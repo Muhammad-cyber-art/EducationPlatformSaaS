@@ -1,0 +1,107 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+
+  web:
+    build: ./backend
+    restart: always
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - static_volume:/app/static
+      - media_volume:/app/media
+
+  celery_worker:
+    build: ./backend
+    restart: always
+    command: celery -A config worker -Q default,heavy_reports -l info
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - media_volume:/app/media
+      - static_volume:/app/static
+
+  celery_beat:
+    build: ./backend
+    restart: always
+    command: celery -A config beat -l info
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - media_volume:/app/media
+      - static_volume:/app/static
+
+  telegram_bot:
+    build: ./backend
+    restart: always
+    command: python manage.py runbot
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - media_volume:/app/media
+      - static_volume:/app/static
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=https://yaxshi-niyat.uz/api/
+    restart: always
+
+  nginx:
+    image: nginx:stable-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./backend/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - static_volume:/app/static
+      - media_volume:/app/media
+    depends_on:
+      - web
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
