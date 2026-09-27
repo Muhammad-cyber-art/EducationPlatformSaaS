@@ -37,11 +37,10 @@ if not SECRET_KEY:
     SECRET_KEY = 'dev-insecure-only-for-local-testing-key-generate-real-one-in-env'
 
 # DEBUG = False    
-# Multi-Tenant: *.crm.uz wildcard barcha subdomenlarni qabul qiladi.
-# .crm.uz (nuqta bilan boshlanuvchi) Django'da wildcard subdomen demak.
-_default_hosts = 'yaxshi-niyat.uz,www.yaxshi-niyat.uz,localhost,127.0.0.1,.localhost,192.168.43.209,.crm.uz,admin.crm.uz,app.crm.uz'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', _default_hosts).split(',')
-# ALLOWED_HOSTS = ['*']
+# Multi-Tenant: *.chronous.uz wildcard barcha subdomenlarni qabul qiladi.
+# .chronous.uz va .crm.uz (nuqta bilan boshlanuvchi) Django'da wildcard subdomen demak.
+_default_hosts = 'chronous.uz,www.chronous.uz,admin.chronous.uz,app.chronous.uz,.chronous.uz,189.74.99.94,.crm.uz,admin.crm.uz,app.crm.uz,localhost,127.0.0.1,.localhost'
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', _default_hosts).split(',') if h.strip()]
 
 
 # Application definition
@@ -122,7 +121,10 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://.*\.localhost(:\d+)?$",
     r"^http://localhost(:\d+)?$",
     r"^http://127\.0\.0\.1(:\d+)?$",
-    r"^https://.*\.crm\.uz$",
+    r"^https?://.*\.chronous\.uz(:[0-9]+)?$",
+    r"^https?://chronous\.uz(:[0-9]+)?$",
+    r"^https?://.*\.crm\.uz(:[0-9]+)?$",
+    r"^http://189\.74\.99\.94(:[0-9]+)?$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -189,12 +191,12 @@ DATABASE_ROUTERS = ['tenants.routers.TenantSchemaRouter']
 
 # ── Tenant Konfiguratsiyasi ────────────────────────────────────────────────────
 # Asosiy platforma domeni. Subdomenlari tenant sifatida taniladi.
-TENANT_BASE_DOMAIN = os.getenv('TENANT_BASE_DOMAIN', 'crm.uz')
+TENANT_BASE_DOMAIN = os.getenv('TENANT_BASE_DOMAIN', 'chronous.uz')
 
 # CEO / Platform Super Admin paneli domenlari.
 # Bu domenlardan kelgan so'rovlar tenant tekshiruvidan o'tmaydi.
 TENANT_CEO_DOMAINS = set(
-    os.getenv('TENANT_CEO_DOMAINS', 'admin.crm.uz,app.crm.uz').split(',')
+    d.strip() for d in os.getenv('TENANT_CEO_DOMAINS', 'admin.chronous.uz,app.chronous.uz').split(',') if d.strip()
 )
 
 # CEO API URL prefiksi. Har qanday domendan ham bu path CEO so'rovi hisoblanadi.

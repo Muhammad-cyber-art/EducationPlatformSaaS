@@ -259,7 +259,7 @@ class TenantMiddleware(MiddlewareMixin):
         if clean_host in ceo_domains:
             return False
 
-        base_domain = getattr(settings, 'TENANT_BASE_DOMAIN', 'crm.uz').lower().strip()
+        base_domain = getattr(settings, 'TENANT_BASE_DOMAIN', 'chronous.uz').lower().strip()
         if clean_host == base_domain:
             return False
 
