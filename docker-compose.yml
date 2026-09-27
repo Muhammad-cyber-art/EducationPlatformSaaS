@@ -138,7 +138,7 @@ services:
       - static_volume:/app/static:ro
       - media_volume:/app/media:ro
       # SSL sertifikatlar (Let's Encrypt o'rnatilgach faollashtiring)
-      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - web
       - frontend
