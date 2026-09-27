@@ -29,5 +29,5 @@ celery
 redis
 django-celery-beat
 gunicorn
+numpy==1.26.4
 pandas
-numpy
