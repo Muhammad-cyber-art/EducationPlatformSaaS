@@ -127,14 +127,20 @@ def reset_search_path() -> None:
     search_path ni default holatiga (faqat public) qaytaradi.
 
     Request tugagach yoki xatolik yuz bergach chaqiriladi.
+    Agar reset muvaffaqiyatsiz bo'lsa (masalan, tranzaksiya abort bo'lgan bo'lsa),
+    ulanuvchi connection butunlay yopiladi (connection.close()),
+    bu boshqa so'rovlarga eski schema qolib ketishini 100% oldini oladi.
     """
     try:
         with connection.cursor() as cursor:
             cursor.execute("SET search_path TO public")
         logger.debug("search_path public ga qaytarildi")
     except Exception as exc:
-        # Reset muvaffaqiyatsiz bo'lsa faqat log qilamiz — exception ko'tarmaymiz
-        logger.warning("search_path reset qilishda xatolik: %s", exc)
+        logger.warning("search_path reset qilishda xatolik: %s. Xavfsizlik uchun connection yopilmoqda.", exc)
+        try:
+            connection.close()
+        except Exception:
+            pass
 
 
 def schema_exists(schema_name: str) -> bool:

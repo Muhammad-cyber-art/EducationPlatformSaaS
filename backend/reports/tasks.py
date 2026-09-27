@@ -8,12 +8,7 @@ from .models import ReportDownloadTrack
 
 logger = logging.getLogger(__name__)
 
-@shared_task
-def alert_uncollected_reports_task():
-    """
-    Celery Beat orqali rejalashtirilgan tarzda (cron job) fonda ishga tushib,
-    hisobotlarni yuklab olmagan admin/superadminlarni tekshiradi va logga ogohlantirish yozadi.
-    """
+def _check_reports_for_current_schema():
     User = get_user_model()
     tashkent_tz = ZoneInfo('Asia/Tashkent')
     now_tashkent = timezone.now().astimezone(tashkent_tz)
@@ -51,3 +46,27 @@ def alert_uncollected_reports_task():
                     f"[CELERY ALARM] SuperAdmin '{sa.username}' ushbu oylik moliya "
                     f"hisobotini hali yuklab olmagan!"
                 )
+
+
+@shared_task
+def alert_uncollected_reports_task():
+    """
+    Celery Beat orqali rejalashtirilgan tarzda (cron job) fonda ishga tushib,
+    hisobotlarni yuklab olmagan admin/superadminlarni tekshiradi va logga ogohlantirish yozadi.
+    Multi-tenant: barcha faol o'quv markazlari schemalarida tekshiriladi.
+    """
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+
+    active_tenants = Tenant.objects.filter(is_active=True)
+    if not active_tenants.exists():
+        _check_reports_for_current_schema()
+        return
+
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                _check_reports_for_current_schema()
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun hisobotlarni tekshirishda xatolik: {exc}")
+

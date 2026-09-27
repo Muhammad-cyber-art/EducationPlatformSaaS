@@ -6,31 +6,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-@shared_task
-def create_attendance_task():
-    """Ertangi kun uchun davomat yozuvlarini yaratish (har kuni yarim tunda).
-
-    BUG #5 FIX: Avvalgi kod `group.students.filter(joined_at__date__lte=tomorrow)`
-    ishlatgan — bu M2M aloqa orqali barcha studentlarni (arxivlangan, o'chirilgan,
-    guruhdan chiqarilgan) olib kelardi. Natijada ular uchun ham Attendance yaratilardi
-    va keyingi hisobotlarda ortiqcha qatorlar paydo bo'lardi.
-
-    Endi faqat guruhda FAOL enrollment'i bor, arxivlanmagan va faol studentlar
-    uchun davomat yaratiladi.
-    """
+def _create_attendance_for_current_schema():
+    """Joriy faol schema ichida davomat yaratish logikasi."""
     from groups.models import GroupEnrollment, Student
-
-    logger.info("Davomat yaratish boshlandi...")
     tomorrow = timezone.localdate() + timedelta(days=1)
     groups = Group.objects.all()
     count = 0
 
     for group in groups:
-        # User talabi: Boshlanish sanasi kelmaguncha davomat ishlamasligi kerak
         if not group.is_logic_enabled():
             continue
 
-        # BUG #5 FIX: Faqat guruhda faol bo'lgan, arxivlanmagan va faol studentlar
         active_student_ids = GroupEnrollment.objects.filter(
             group=group,
             is_active=True,
@@ -52,6 +38,38 @@ def create_attendance_task():
             )
             if created:
                 count += 1
-
-    logger.info(f"{tomorrow} uchun {count} ta davomat yaratildi.")
     return count
+
+
+@shared_task
+def create_attendance_task():
+    """Ertangi kun uchun davomat yozuvlarini yaratish (har kuni yarim tunda).
+    
+    Multi-tenant qo'llab-quvvatlash: Barcha faol o'quv markazlari (tenantlar)
+    schemalarini aylanib chiqadi va har bir markaz uchun davomat yaratadi.
+    """
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+
+    logger.info("Davomat yaratish boshlandi (Multi-tenant)...")
+    active_tenants = Tenant.objects.filter(is_active=True)
+
+    if not active_tenants.exists():
+        # Tenantlar mavjud bo'lmaganda (masalan dev/legacy holatda)
+        count = _create_attendance_for_current_schema()
+        logger.info(f"Davomat yaratildi (public): {count} ta")
+        return count
+
+    total_count = 0
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                count = _create_attendance_for_current_schema()
+                total_count += count
+                logger.info(f"[{tenant.name} - {tenant.schema_name}] {count} ta davomat yaratildi.")
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun davomat yaratishda xatolik: {exc}", exc_info=True)
+
+    logger.info(f"Jami barcha markazlar uchun {total_count} ta davomat yaratildi.")
+    return total_count
+

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchTenants, fetchTenantDetail, toggleTenantStatus, clearSelectedTenant } from '../../store/slices/ceoSlice';
+import { fetchTenants, toggleTenantStatus } from '../../store/slices/ceoSlice';
 import AddTenantModal from './AddTenantModal';
-import TenantDetailModal from './TenantDetailModal';
 
 // Plan badge colors
 const PLAN_STYLE = {
@@ -33,10 +33,10 @@ function StatusDot({ active }) {
 
 export default function CEOTenants() {
   const dispatch  = useDispatch();
+  const navigate  = useNavigate();
   const { tenants, tenantsLoading, tenantsTotal, tenantsPage, tenantsPages } = useSelector((s) => s.ceo);
 
   const [showAdd,    setShowAdd]    = useState(false);
-  const [showDetail, setShowDetail] = useState(false);
   const [search,     setSearch]     = useState('');
   const [filterPlan, setFilterPlan] = useState('');
   const [filterActive, setFilterActive] = useState('');
@@ -54,8 +54,7 @@ export default function CEOTenants() {
   useEffect(() => { setPage(1); load(); }, [search, filterPlan, filterActive]);
 
   const openDetail = (id) => {
-    dispatch(fetchTenantDetail(id));
-    setShowDetail(true);
+    navigate(`/ceo/tenants/${id}`);
   };
 
   const handleToggle = async (id, currentStatus) => {
@@ -157,6 +156,8 @@ export default function CEOTenants() {
                 </tr>
               ) : tenants.map((tenant) => (
                 <tr key={tenant.id}
+                  onClick={() => openDetail(tenant.id)}
+                  className="cursor-pointer transition-colors"
                   style={{ borderTop: '1px solid var(--border-glass)' }}
                   onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-void)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
@@ -205,7 +206,7 @@ export default function CEOTenants() {
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
                       {/* Detail */}
-                      <button onClick={() => openDetail(tenant.id)}
+                      <button onClick={(e) => { e.stopPropagation(); openDetail(tenant.id); }}
                         className="p-1.5 rounded-lg transition-all"
                         style={{ color: 'var(--gold)', background: 'var(--gold-dim)' }}
                         title="Ko'rish"
@@ -217,7 +218,7 @@ export default function CEOTenants() {
                       </button>
 
                       {/* Toggle Status */}
-                      <button onClick={() => handleToggle(tenant.id, tenant.is_active)}
+                      <button onClick={(e) => { e.stopPropagation(); handleToggle(tenant.id, tenant.is_active); }}
                         className="p-1.5 rounded-lg transition-all"
                         title={tenant.is_active ? 'Bloklash' : 'Ochish'}
                         style={{
@@ -269,8 +270,7 @@ export default function CEOTenants() {
       </div>
 
       {/* Modals */}
-      {showAdd    && <AddTenantModal    onClose={() => { setShowAdd(false);    load(); }} />}
-      {showDetail && <TenantDetailModal onClose={() => { setShowDetail(false); dispatch(clearSelectedTenant()); }} />}
+      {showAdd && <AddTenantModal onClose={() => { setShowAdd(false); load(); }} />}
     </div>
   );
 }

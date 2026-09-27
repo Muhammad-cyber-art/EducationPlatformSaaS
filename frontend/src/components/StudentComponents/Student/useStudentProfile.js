@@ -39,32 +39,36 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
  }
  });
 
- const { data: paymentsAllGroupsRaw, isLoading: paymentLoading } = useQuery({
- queryKey: ['payments-all', student_id],
- queryFn: () => api.get(`/finance/student-payments/?student=${student_id}`).then(res => res.data),
- enabled: !!student_id && !!userData.id
- });
- const paymentsAllGroups = paymentsAllGroupsRaw?.results || paymentsAllGroupsRaw || [];
+  const { data: paymentsAllGroupsRaw, isLoading: paymentLoading } = useQuery({
+    queryKey: ['payments-all', student_id],
+    queryFn: () => api.get(`/finance/student-payments/?student=${student_id}`).then(res => res.data),
+    enabled: !!studentData?.id && !!userData.id,
+    staleTime: 1000 * 30,
+  });
+  const paymentsAllGroups = paymentsAllGroupsRaw?.results || paymentsAllGroupsRaw || [];
 
- const { data: studentHistory, isLoading: historyLoading } = useQuery({
- queryKey: ['student-history', student_id],
- queryFn: () => api.get(`/finance/student-payments/student-history/${student_id}/`).then(res => res.data),
- enabled: !!student_id && !!userData.id
- });
+  const { data: studentHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['student-history', student_id],
+    queryFn: () => api.get(`/finance/student-payments/student-history/${student_id}/`).then(res => res.data),
+    enabled: !!studentData?.id && !!userData.id,
+    staleTime: 1000 * 30,
+  });
 
- const { data: branchGroupsRaw } = useQuery({
- queryKey: ['groups-list', branchID],
- queryFn: () => api.get(`/groups/nested_groups/?branch_id=${branchID}`).then(res => res.data),
- enabled: !!userData.id && !!branchID,
- });
- const branchGroups = branchGroupsRaw?.results || branchGroupsRaw || [];
+  const { data: branchGroupsRaw } = useQuery({
+    queryKey: ['groups-list', branchID],
+    queryFn: () => api.get(`/groups/nested_groups/?branch_id=${branchID}`).then(res => res.data),
+    enabled: !!studentData?.id && !!userData.id && !!branchID,
+    staleTime: 1000 * 60,
+  });
+  const branchGroups = branchGroupsRaw?.results || branchGroupsRaw || [];
 
- const { data: transfersRaw } = useQuery({
- queryKey: ['student-transfers', student_id],
- queryFn: () => api.get(`/groups/students/${student_id}/transfers/`).then(res => res.data),
- enabled: !!student_id && !!userData.id,
- });
- const transfers = transfersRaw?.results || transfersRaw || [];
+  const { data: transfersRaw } = useQuery({
+    queryKey: ['student-transfers', student_id],
+    queryFn: () => api.get(`/groups/students/${student_id}/transfers/`).then(res => res.data),
+    enabled: !!studentData?.id && !!userData.id,
+    staleTime: 1000 * 60,
+  });
+  const transfers = transfersRaw?.results || transfersRaw || [];
 
  const permissions = {
  canEditStudent: userRole ==="admin" || userRole ==="super_admin" || (userRole ==="mentor" && perms.students === true),

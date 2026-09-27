@@ -187,8 +187,8 @@ class FinanceAttendanceStatsTests(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name="Tashkent")
         self.mentor = User.objects.create_user(username='mentor_att', password='pw', role='mentor', branch=self.branch)
-        self.g1 = Group.objects.create(name="G1", branch=self.branch, mentor=self.mentor, monthly_price=Decimal('100000'))
-        self.g2 = Group.objects.create(name="G2", branch=self.branch, mentor=self.mentor, monthly_price=Decimal('120000'))
+        self.g1 = Group.objects.create(name="G1", branch=self.branch, mentor=self.mentor, monthly_price=Decimal('100000'), days='everyday')
+        self.g2 = Group.objects.create(name="G2", branch=self.branch, mentor=self.mentor, monthly_price=Decimal('120000'), days='everyday')
         self.s1 = Student.objects.create(full_name="S1", group=self.g1)
         self.s2 = Student.objects.create(full_name="S2", group=self.g1)
 
@@ -197,7 +197,11 @@ class FinanceAttendanceStatsTests(TestCase):
         GroupEnrollment.objects.create(student=self.s1, group=self.g2, is_active=True)
         GroupEnrollment.objects.get_or_create(student=self.s2, group=self.g1, defaults={'is_active': True})
 
-        self.today = timezone.localdate()
+        today = timezone.localdate()
+        if today.weekday() == 6:
+            self.today = today - timezone.timedelta(days=1)
+        else:
+            self.today = today
 
     def test_attendance_today_counts_unique_students_across_groups(self):
         # S1 is present in two groups today -> should still be counted once

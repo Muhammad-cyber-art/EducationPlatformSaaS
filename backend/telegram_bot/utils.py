@@ -34,12 +34,18 @@ def get_student_telegram_ids(student):
     return chat_ids
 
 def send_telegram_message_async(chat_id, text):
-    """Xabarni asinxron (threading orqali) jo'natish - serverni qotirmaydi"""
+    """Xabarni Celery foni orqali jo'natish (ishonchli, retry mexanizmi bilan)"""
     if not chat_id:
         return
     
-    thread = threading.Thread(target=_send_message_sync, args=(chat_id, text))
-    thread.start()
+    try:
+        from .tasks import send_telegram_message_task
+        send_telegram_message_task.delay(chat_id, text)
+    except Exception as exc:
+        logger.warning(f"Celery task dispatch failed ({exc}), falling back to background thread.")
+        thread = threading.Thread(target=_send_message_sync, args=(chat_id, text), daemon=True)
+        thread.start()
+
 
 def _send_message_sync(chat_id, text, max_retries=3):
     """Xabarni yuborishning sinxron qismi (Retry mexanizmi bilan)"""
@@ -60,6 +66,13 @@ def _send_message_sync(chat_id, text, max_retries=3):
                     retry_after = response.json().get('parameters', {}).get('retry_after', 3)
                     time.sleep(retry_after)
                     continue
+                # Agar HTML parse xatosi bo'lsa (&, < kabi belgilar sabab), formatlashsiz (plain text) qayta yuboramiz
+                if response.status_code == 400 and "can't parse entities" in response.text.lower():
+                    logger.warning("Telegram HTML parse xatosi aniqlandi. Oddiy matn (plain text) sifatida qayta jo'natilmoqda.")
+                    plain_payload = {'chat_id': chat_id, 'text': text}
+                    plain_res = requests.post(url, json=plain_payload, timeout=10)
+                    if plain_res.status_code == 200:
+                        return plain_res
             return response
         except Exception as e:
             logger.error(f"Telegram connection error (Attempt {attempt+1}): {e}")

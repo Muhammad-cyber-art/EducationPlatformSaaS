@@ -15,6 +15,9 @@ from tenants.views import (
     TenantDetailView,
     TenantToggleStatusView,
     CEOAnalyticsView,
+    TenantResetAdminPasswordView,
+    TenantUpdateAdminView,
+    TenantImpersonateView,
 )
 
 app_name = "tenants"
@@ -38,6 +41,15 @@ urlpatterns = [
     # PATCH /api/v1/super-admin/tenants/{id}/toggle-status/
     path("tenants/<int:tenant_id>/toggle-status/",
          TenantToggleStatusView.as_view(), name="tenant-toggle-status"),
+    # POST /api/v1/super-admin/tenants/{id}/reset-admin-password/
+    path("tenants/<int:tenant_id>/reset-admin-password/",
+         TenantResetAdminPasswordView.as_view(), name="tenant-reset-admin-password"),
+    # PATCH /api/v1/super-admin/tenants/{id}/update-admin/
+    path("tenants/<int:tenant_id>/update-admin/",
+         TenantUpdateAdminView.as_view(), name="tenant-update-admin"),
+    # POST /api/v1/super-admin/tenants/{id}/impersonate/
+    path("tenants/<int:tenant_id>/impersonate/",
+         TenantImpersonateView.as_view(), name="tenant-impersonate"),
 
     # ── Analytics ─────────────────────────────────────────────────────────
     # GET   /api/v1/super-admin/analytics/     → Dashboard metrics

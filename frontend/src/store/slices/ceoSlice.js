@@ -77,6 +77,65 @@ export const toggleTenantStatus = createAsyncThunk('ceo/toggleStatus',
   }
 );
 
+export const updateTenant = createAsyncThunk('ceo/updateTenant',
+  async ({ id, ...data }, { rejectWithValue }) => {
+    try {
+      const res = await fetch(`${CEO_BASE}/tenants/${id}/`, {
+        method: 'PATCH',
+        headers: jsonHdrs(),
+        body: JSON.stringify(data),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Markazni yangilashda xatolik');
+      return resData;
+    } catch (e) { return rejectWithValue(e.message); }
+  }
+);
+
+export const resetAdminPassword = createAsyncThunk('ceo/resetAdminPassword',
+  async ({ id, new_password }, { rejectWithValue }) => {
+    try {
+      const res = await fetch(`${CEO_BASE}/tenants/${id}/reset-admin-password/`, {
+        method: 'POST',
+        headers: jsonHdrs(),
+        body: JSON.stringify({ new_password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Parolni yangilashda xatolik');
+      return data;
+    } catch (e) { return rejectWithValue(e.message); }
+  }
+);
+
+export const updateAdmin = createAsyncThunk('ceo/updateAdmin',
+  async ({ id, ...data }, { rejectWithValue }) => {
+    try {
+      const res = await fetch(`${CEO_BASE}/tenants/${id}/update-admin/`, {
+        method: 'PATCH',
+        headers: jsonHdrs(),
+        body: JSON.stringify(data),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Adminni yangilashda xatolik');
+      return resData;
+    } catch (e) { return rejectWithValue(e.message); }
+  }
+);
+
+export const impersonateTenant = createAsyncThunk('ceo/impersonateTenant',
+  async (tenantId, { rejectWithValue }) => {
+    try {
+      const res = await fetch(`${CEO_BASE}/tenants/${tenantId}/impersonate/`, {
+        method: 'POST',
+        headers: jsonHdrs(),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Tizimga kirishda xatolik yuz berdi');
+      return resData;
+    } catch (e) { return rejectWithValue(e.message); }
+  }
+);
+
 // ─── Slice ───────────────────────────────────────────────────────────────────
 
 const ceoSlice = createSlice({
@@ -182,6 +241,22 @@ const ceoSlice = createSlice({
         const idx = s.tenants.findIndex((t) => t.id === payload.id);
         if (idx !== -1) s.tenants[idx].is_active = payload.is_active;
         if (s.selectedTenant?.id === payload.id) s.selectedTenant.is_active = payload.is_active;
+      });
+
+    // Update tenant
+    builder
+      .addCase(updateTenant.fulfilled, (s, { payload }) => {
+        s.selectedTenant = payload;
+        const idx = s.tenants.findIndex((t) => t.id === payload.id);
+        if (idx !== -1) s.tenants[idx] = { ...s.tenants[idx], ...payload };
+      });
+
+    // Update admin
+    builder
+      .addCase(updateAdmin.fulfilled, (s, { payload }) => {
+        if (s.selectedTenant && payload.super_admin) {
+          s.selectedTenant.super_admin = payload.super_admin;
+        }
       });
   },
 });

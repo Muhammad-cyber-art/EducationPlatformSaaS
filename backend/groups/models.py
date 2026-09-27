@@ -185,6 +185,14 @@ class Group(models.Model):
         return f"{self.name} | Mentor: {self.mentor} | Kun: {self.get_days_display()}"
 
 
+def tenant_student_image_path(instance, filename):
+    """O'quvchi rasmlarini har bir tenant schemasi bo'yicha alohida saqlash."""
+    from tenants.context import get_current_tenant
+    tenant = get_current_tenant()
+    schema = tenant.schema_name if tenant else 'common'
+    return f"tenants/{schema}/students/{filename}"
+
+
 class Student(models.Model):
     branch = models.ForeignKey(
         Branch,
@@ -212,7 +220,7 @@ class Student(models.Model):
     notes = models.TextField(blank=True)
     joined_at = models.DateTimeField(auto_now_add=True)
     image = models.ImageField(
-        upload_to="students/", null=True, blank=True, validators=[validate_image_file]
+        upload_to=tenant_student_image_path, null=True, blank=True, validators=[validate_image_file]
     )
     telegram_id = models.CharField(
         max_length=20, blank=True, null=True, verbose_name="Student Telegram Chat ID"

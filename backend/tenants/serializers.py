@@ -102,22 +102,116 @@ class TenantListSerializer(serializers.ModelSerializer):
 # TENANT — DETALLAR
 # ─────────────────────────────────────────────────────────────────────────────
 
+def get_tenant_stats_and_admin(schema_name: str):
+    """
+    Tenant schemasi ichidan real vaqt statistikalari va birinchi super adminni oladi.
+    """
+    import logging
+    from tenants.utils import tenant_schema_context
+    from django.contrib.auth import get_user_model
+    from groups.models import Student, Group
+    from branches.models import Branch
+
+    logger = logging.getLogger(__name__)
+    UserModel = get_user_model()
+
+    stats = {
+        "total_students": 0,
+        "active_students": 0,
+        "inactive_students": 0,
+        "archived_students": 0,
+        "total_staff": 0,
+        "mentor_count": 0,
+        "admin_count": 0,
+        "total_groups": 0,
+        "active_groups": 0,
+        "total_branches": 0,
+    }
+    super_admin_data = None
+
+    try:
+        with tenant_schema_context(schema_name):
+            stats["total_students"] = Student.objects.filter(is_archived=False).count()
+            stats["active_students"] = Student.objects.filter(is_archived=False, is_active=True).count()
+            stats["inactive_students"] = Student.objects.filter(is_archived=False, is_active=False).count()
+            stats["archived_students"] = Student.objects.filter(is_archived=True).count()
+
+            stats["total_groups"] = Group.objects.count()
+            stats["active_groups"] = Group.objects.filter(is_faol=True).count()
+
+            stats["total_branches"] = Branch.objects.count()
+
+            super_admin_user = UserModel.objects.filter(role="super_admin").first()
+            if not super_admin_user:
+                super_admin_user = UserModel.objects.filter(is_superuser=True).first()
+
+            mentor_count = UserModel.objects.filter(role="mentor").count()
+            admin_count  = UserModel.objects.filter(role="admin").count()
+
+            stats["mentor_count"] = mentor_count
+            stats["admin_count"]  = admin_count
+            stats["total_staff"]  = mentor_count + admin_count + (1 if super_admin_user else 0)
+
+            if super_admin_user:
+                super_admin_data = {
+                    "id":           super_admin_user.id,
+                    "username":     super_admin_user.username,
+                    "email":        super_admin_user.email,
+                    "first_name":   super_admin_user.first_name,
+                    "last_name":    super_admin_user.last_name,
+                    "full_name":    super_admin_user.get_full_name() or super_admin_user.username,
+                    "phone_number": super_admin_user.phone_number or "",
+                    "is_active":    super_admin_user.is_active,
+                    "date_joined":  super_admin_user.date_joined,
+                    "last_login":   super_admin_user.last_login,
+                }
+    except Exception as e:
+        logger.warning("Tenant stats olishda xatolik: schema=%s, err=%s", schema_name, e)
+
+    return stats, super_admin_data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TENANT — DETALLAR
+# ─────────────────────────────────────────────────────────────────────────────
+
 class TenantDetailSerializer(serializers.ModelSerializer):
     """
-    Bitta tenant haqida to'liq ma'lumot.
+    Bitta tenant haqida to'liq ma'lumot (dinamik statistika va super admin bilan).
     """
-    domains      = DomainSerializer(many=True, read_only=True)
-    subscription = SubscriptionSerializer(read_only=True)
+    domains        = DomainSerializer(many=True, read_only=True)
+    subscription   = SubscriptionSerializer(read_only=True)
+    primary_domain = serializers.SerializerMethodField()
+    stats          = serializers.SerializerMethodField()
+    super_admin    = serializers.SerializerMethodField()
 
     class Meta:
         model  = Tenant
         fields = [
             "id", "name", "schema_name", "is_active",
             "city", "contact_phone",
-            "domains", "subscription",
+            "domains", "primary_domain", "subscription",
+            "stats", "super_admin",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "schema_name", "created_at", "updated_at"]
+
+    def get_primary_domain(self, obj) -> str | None:
+        domain = obj.domains.filter(is_primary=True).first()
+        return domain.domain if domain else None
+
+    def _get_data(self, obj):
+        if not hasattr(obj, "_cached_stats_and_admin"):
+            obj._cached_stats_and_admin = get_tenant_stats_and_admin(obj.schema_name)
+        return obj._cached_stats_and_admin
+
+    def get_stats(self, obj):
+        stats, _ = self._get_data(obj)
+        return stats
+
+    def get_super_admin(self, obj):
+        _, admin_data = self._get_data(obj)
+        return admin_data
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -22,17 +22,24 @@ load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'x_z#v9!k@m&p*q2r5s8t-w+y(z)a[b]c{d}e|f:g;h<i.j/k?l>m,n')
+from django.core.exceptions import ImproperlyConfigured
 
-# SECURITY WARNING: don't run with debug turned on in production!
+# Environment definition
 ENVIRONMENT = os.getenv('DJANGO_ENV', 'development').strip().lower()
 IS_PRODUCTION = ENVIRONMENT in ('production', 'prod')
 DEBUG = os.getenv('DEBUG', 'False' if IS_PRODUCTION else 'True') == 'True'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if IS_PRODUCTION:
+        raise ImproperlyConfigured("CRITICAL: DJANGO_SECRET_KEY environment variable is required in production!")
+    SECRET_KEY = 'dev-insecure-only-for-local-testing-key-generate-real-one-in-env'
+
 # DEBUG = False    
 # Multi-Tenant: *.crm.uz wildcard barcha subdomenlarni qabul qiladi.
 # .crm.uz (nuqta bilan boshlanuvchi) Django'da wildcard subdomen demak.
-_default_hosts = 'yaxshi-niyat.uz,www.yaxshi-niyat.uz,localhost,127.0.0.1,192.168.43.209,.crm.uz,admin.crm.uz,app.crm.uz'
+_default_hosts = 'yaxshi-niyat.uz,www.yaxshi-niyat.uz,localhost,127.0.0.1,.localhost,192.168.43.209,.crm.uz,admin.crm.uz,app.crm.uz'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', _default_hosts).split(',')
 # ALLOWED_HOSTS = ['*']
 
@@ -89,12 +96,21 @@ MIDDLEWARE = [
 
 
 # CORS Configuration
+from corsheaders.defaults import default_headers
+
 _cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if origin.strip()]
 
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
-    CSRF_TRUSTED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:8000', 'http://127.0.0.1:8000']
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+        'http://*.localhost:5173',
+        'http://*.localhost:8000',
+    ]
     if CORS_ALLOWED_ORIGINS:
         for origin in CORS_ALLOWED_ORIGINS:
             if origin not in CSRF_TRUSTED_ORIGINS:
@@ -102,19 +118,23 @@ if DEBUG:
 else:
     CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://.*\.localhost(:\d+)?$",
+    r"^http://localhost(:\d+)?$",
+    r"^http://127\.0\.0\.1(:\d+)?$",
+    r"^https://.*\.crm\.uz$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ['Content-Disposition']
-CORS_ALLOW_HEADERS = [
-    'accept',
+CORS_ALLOW_HEADERS = list(default_headers) + [
     'accept-encoding',
-    'authorization',
-    'content-type',
     'dnt',
     'origin',
-    'user-agent',
     'x-csrftoken',
-    'x-requested-with',
     'x-tenant-schema',
+    'x-tenant-domain',
+    'x-tenant-subdomain',
 ]
 
 APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
@@ -125,7 +145,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES' : [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'authenticatsiya.authentication.TenantJWTAuthentication',
     ],
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend'
@@ -206,19 +226,19 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 # Database Type: 'postgresql' yoki 'sqlite' (development uchun)
-DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite')
+DB_ENGINE = os.getenv('DB_ENGINE', 'postgresql')
 
 if DB_ENGINE == 'postgresql':
     # PostgreSQL Configuration (Production uchun tavsiya etiladi)
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', 'education_db'),
+            'NAME': os.getenv('DB_NAME', 'postgres'),
             'USER': os.getenv('DB_USER', 'postgres'),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', 'localhost'),
             'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 600,  # Connection pooling
+            'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '0')),  # Multi-tenant schema xavfsizligi uchun 0
             'OPTIONS': {
                 'connect_timeout': 10,
             }
@@ -311,6 +331,17 @@ SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'same-origin'
 
+# Cache Configuration (Redis)
+REDIS_CACHE_URL = os.getenv('REDIS_URL', os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/1'))
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_CACHE_URL,
+        'KEY_PREFIX': 'education_saas',
+        'TIMEOUT': 300,
+    }
+}
+
 # Celery Configuration
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
@@ -355,6 +386,14 @@ CELERY_BEAT_SCHEDULE = {
 
 # Production Optimization & Logging
 if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
+    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+    CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False') == 'True'
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
+
     # Faqat productionda loglarni faylga yozamiz
     LOGGING = {
         'version': 1,

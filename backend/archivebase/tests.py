@@ -102,3 +102,34 @@ class ArchiveServiceTests(TestCase):
         self.assertEqual(restored.phone, "998907654321")
         self.assertEqual(restored.subject, "Math")
         self.assertFalse(ArchivedLid.objects.filter(id=archived.id).exists())
+
+
+class ArchivePermissionTests(TestCase):
+    def setUp(self):
+        self.branch = Branch.objects.create(name="Samarkand")
+        self.super_admin = User.objects.create_user(username='super_boss', password='pw', role='super_admin')
+        self.admin = User.objects.create_user(username='branch_admin', password='pw', role='admin', branch=self.branch)
+        self.mentor = User.objects.create_user(username='mentor_user', password='pw', role='mentor', branch=self.branch)
+
+    def test_permission_class_evaluation(self):
+        from archivebase.permission import IsArchiveAdmin
+        from django.test import RequestFactory
+
+        rf = RequestFactory()
+        permission = IsArchiveAdmin()
+
+        # Super admin tekshiruvi (is_superuser=False bo'lsa ham)
+        req_super = rf.get('/api/archive/students/')
+        req_super.user = self.super_admin
+        self.assertTrue(permission.has_permission(req_super, None))
+
+        # Admin tekshiruvi
+        req_admin = rf.get('/api/archive/students/')
+        req_admin.user = self.admin
+        self.assertTrue(permission.has_permission(req_admin, None))
+
+        # Mentor uchun taqiqlanishi tekshiruvi
+        req_mentor = rf.get('/api/archive/students/')
+        req_mentor.user = self.mentor
+        self.assertFalse(permission.has_permission(req_mentor, None))
+

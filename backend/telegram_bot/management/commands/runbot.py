@@ -1,3 +1,4 @@
+import os
 import logging
 import re
 from django.core.management.base import BaseCommand
@@ -40,7 +41,26 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR('XATO: TELEGRAM_BOT_TOKEN settings.py da topilmadi!'))
             return
 
-        persistence = PicklePersistence(filepath="bot_persistence.pickle")
+        persistence_path = os.path.join(str(settings.BASE_DIR), "bot_persistence.pickle")
+        
+        # Agar pickle fayli mavjud bo'lsa, lekin bo'sh (0 bayt) yoki buzilgan bo'lsa, uni o'chiramiz
+        if os.path.exists(persistence_path):
+            try:
+                if os.path.getsize(persistence_path) == 0:
+                    logger.warning("bot_persistence.pickle bo'sh (0 bayt) ekanligi aniqlandi, o'chirilmoqda.")
+                    os.remove(persistence_path)
+                else:
+                    import pickle
+                    with open(persistence_path, 'rb') as f:
+                        pickle.load(f)
+            except Exception as e:
+                logger.warning(f"bot_persistence.pickle shikastlangan ({e}), tozalab yangidan boshlanmoqda.")
+                try:
+                    os.remove(persistence_path)
+                except Exception:
+                    pass
+
+        persistence = PicklePersistence(filepath=persistence_path)
         app = ApplicationBuilder().token(TOKEN).persistence(persistence).build()
 
         # TypeHandler barcha update'lardan oldin ishlashi uchun group=-1
@@ -71,7 +91,7 @@ class Command(BaseCommand):
         app.add_error_handler(error_handler)
 
         self.stdout.write(self.style.SUCCESS('Bot muvaffaqiyatli ishga tushdi (Polling mode)'))
-        app.run_polling()
+        app.run_polling(drop_pending_updates=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start komandasi - ro'yxatdan o'tish jarayoni"""
@@ -115,11 +135,11 @@ def process_contact_and_create_profile(clean_phone, chat_id):
     else:
         possible_numbers.add('998' + clean_phone)
 
-    # 1. Admin/Super Admin qidirish
+    # 1. Admin/Super Admin/Mentor/Teacher qidirish
     for phone in possible_numbers:
         user = UserModel.objects.select_related('branch').filter(
             Q(phone_number=phone) | Q(phone_number__endswith=phone[-9:]),
-            role__in=['admin', 'super_admin', 'teacher'],
+            role__in=['admin', 'super_admin', 'mentor', 'teacher'],
             is_active=True
         ).first()
         if user:
@@ -135,6 +155,10 @@ def process_contact_and_create_profile(clean_phone, chat_id):
                     'is_active': True
                 }
             )
+            # UserModel bilan ham telegram_chat_id ni sinxronlashtirish
+            if user.telegram_chat_id != chat_id:
+                user.telegram_chat_id = chat_id
+                user.save(update_fields=['telegram_chat_id'])
             return profile, 'admin_confirm_needed'
 
     # 2. Student qidirish
@@ -246,6 +270,10 @@ async def confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == 'HA':
         profile = context.user_data.get('bot_profile')
         if profile:
+            if profile.user and profile.user.telegram_chat_id != str(update.effective_chat.id):
+                profile.user.telegram_chat_id = str(update.effective_chat.id)
+                await sync_to_async(profile.user.save)(update_fields=['telegram_chat_id'])
+
             keyboard = [[KeyboardButton("Menyuga qaytish")]]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             await update.message.reply_html(
@@ -305,15 +333,15 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.edit_message_text(text, parse_mode='HTML', reply_markup=reply_markup)
         elif update.message:
             await update.message.reply_html(text, reply_markup=reply_markup)
-    elif role == 'teacher':
+    elif role in ['teacher', 'mentor']:
         keyboard = [
             [InlineKeyboardButton("📚 Mening Guruhlarim", callback_data='my_groups')],
-            [InlineKeyboardButton("📝 Uy vazifalari", callback_data='homework')],
             [InlineKeyboardButton("ℹ️ Yordam", callback_data='help')],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
-            f"<b>👋 Assalomu alaykum, Ustoz!</b>\n\n"
+            f"<b>👋 Assalomu alaykum, {profile.get_full_name()}!</b>\n\n"
+            f"Rol: <b>O'qituvchi / Mentor</b>\n\n"
             f"Quyidagi bo'limlardan foydalanishingiz mumkin:"
         )
         if update.callback_query:
@@ -461,9 +489,38 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await sync_to_async(generate_and_send_report_pandas)("group_attendance", profile.user_id, is_manual=True, group_id=group_id)
             else:
                 generate_and_send_report_pandas.delay("group_attendance", profile.user_id, is_manual=True, group_id=group_id)
+    elif callback_data == 'my_groups':
+        if role in ['teacher', 'mentor']:
+            from asgiref.sync import sync_to_async
+            from groups.models import Group
+            
+            mentor_user = profile.user
+            if not mentor_user:
+                await query.edit_message_text("<b>❌ O'qituvchi ma'lumotlari topilmadi.</b>", parse_mode='HTML')
+                return
+                
+            groups = await sync_to_async(list)(
+                Group.objects.filter(
+                    Q(mentor=mentor_user) | Q(additional_mentors__mentor=mentor_user),
+                    is_faol=True
+                ).distinct().order_by('name')
+            )
+            
+            if not groups:
+                text = "📚 <b>Sizga biriktirilgan faol guruhlar topilmadi.</b>"
+            else:
+                text = "<b>📚 Sizning faol guruhlaringiz:</b>\n\n"
+                for i, g in enumerate(groups, start=1):
+                    days_str = g.get_days_display() if hasattr(g, 'get_days_display') else ''
+                    time_str = g.start_time.strftime('%H:%M') if getattr(g, 'start_time', None) else ''
+                    text += f"{i}. <b>{g.name}</b>\n   📅 Kunlar: {days_str}\n   ⏰ Vaqt: {time_str}\n\n"
+                    
+            keyboard = [[InlineKeyboardButton("🔙 Orqaga", callback_data='admin_panel')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=reply_markup)
         else:
             await query.edit_message_text("<b>❌ Ruxsat yo'q!</b>", parse_mode='HTML')
-    
+
     elif callback_data == 'help':
         await help_command(update, context)
     

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { ceoLogin } from '../../store/slices/ceoSlice';
+import CEOSubdomainForbidden from './CEOSubdomainForbidden';
+import { isTenantSubdomain } from '../../utils/subdomain';
 
 export default function CEOLogin() {
   const dispatch   = useDispatch();
@@ -10,6 +12,10 @@ export default function CEOLogin() {
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [show, setShow] = useState(false);
+
+  if (isTenantSubdomain()) {
+    return <CEOSubdomainForbidden />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

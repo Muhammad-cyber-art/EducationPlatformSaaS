@@ -181,6 +181,12 @@ class Attendance(models.Model):
 
     class Meta:
         ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "group", "date"],
+                name="unique_daily_student_attendance"
+            )
+        ]
 
     def __str__(self):
         student_name = self.student_full_name or (

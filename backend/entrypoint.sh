@@ -16,6 +16,8 @@ fi
 if [ "$1" = "gunicorn" ]; then
     echo "Migratsiyalar bajarilmoqda..."
     python manage.py migrate --noinput
+    echo "Barcha tenant schemalari tekshirilmoqda..."
+    python manage.py migrate_all_tenants --skip-public || true
 
     echo "Static fayllar yig'ilmoqda..."
     mkdir -p /app/static /app/media

@@ -236,6 +236,53 @@ class TenantMiddlewareTests(TestCase):
     @override_settings(
         TENANT_CEO_URL_PREFIX='/api/v1/super-admin/',
         TENANT_CEO_DOMAINS={'admin.crm.uz'},
+        DEBUG=True,
+    )
+    def test_ceo_routes_blocked_on_subdomain_via_host(self):
+        """Subdomendan kelgan CEO so'rovlari 403 bilan bloklanishi kerak."""
+        middleware = self._get_middleware()
+        request = self.factory.get(
+            '/api/v1/super-admin/tenants/',
+            SERVER_NAME='najot.localhost',
+            SERVER_PORT='8000',
+        )
+        request.META['HTTP_HOST'] = 'najot.localhost:8000'
+
+        response = middleware.process_request(request)
+
+        self.assertIsNotNone(response)
+        self.assertEqual(response.status_code, 403)
+        import json
+        data = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(data.get('code'), 'CEO_FORBIDDEN_ON_SUBDOMAIN')
+
+    @override_settings(
+        TENANT_CEO_URL_PREFIX='/api/v1/super-admin/',
+        TENANT_CEO_DOMAINS={'admin.crm.uz'},
+        DEBUG=True,
+    )
+    def test_ceo_routes_blocked_on_subdomain_via_header(self):
+        """X-Tenant-Domain headeri subdomen bo'lsa CEO so'rovi 403 qaytarishi kerak."""
+        middleware = self._get_middleware()
+        request = self.factory.get(
+            '/api/v1/super-admin/tenants/',
+            SERVER_NAME='localhost',
+            SERVER_PORT='8000',
+        )
+        request.META['HTTP_HOST'] = 'localhost:8000'
+        request.META['HTTP_X_TENANT_DOMAIN'] = 'maktab1.localhost'
+
+        response = middleware.process_request(request)
+
+        self.assertIsNotNone(response)
+        self.assertEqual(response.status_code, 403)
+        import json
+        data = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(data.get('code'), 'CEO_FORBIDDEN_ON_SUBDOMAIN')
+
+    @override_settings(
+        TENANT_CEO_URL_PREFIX='/api/v1/super-admin/',
+        TENANT_CEO_DOMAINS={'admin.crm.uz'},
         TENANT_DEV_SCHEMA_HEADER=False,
         DEBUG=True,
     )

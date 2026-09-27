@@ -14,6 +14,8 @@ export default function StudentFinanceSection({
   canConfirmPayment,
   studentStatus,
   dispatch,
+  historyLoading = false,
+  paymentLoading = false,
 }) {
   const [activeTab, setActiveTab] = useState("history"); // 'wallet' or 'history'
 
@@ -68,6 +70,7 @@ export default function StudentFinanceSection({
             handleDeleteHistory={handleDeleteHistory}
             studentStatus={studentStatus}
             dispatch={dispatch}
+            isLoading={historyLoading}
           />
         )}
       </div>

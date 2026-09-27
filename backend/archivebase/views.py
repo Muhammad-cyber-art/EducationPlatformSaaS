@@ -128,11 +128,11 @@ class ArchivedStaffViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def destroy(self, request, *args, **kwargs):
         """
         Arxivdan butunlay o'chirish.
-        Ruxsat: Faqat Super Admin
+        Ruxsat: Super Admin va Admin
         """
-        if request.user.role != 'super_admin':
+        if request.user.role not in ['super_admin', 'admin'] and not request.user.is_superuser:
             return Response(
-                {"error": "Faqat super_admin xodimlarni butunlay o'chira oladi"},
+                {"error": "Faqat super_admin va admin xodimlarni butunlay o'chira oladi"},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -146,14 +146,14 @@ class ArchivedStaffViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def restore(self, request, pk=None):
         """
         Arxivlangan xodimni qayta tiklash.
-        Ruxsat: Faqat Super Admin
+        Ruxsat: Super Admin va Admin
         """
         user = request.user
         
-        # Faqat super_admin tiklashi mumkin
-        if user.role != 'super_admin':
+        # Super Admin yoki Admin tiklashi mumkin
+        if user.role not in ['super_admin', 'admin'] and not user.is_superuser:
             return Response(
-                {"error": "Faqat super_admin xodimlarni tiklashi mumkin"},
+                {"error": "Faqat super_admin va admin xodimlarni tiklashi mumkin"},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -179,8 +179,8 @@ class ArchivedStaffViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def bulk_restore(self, request):
         """Ko'plab xodimlarni bir vaqtda arxivdan tiklash"""
         user = request.user
-        if user.role != 'super_admin':
-            return Response({"error": "Faqat super_admin xodimlarni tiklashi mumkin"}, status=403)
+        if user.role not in ['super_admin', 'admin'] and not user.is_superuser:
+            return Response({"error": "Faqat super_admin va admin xodimlarni tiklashi mumkin"}, status=403)
             
         ids = request.data.get('ids', [])
         results = []
@@ -202,8 +202,8 @@ class ArchivedStaffViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def bulk_delete(self, request):
         """Ko'plab xodimlarni bir vaqtda arxivdan butunlay o'chirish"""
         user = request.user
-        if user.role != 'super_admin':
-            return Response({"error": "Faqat super_admin o'chira oladi"}, status=403)
+        if user.role not in ['super_admin', 'admin'] and not user.is_superuser:
+            return Response({"error": "Faqat super_admin va admin o'chira oladi"}, status=403)
             
         ids = request.data.get('ids', [])
         ArchivedStaff.objects.filter(id__in=ids).delete()
@@ -222,11 +222,11 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def destroy(self, request, *args, **kwargs):
         """
         Arxivdan butunlay o'chirish.
-        Ruxsat: Faqat Super Admin
+        Ruxsat: Super Admin va Admin
         """
-        if request.user.role != 'super_admin':
+        if request.user.role not in ['super_admin', 'admin'] and not request.user.is_superuser:
             return Response(
-                {"error": "Faqat super_admin guruhlarni butunlay o'chira oladi"},
+                {"error": "Faqat super_admin va admin guruhlarni butunlay o'chira oladi"},
                 status=status.HTTP_403_FORBIDDEN
             )
         return super().destroy(request, *args, **kwargs)
@@ -235,7 +235,7 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def restore(self, request, pk=None):
         """
         Arxivlangan guruhni va uning o'quvchilarini qayta tiklash.
-        Ruxsat: Faqat Super Admin.
+        Ruxsat: Super Admin va Admin.
 
         Response:
             {
@@ -249,9 +249,9 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
         """
         user = request.user
 
-        if user.role != 'super_admin':
+        if user.role not in ['super_admin', 'admin'] and not user.is_superuser:
             return Response(
-                {"error": "Faqat super_admin guruhlarni tiklashi mumkin"},
+                {"error": "Faqat super_admin va admin guruhlarni tiklashi mumkin"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -296,8 +296,8 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def bulk_restore(self, request):
         """Ko'plab guruhlarni bir vaqtda arxivdan tiklash"""
         user = request.user
-        if user.role != 'super_admin':
-            return Response({"error": "Faqat super_admin guruhlarni tiklashi mumkin"}, status=403)
+        if user.role not in ['super_admin', 'admin'] and not user.is_superuser:
+            return Response({"error": "Faqat super_admin va admin guruhlarni tiklashi mumkin"}, status=403)
             
         ids = request.data.get('ids', [])
         results = []
@@ -319,8 +319,8 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
     def bulk_delete(self, request):
         """Ko'plab guruhlarni bir vaqtda arxivdan butunlay o'chirish"""
         user = request.user
-        if user.role != 'super_admin':
-            return Response({"error": "Faqat super_admin o'chira oladi"}, status=403)
+        if user.role not in ['super_admin', 'admin'] and not user.is_superuser:
+            return Response({"error": "Faqat super_admin va admin o'chira oladi"}, status=403)
             
         ids = request.data.get('ids', [])
         ArchivedGroup.objects.filter(id__in=ids).delete()
@@ -328,18 +328,22 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
 
 
 class PaymentArchiveViewSet(viewsets.ModelViewSet):
+    """To'lovlar arxivi — Super Admin va Admin uchun ruxsat berilgan"""
     queryset = PaymentArchive.objects.all().order_by('-archived_at')
     serializer_class = PaymentArchiveSerializer
-    
-    # Faqat Super Admin arxivni ko'ra oladi
-    def get_permissions(self):
-        class DenyAll(permissions.BasePermission):
-            def has_permission(self, request, view):
-                return False
-        
-        if self.request.user and self.request.user.is_authenticated and getattr(self.request.user, 'role', '') == 'super_admin':
-            return [permissions.IsAuthenticated()]
-        return [DenyAll()]
+    permission_classes = [IsArchiveAdmin]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        if user.is_superuser or getattr(user, 'role', '') == 'super_admin':
+            return qs
+        if getattr(user, 'role', '') == 'admin':
+            if getattr(user, 'branch', None):
+                return qs.filter(branch_name=user.branch.name)
+            return qs
+        return qs.none()
 
 
 from .models import ArchivedHomework

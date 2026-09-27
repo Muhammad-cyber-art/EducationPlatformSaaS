@@ -22,7 +22,8 @@ from datetime import timedelta
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import status, permissions
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -259,6 +260,40 @@ class TenantDetailView(CEOAuthMixin, APIView):
             )
         return Response(TenantDetailSerializer(tenant).data)
 
+    def patch(self, request, tenant_id: int):
+        """
+        Tenant ma'lumotlarini (nomi, shahar, telefon, tarif) yangilash.
+        """
+        tenant = self._get_tenant(tenant_id)
+        if not tenant:
+            return Response(
+                {"error": f"Tenant (id={tenant_id}) topilmadi."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        data = request.data
+        if "name" in data and data["name"].strip():
+            tenant.name = data["name"].strip()
+        if "city" in data:
+            tenant.city = data["city"].strip()
+        if "contact_phone" in data:
+            tenant.contact_phone = data["contact_phone"].strip()
+
+        tenant.save()
+
+        # Obuna tarifini yangilash
+        if "plan" in data:
+            new_plan = data["plan"]
+            if hasattr(tenant, "subscription") and new_plan in ("starter", "pro", "enterprise"):
+                tenant.subscription.plan = new_plan
+                tenant.subscription.save()
+
+        # Cached ma'lumotlarni tozalash
+        if hasattr(tenant, "_cached_stats_and_admin"):
+            delattr(tenant, "_cached_stats_and_admin")
+
+        return Response(TenantDetailSerializer(tenant).data, status=status.HTTP_200_OK)
+
     def delete(self, request, tenant_id: int):
         """
         Tenantni o'chirish. JUDA XAVFLI operatsiya.
@@ -344,6 +379,120 @@ class TenantToggleStatusView(CEOAuthMixin, APIView):
             "old_status": old_status,
             "reason":     reason,
         }, status=status.HTTP_200_OK)
+
+
+class TenantResetAdminPasswordView(CEOAuthMixin, APIView):
+    """
+    POST /api/v1/super-admin/tenants/{tenant_id}/reset-admin-password/
+    O'quv markaz super adminining parolini o'zgartirish.
+    Body: {"new_password": "NewStrongPassword123!"}
+    """
+    def post(self, request, tenant_id: int):
+        new_password = request.data.get("new_password", "").strip()
+        if not new_password or len(new_password) < 6:
+            return Response(
+                {"error": "Yangi parol kamida 6 belgidan iborat bo'lishi kerak."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+
+        from tenants.utils import tenant_schema_context
+        from django.contrib.auth import get_user_model
+        UserModel = get_user_model()
+
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                admin_user = UserModel.objects.filter(role="super_admin").first()
+                if not admin_user:
+                    admin_user = UserModel.objects.filter(is_superuser=True).first()
+                if not admin_user:
+                    return Response(
+                        {"error": "Ushbu markazda super admin foydalanuvchisi topilmadi."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+
+                admin_user.set_password(new_password)
+                admin_user.save()
+
+                logger.info(
+                    "CEO API: Tenant admin paroli yangilandi: tenant=%s, admin=%s, CEO=%s",
+                    tenant.name, admin_user.username, request.user.email
+                )
+
+                return Response({
+                    "message": f"'{admin_user.username}' administrator paroli muvaffaqiyatli yangilandi.",
+                    "username": admin_user.username,
+                }, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            logger.error("Admin parolini o'zgartirishda xatolik: %s", exc)
+            return Response({"error": f"Xatolik: {str(exc)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TenantUpdateAdminView(CEOAuthMixin, APIView):
+    """
+    PATCH /api/v1/super-admin/tenants/{tenant_id}/update-admin/
+    O'quv markaz super adminining ma'lumotlarini (ism, telefon, email, username) tahrirlash.
+    """
+    def patch(self, request, tenant_id: int):
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+
+        from tenants.utils import tenant_schema_context
+        from django.contrib.auth import get_user_model
+        UserModel = get_user_model()
+
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                admin_user = UserModel.objects.filter(role="super_admin").first()
+                if not admin_user:
+                    admin_user = UserModel.objects.filter(is_superuser=True).first()
+                if not admin_user:
+                    return Response(
+                        {"error": "Super admin foydalanuvchisi topilmadi."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+
+                data = request.data
+                if "username" in data and data["username"].strip():
+                    new_uname = data["username"].strip()
+                    if UserModel.objects.filter(username=new_uname).exclude(id=admin_user.id).exists():
+                        return Response({"error": "Bu username allaqachon band."}, status=status.HTTP_400_BAD_REQUEST)
+                    admin_user.username = new_uname
+
+                if "first_name" in data:
+                    admin_user.first_name = data["first_name"].strip()
+                if "last_name" in data:
+                    admin_user.last_name = data["last_name"].strip()
+                if "phone_number" in data:
+                    admin_user.phone_number = data["phone_number"].strip()
+                if "email" in data and data["email"].strip():
+                    admin_user.email = data["email"].strip()
+
+                admin_user.save()
+
+                return Response({
+                    "message": "Super admin ma'lumotlari muvaffaqiyatli yangilandi.",
+                    "super_admin": {
+                        "id":           admin_user.id,
+                        "username":     admin_user.username,
+                        "email":        admin_user.email,
+                        "first_name":   admin_user.first_name,
+                        "last_name":    admin_user.last_name,
+                        "full_name":    admin_user.get_full_name() or admin_user.username,
+                        "phone_number": admin_user.phone_number or "",
+                    }
+                }, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            logger.error("Admin ma'lumotlarini tahrirlashda xatolik: %s", exc)
+            return Response({"error": f"Xatolik: {str(exc)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -435,3 +584,118 @@ class CEOAnalyticsView(CEOAuthMixin, APIView):
             })
 
         return result
+
+
+class TenantImpersonateView(CEOAuthMixin, APIView):
+    """
+    POST /api/v1/super-admin/tenants/{tenant_id}/impersonate/
+    CEO uchun: O'quv markaz super admini sifatida 1-bosishda tizimga kirish (impersonation).
+    Tenant super admini uchun haqiqiy JWT tokenlarini generatsiya qiladi.
+    """
+    def post(self, request, tenant_id: int):
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not tenant.is_active:
+            return Response({"error": "Ushbu markaz faol emas (bloklangan)."}, status=status.HTTP_403_FORBIDDEN)
+
+        from tenants.utils import tenant_schema_context
+        from tenants.context import set_current_tenant, clear_current_tenant
+        from django.contrib.auth import get_user_model
+        from authenticatsiya.serializers import LoginSerializer
+
+        UserModel = get_user_model()
+
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                admin_user = UserModel.objects.filter(role="super_admin").first()
+                if not admin_user:
+                    admin_user = UserModel.objects.filter(is_superuser=True).first()
+
+                if not admin_user:
+                    return Response(
+                        {"error": "Ushbu markazda super admin foydalanuvchisi topilmadi."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+
+                set_current_tenant(tenant)
+                refresh = LoginSerializer.get_token(admin_user)
+                access = str(refresh.access_token)
+                clear_current_tenant()
+
+                logger.info(
+                    "CEO Impersonation: CEO=%s entered tenant=%s as admin=%s",
+                    request.user.email, tenant.name, admin_user.username
+                )
+
+                return Response({
+                    "access": access,
+                    "refresh": str(refresh),
+                    "tenant": {
+                        "id": tenant.id,
+                        "name": tenant.name,
+                        "schema_name": tenant.schema_name,
+                    },
+                    "user": {
+                        "id": admin_user.id,
+                        "username": admin_user.username,
+                        "role": admin_user.role,
+                        "full_name": admin_user.get_full_name() or admin_user.username,
+                    }
+                }, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            logger.error("Impersonation xatolik: %s", exc)
+            return Response({"error": f"Xatolik: {str(exc)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ResolveSubdomainView(APIView):
+    """
+    GET /api/v1/public/tenants/resolve/?subdomain=najot
+    Subdomen mavjudligini xavfsiz tekshirish (barcha tenantlar ro'yxatini oshkor qilmaydi).
+    Faqatgina so'ralgan bitta subdomen mavjud yoki yo'qligini qaytaradi.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        subdomain = request.query_params.get("subdomain", "").strip().lower()
+        if not subdomain:
+            return Response({"error": "Subdomen parametri ko'rsatilmadi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.db.models import Q
+        domain_obj = Domain.objects.select_related('tenant').filter(
+            Q(domain=subdomain) |
+            Q(domain=f"{subdomain}.localhost") |
+            Q(domain__istartswith=f"{subdomain}.") |
+            Q(tenant__schema_name=f"tenant_{subdomain}") |
+            Q(tenant__schema_name=subdomain)
+        ).filter(tenant__is_active=True).first()
+
+        if domain_obj and domain_obj.tenant:
+            return Response({
+                "exists": True,
+                "name": domain_obj.tenant.name,
+                "subdomain": subdomain,
+                "schema_name": domain_obj.tenant.schema_name,
+                "primary_domain": domain_obj.domain,
+            }, status=status.HTTP_200_OK)
+
+        tenant = Tenant.objects.filter(
+            Q(schema_name=f"tenant_{subdomain}") | Q(schema_name=subdomain),
+            is_active=True
+        ).first()
+
+        if tenant:
+            return Response({
+                "exists": True,
+                "name": tenant.name,
+                "subdomain": subdomain,
+                "schema_name": tenant.schema_name,
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "exists": False,
+            "error": f"'{subdomain}' nomli faol o'quv markaz topilmadi."
+        }, status=status.HTTP_404_NOT_FOUND)

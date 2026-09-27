@@ -544,8 +544,12 @@ class ReportDistributor:
             admin_user: User object with admin role
             target_date: Date for the report (defaults to today)
         """
-        if not admin_user.telegram_chat_id:
-            self.logger.warning(f"Admin {admin_user.username} has no telegram_chat_id")
+        chat_id = admin_user.telegram_chat_id
+        if not chat_id and hasattr(admin_user, 'bot_profile') and admin_user.bot_profile and admin_user.bot_profile.is_active:
+            chat_id = admin_user.bot_profile.telegram_id
+            
+        if not chat_id:
+            self.logger.warning(f"Admin {admin_user.username} has no telegram_chat_id or bot_profile")
             return False
         
         if not admin_user.branch:
@@ -557,7 +561,7 @@ class ReportDistributor:
             filename = f"daily_report_{target_date.strftime('%Y-%m-%d') if target_date else timezone.now().date().strftime('%Y-%m-%d')}.xlsx"
             caption = f"Kunlik hisobot - {admin_user.branch.name}"
             
-            return self._send_file_to_chat(admin_user.telegram_chat_id, report_buffer, filename, caption)
+            return self._send_file_to_chat(chat_id, report_buffer, filename, caption)
             
         except ReportGenerationError as e:
             self.logger.error(f"Failed to send daily report to admin {admin_user.username}: {str(e)}")
@@ -572,8 +576,12 @@ class ReportDistributor:
             year: Year for the report
             month: Month for the report
         """
-        if not admin_user.telegram_chat_id:
-            self.logger.warning(f"Admin {admin_user.username} has no telegram_chat_id")
+        chat_id = admin_user.telegram_chat_id
+        if not chat_id and hasattr(admin_user, 'bot_profile') and admin_user.bot_profile and admin_user.bot_profile.is_active:
+            chat_id = admin_user.bot_profile.telegram_id
+
+        if not chat_id:
+            self.logger.warning(f"Admin {admin_user.username} has no telegram_chat_id or bot_profile")
             return False
         
         if not admin_user.branch:
@@ -585,7 +593,7 @@ class ReportDistributor:
             filename = f"attendance_{year}_{month:02d}.zip"
             caption = f"Oylik davomat arxivi - {admin_user.branch.name} ({year}-{month:02d})"
             
-            return self._send_file_to_chat(admin_user.telegram_chat_id, zip_buffer, filename, caption)
+            return self._send_file_to_chat(chat_id, zip_buffer, filename, caption)
             
         except ReportGenerationError as e:
             self.logger.error(f"Failed to send monthly attendance to admin {admin_user.username}: {str(e)}")
@@ -600,8 +608,12 @@ class ReportDistributor:
             year: Year for the report
             month: Month for the report
         """
-        if not super_admin_user.telegram_chat_id:
-            self.logger.warning(f"Super Admin {super_admin_user.username} has no telegram_chat_id")
+        chat_id = super_admin_user.telegram_chat_id
+        if not chat_id and hasattr(super_admin_user, 'bot_profile') and super_admin_user.bot_profile and super_admin_user.bot_profile.is_active:
+            chat_id = super_admin_user.bot_profile.telegram_id
+
+        if not chat_id:
+            self.logger.warning(f"Super Admin {super_admin_user.username} has no telegram_chat_id or bot_profile")
             return False
         
         try:
@@ -609,7 +621,7 @@ class ReportDistributor:
             filename = f"financial_report_{year}_{month:02d}.xlsx"
             caption = f"Oylik moliyaviy hisobot - {year}-{month:02d}"
             
-            return self._send_file_to_chat(super_admin_user.telegram_chat_id, report_buffer, filename, caption)
+            return self._send_file_to_chat(chat_id, report_buffer, filename, caption)
             
         except ReportGenerationError as e:
             self.logger.error(f"Failed to send monthly financial to super admin {super_admin_user.username}: {str(e)}")

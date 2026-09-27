@@ -1,10 +1,13 @@
 import { Outlet, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import CEOSidebar from './CEOSidebar';
+import CEOSubdomainForbidden from './CEOSubdomainForbidden';
+import { isTenantSubdomain } from '../../utils/subdomain';
 
 export default function CEOLayout() {
   const { isAuthenticated } = useSelector((s) => s.ceo);
 
+  if (isTenantSubdomain()) return <CEOSubdomainForbidden />;
   if (!isAuthenticated) return <Navigate to="/ceo/login" replace />;
 
   return (

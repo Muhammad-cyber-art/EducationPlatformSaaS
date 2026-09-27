@@ -4,6 +4,14 @@ from django.utils import timezone
 from decimal import Decimal
 import uuid
 
+def tenant_receipt_image_path(instance, filename):
+    """To'lov chek rasmlarini har bir tenant schemasi bo'yicha alohida saqlash."""
+    from tenants.context import get_current_tenant
+    tenant = get_current_tenant()
+    schema = tenant.schema_name if tenant else 'common'
+    return f"tenants/{schema}/receipts/{filename}"
+
+
 class Payment(models.Model):
     # O'quvchi va Guruh bilan bog'liqlik
     student = models.ForeignKey('groups.Student', on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
@@ -61,7 +69,7 @@ class Payment(models.Model):
         ('other', 'Boshqa'),
     ]
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='cash')
-    receipt_image = models.ImageField(upload_to='receipts/', null=True, blank=True)
+    receipt_image = models.ImageField(upload_to=tenant_receipt_image_path, null=True, blank=True)
     is_receiptless = models.BooleanField(default=False, verbose_name="Chek yo'q")
     is_full_amount = models.BooleanField(default=False, verbose_name="To'liq oylik to'langan")
     notes = models.TextField(blank=True, null=True)

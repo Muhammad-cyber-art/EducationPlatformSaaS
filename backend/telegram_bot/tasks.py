@@ -5,6 +5,24 @@ from .utils import _send_message_sync, get_student_telegram_ids
 
 logger = logging.getLogger(__name__)
 
+@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+def send_telegram_message_task(self, chat_id, text):
+    """
+    Yagona Telegram xabarini Celery orqali xavfsiz va ishonchli yuborish.
+    Retry va exponential backoff qo'llab-quvvatlanadi.
+    """
+    try:
+        response = _send_message_sync(chat_id, text)
+        if response is None or response.status_code != 200:
+            raise Exception(f"Telegram API xatolik qaytardi: {getattr(response, 'text', 'No response')}")
+        return True
+    except Exception as exc:
+        logger.warning(f"Telegram xabar yuborishda xatolik (urinish {self.request.retries + 1}): {exc}")
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=5 * (2 ** self.request.retries))
+        logger.error(f"Telegram xabari {chat_id} ga {self.max_retries} marta urinishdan so'ng ham bormadi: {exc}")
+        return False
+
 @shared_task
 def send_attendance_notifications_task(attendance_ids):
     """

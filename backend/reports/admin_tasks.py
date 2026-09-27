@@ -14,6 +14,7 @@ from datetime import datetime, date
 from celery import shared_task
 from django.utils import timezone
 from django.conf import settings
+from django.db.models import Q
 
 from authenticatsiya.models import UserModel
 from reports.report_generator import ReportDistributor, ReportGenerationError
@@ -21,24 +22,15 @@ from reports.report_generator import ReportDistributor, ReportGenerationError
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name='reports.send_daily_reports_to_admins')
-def send_daily_reports_to_admins():
-    """
-    Send daily Excel reports to all admins with telegram_chat_id.
-    Scheduled to run daily at a specified time (e.g., 8:00 PM).
-    """
-    logger.info("Starting daily report distribution to admins")
-    
+def _send_daily_reports_for_current_schema():
     distributor = ReportDistributor()
     target_date = timezone.now().date()
     
-    # Get all admins with telegram_chat_id and branch
     admins = UserModel.objects.filter(
+        Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False, telegram_chat_id__gt=''),
         role='admin',
-        telegram_chat_id__isnull=False,
-        telegram_chat_id__gt='',
         branch__isnull=False
-    )
+    ).distinct()
     
     success_count = 0
     failure_count = 0
@@ -55,24 +47,74 @@ def send_daily_reports_to_admins():
         except Exception as e:
             failure_count += 1
             logger.error(f"Error sending daily report to admin {admin.username}: {str(e)}")
-    
-    logger.info(f"Daily report distribution completed: {success_count} success, {failure_count} failures")
-    return {
-        'success_count': success_count,
-        'failure_count': failure_count,
-        'total_admins': admins.count()
-    }
+            
+    return {'success_count': success_count, 'failure_count': failure_count, 'total_admins': admins.count()}
+
+
+@shared_task(name='reports.send_daily_reports_to_admins')
+def send_daily_reports_to_admins():
+    """
+    Send daily Excel reports to all admins with telegram_chat_id (Multi-tenant).
+    Scheduled to run daily at a specified time (e.g., 8:00 PM).
+    """
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+
+    logger.info("Starting daily report distribution to admins (Multi-tenant)...")
+    active_tenants = Tenant.objects.filter(is_active=True)
+
+    if not active_tenants.exists():
+        return _send_daily_reports_for_current_schema()
+
+    aggregated = {'success_count': 0, 'failure_count': 0, 'total_admins': 0}
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                res = _send_daily_reports_for_current_schema()
+                aggregated['success_count'] += res['success_count']
+                aggregated['failure_count'] += res['failure_count']
+                aggregated['total_admins'] += res['total_admins']
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun kunlik hisobot jo'natishda xatolik: {exc}")
+
+    return aggregated
+
+
+def _send_monthly_attendance_for_current_schema(year, month):
+    distributor = ReportDistributor()
+    admins = UserModel.objects.filter(
+        Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False, telegram_chat_id__gt=''),
+        role='admin',
+        branch__isnull=False
+    ).distinct()
+    success_count = 0
+    failure_count = 0
+    for admin in admins:
+        try:
+            result = distributor.send_monthly_attendance_to_admin(admin, year, month)
+            if result:
+                success_count += 1
+                logger.info(f"Monthly attendance sent successfully to admin {admin.username}")
+            else:
+                failure_count += 1
+                logger.warning(f"Failed to send monthly attendance to admin {admin.username}")
+        except Exception as e:
+            failure_count += 1
+            logger.error(f"Error sending monthly attendance to admin {admin.username}: {str(e)}")
+            
+    return {'success_count': success_count, 'failure_count': failure_count, 'total_admins': admins.count(), 'year': year, 'month': month}
 
 
 @shared_task(name='reports.send_monthly_attendance_to_admins')
 def send_monthly_attendance_to_admins():
     """
-    Send monthly attendance ZIP archives to all admins.
+    Send monthly attendance ZIP archives to all admins (Multi-tenant).
     Scheduled to run on the last day of each month at a specified time.
     """
-    logger.info("Starting monthly attendance distribution to admins")
-    
-    distributor = ReportDistributor()
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+
+    logger.info("Starting monthly attendance distribution to admins (Multi-tenant)...")
     now = timezone.now()
     year = now.year
     month = now.month
@@ -88,74 +130,32 @@ def send_monthly_attendance_to_admins():
         logger.info(f"Today {today} is not the last day of the month. Skipping monthly attendance reports.")
         return {'status': 'skipped', 'reason': 'Not last day of month'}
     
-    # Get all admins with telegram_chat_id and branch
-    admins = UserModel.objects.filter(
-        role='admin',
-        telegram_chat_id__isnull=False,
-        telegram_chat_id__gt='',
-        branch__isnull=False
-    )
-    
-    success_count = 0
-    failure_count = 0
-    
-    for admin in admins:
+    active_tenants = Tenant.objects.filter(is_active=True)
+    if not active_tenants.exists():
+        return _send_monthly_attendance_for_current_schema(year, month)
+
+    aggregated = {'success_count': 0, 'failure_count': 0, 'total_admins': 0, 'year': year, 'month': month}
+    for tenant in active_tenants:
         try:
-            result = distributor.send_monthly_attendance_to_admin(admin, year, month)
-            if result:
-                success_count += 1
-                logger.info(f"Monthly attendance sent successfully to admin {admin.username}")
-            else:
-                failure_count += 1
-                logger.warning(f"Failed to send monthly attendance to admin {admin.username}")
-        except Exception as e:
-            failure_count += 1
-            logger.error(f"Error sending monthly attendance to admin {admin.username}: {str(e)}")
-    
-    logger.info(f"Monthly attendance distribution completed: {success_count} success, {failure_count} failures")
-    return {
-        'success_count': success_count,
-        'failure_count': failure_count,
-        'total_admins': admins.count(),
-        'year': year,
-        'month': month
-    }
+            with tenant_schema_context(tenant.schema_name):
+                res = _send_monthly_attendance_for_current_schema(year, month)
+                aggregated['success_count'] += res['success_count']
+                aggregated['failure_count'] += res['failure_count']
+                aggregated['total_admins'] += res['total_admins']
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun oylik davomat jo'natishda xatolik: {exc}")
+
+    return aggregated
 
 
-@shared_task(name='reports.send_monthly_financial_to_super_admins')
-def send_monthly_financial_to_super_admins():
-    """
-    Send monthly financial Excel reports to all super_admins.
-    Scheduled to run on the last day of each month at a specified time.
-    """
-    logger.info("Starting monthly financial report distribution to super_admins")
-    
+def _send_monthly_financial_for_current_schema(year, month):
     distributor = ReportDistributor()
-    now = timezone.now()
-    year = now.year
-    month = now.month
-    
-    # Check if today is the last day of the month
-    if month == 12:
-        next_month = date(year + 1, 1, 1)
-    else:
-        next_month = date(year, month + 1, 1)
-    
-    today = now.date()
-    if today != (next_month - timezone.timedelta(days=1)):
-        logger.info(f"Today {today} is not the last day of the month. Skipping monthly financial reports.")
-        return {'status': 'skipped', 'reason': 'Not last day of month'}
-    
-    # Get all super_admins with telegram_chat_id
     super_admins = UserModel.objects.filter(
-        role='super_admin',
-        telegram_chat_id__isnull=False,
-        telegram_chat_id__gt=''
-    )
-    
+        Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False, telegram_chat_id__gt=''),
+        role='super_admin'
+    ).distinct()
     success_count = 0
     failure_count = 0
-    
     for super_admin in super_admins:
         try:
             result = distributor.send_monthly_financial_to_super_admin(super_admin, year, month)
@@ -168,15 +168,50 @@ def send_monthly_financial_to_super_admins():
         except Exception as e:
             failure_count += 1
             logger.error(f"Error sending monthly financial report to super_admin {super_admin.username}: {str(e)}")
+            
+    return {'success_count': success_count, 'failure_count': failure_count, 'total_super_admins': super_admins.count(), 'year': year, 'month': month}
+
+
+@shared_task(name='reports.send_monthly_financial_to_super_admins')
+def send_monthly_financial_to_super_admins():
+    """
+    Send monthly financial Excel reports to all super_admins (Multi-tenant).
+    Scheduled to run on the last day of each month at a specified time.
+    """
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+
+    logger.info("Starting monthly financial report distribution to super_admins (Multi-tenant)...")
+    now = timezone.now()
+    year = now.year
+    month = now.month
     
-    logger.info(f"Monthly financial report distribution completed: {success_count} success, {failure_count} failures")
-    return {
-        'success_count': success_count,
-        'failure_count': failure_count,
-        'total_super_admins': super_admins.count(),
-        'year': year,
-        'month': month
-    }
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    
+    today = now.date()
+    if today != (next_month - timezone.timedelta(days=1)):
+        logger.info(f"Today {today} is not the last day of the month. Skipping monthly financial reports.")
+        return {'status': 'skipped', 'reason': 'Not last day of month'}
+    
+    active_tenants = Tenant.objects.filter(is_active=True)
+    if not active_tenants.exists():
+        return _send_monthly_financial_for_current_schema(year, month)
+
+    aggregated = {'success_count': 0, 'failure_count': 0, 'total_super_admins': 0, 'year': year, 'month': month}
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                res = _send_monthly_financial_for_current_schema(year, month)
+                aggregated['success_count'] += res['success_count']
+                aggregated['failure_count'] += res['failure_count']
+                aggregated['total_super_admins'] += res['total_super_admins']
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun oylik moliyaviy hisobot jo'natishda xatolik: {exc}")
+
+    return aggregated
 
 
 @shared_task(name='reports.send_manual_daily_report')

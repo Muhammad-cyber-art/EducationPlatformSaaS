@@ -85,11 +85,21 @@ class Command(BaseCommand):
             )
         )
 
-        # ── search_path o'rnatish ─────────────────────────────────────────────
+        # ── search_path o'rnatish va izolyatsiyalangan django_migrations yaratish ─────
         try:
             with connection.cursor() as cursor:
                 cursor.execute(f"SET search_path TO {schema_name}, public")
-            logger.info("search_path o'rnatildi: %s", schema_name)
+                # Tenant schemasi uchun alohida django_migrations jadvalini ta'minlash.
+                # Bu public.django_migrations bilan to'qnashuvni va migratsiyalar o'tkazib yuborilishini oldini oladi.
+                cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS "{schema_name}"."django_migrations" (
+                        id serial PRIMARY KEY,
+                        app varchar(255) NOT NULL,
+                        name varchar(255) NOT NULL,
+                        applied timestamp with time zone NOT NULL
+                    )
+                """)
+            logger.info("search_path o'rnatildi va django_migrations ta'minlandi: %s", schema_name)
         except Exception as exc:
             raise CommandError(f"search_path o'rnatishda xatolik: {exc}") from exc
 
@@ -98,7 +108,6 @@ class Command(BaseCommand):
             migrate_kwargs = {
                 "verbosity": options.get("verbosity", 1),
                 "interactive": False,
-                "run_syncdb": True,
             }
 
             if fake_initial:
@@ -113,7 +122,7 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"✅ Schema '{schema_name}' uchun barcha migratsiyalar muvaffaqiyatli bajarildi."
+                    f"[OK] Schema '{schema_name}' uchun barcha migratsiyalar muvaffaqiyatli bajarildi."
                 )
             )
 
@@ -122,28 +131,32 @@ class Command(BaseCommand):
 
         finally:
             # search_path ni albatta tiklash
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SET search_path TO public")
-                logger.info("search_path public ga qaytarildi")
-            except Exception as exc:
-                logger.warning("search_path reset qilishda xatolik: %s", exc)
+            from tenants.utils import reset_search_path
+            reset_search_path()
 
     def _migrate_tenant_apps(self, kwargs: dict) -> None:
         """
         Tenant schemasi uchun tegishli applarni migratsiya qiladi.
 
-        'tenants' app PUBLIC schemada bo'lgani uchun uni o'tkazib yuboramiz.
-        Qolgan barcha applar tenant schemaga migratsiya qilinadi.
+        Faqat migratsiyasi bor bo'lgan va public/celery/admin ga kirmaydigan
+        tenant applari migratsiya qilinadi.
         """
         from django.conf import settings
+        from django.db.migrations.loader import MigrationLoader
 
-        # Tenant schemaga kiruvchi applar (tenants o'zini istisno qilib)
+        loader = MigrationLoader(connection)
+        migrated_apps = set(loader.migrated_apps)
+
+        excluded_apps = {
+            'tenants',
+            'django_celery_beat',
+            'admin',
+            'sessions',
+        }
+
         tenant_apps = [
             app for app in settings.INSTALLED_APPS
-            if not app.startswith('django.')
-            and app not in ('tenants', 'django_celery_beat', 'drf_spectacular', 'drf_spectacular_sidecar')
-            and '.' not in app  # faqat lokal applar
+            if app in migrated_apps and app not in excluded_apps
         ]
 
         for app_label in tenant_apps:
@@ -151,8 +164,5 @@ class Command(BaseCommand):
                 call_command("migrate", app_label, **kwargs)
                 logger.debug("Migratsiya bajarildi: app=%s", app_label)
             except Exception as exc:
-                # Ba'zi applar migrate bo'lmasligi mumkin (masalan, telegram_bot)
-                logger.warning(
-                    "App migratsiya qilishda ogohlantirish: app=%s, error=%s",
-                    app_label, exc
-                )
+                logger.error("App migratsiya qilishda xatolik: app=%s, error=%s", app_label, exc)
+                raise CommandError(f"App '{app_label}' migratsiya qilib bo'lmadi: {exc}") from exc

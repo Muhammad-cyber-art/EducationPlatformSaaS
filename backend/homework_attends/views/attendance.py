@@ -37,8 +37,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_permissions(self):
-        """Monthly report uchun autentifikatsiya majburiy (ReportDownloadTrack user talab qiladi)"""
-        if self.action == 'monthly_report':
+        """Monthly report va student_monthly uchun autentifikatsiya majburiy"""
+        if self.action in ['monthly_report', 'student_monthly']:
             return [IsAuthenticated()]
         return super().get_permissions()
 
@@ -395,5 +395,251 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             logger.exception("Davomat tahrirlashda xatolik: %s", str(e))
             return Response(
                 {"detail": "Tizim xatoligi yuz berdi. Iltimos adminga murojaat qiling."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='student-monthly', permission_classes=[IsAuthenticated])
+    def student_monthly(self, request):
+        """
+        O'quvchining 1 oylik davomatini GitHub-style heatmap uchun agregatsiya qilish.
+        Faqat so'rov yuborilganda asinxron (lazy) olinadi.
+        Moliya ma'lumotlariga mutlaqo daxl qilmaydi (Read-Only).
+        """
+        from groups.models import Student, GroupEnrollment
+        from calendar import monthrange
+        from datetime import date as date_type
+
+        student_id = request.query_params.get('student_id')
+        if not student_id:
+            return Response({"detail": "student_id parametri majburiy"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            student_id_int = int(student_id)
+        except (ValueError, TypeError):
+            return Response({"detail": "student_id butun son bo'lishi kerak"}, status=status.HTTP_400_BAD_REQUEST)
+
+        student = get_object_or_404(Student, id=student_id_int)
+
+        # Ruxsatlarni tekshirish (Access Control)
+        user = request.user
+        if user.role == 'admin':
+            allowed_branches = [user.branch_id] if user.branch_id else []
+            if hasattr(user, 'branch_accesses'):
+                allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
+            student_branch = student.branch_id or (student.group.branch_id if student.group else None)
+            if not student_branch:
+                first_active_enrollment = student.enrollments.filter(is_active=True).select_related('group').first()
+                if first_active_enrollment and first_active_enrollment.group:
+                    student_branch = first_active_enrollment.group.branch_id
+
+            if student_branch and student_branch not in allowed_branches:
+                return Response({"detail": "Sizda ushbu o'quvchi ma'lumotlarini ko'rish huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+        elif user.role == 'mentor':
+            mentor_groups = Group.objects.filter(mentor=user)
+            student_groups = GroupEnrollment.objects.filter(student=student, is_active=True).values_list('group_id', flat=True)
+            if not mentor_groups.filter(id__in=student_groups).exists() and (not student.group_id or student.group_id not in mentor_groups.values_list('id', flat=True)):
+                return Response({"detail": "Sizda ushbu o'quvchi ma'lumotlarini ko'rish huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+
+        today = timezone.localdate()
+        try:
+            year = int(request.query_params.get('year', today.year))
+            month = int(request.query_params.get('month', today.month))
+            if year < 2000 or year > 2100 or month < 1 or month > 12:
+                year, month = today.year, today.month
+            date_type(year, month, 1)
+        except (ValueError, TypeError):
+            year, month = today.year, today.month
+
+        # Xavfsiz req_group_id tekshiruvi (null, undefined, bo'sh satr kabilardan himoyalangan)
+        raw_group_id = request.query_params.get('group_id')
+        req_group_id = None
+        if raw_group_id and str(raw_group_id).strip().lower() not in ['null', 'undefined', 'none', '']:
+            try:
+                req_group_id = int(raw_group_id)
+            except (ValueError, TypeError):
+                req_group_id = None
+
+        try:
+            # O'quvchining barcha guruhlarini olish (faol va o'tgan)
+            all_enrollments = list(GroupEnrollment.objects.filter(
+                student=student
+            ).select_related('group'))
+
+            all_available_groups = [e.group for e in all_enrollments if e.group]
+            if not all_available_groups and student.group:
+                all_available_groups = [student.group]
+
+            if req_group_id:
+                enrollments = [e for e in all_enrollments if e.group_id == req_group_id]
+            else:
+                enrollments = all_enrollments
+
+            active_groups = [e.group for e in enrollments if e.group]
+            if not active_groups and student.group:
+                if not req_group_id or student.group.id == req_group_id:
+                    active_groups = [student.group]
+
+            # Join date xaritasi
+            join_dates = {}
+            for e in enrollments:
+                join_dates[e.group_id] = e.joined_at.date() if e.joined_at else (student.joined_at.date() if student.joined_at else None)
+            if student.group_id and student.group_id not in join_dates:
+                join_dates[student.group_id] = student.joined_at.date() if student.joined_at else None
+
+            # Oydagi barcha guruhlarning rejalashtirilgan dars kunlarini olish
+            group_lessons_map = {}
+            for g in active_groups:
+                try:
+                    l_dates = set(g.get_lesson_dates(year, month))
+                except Exception as ex:
+                    logger.warning(f"Error fetching lesson dates for group {g.id}: {ex}")
+                    l_dates = set()
+
+                group_lessons_map[g.id] = {
+                    'id': g.id,
+                    'name': g.name,
+                    'color': getattr(g, 'color', '#ffffff'),
+                    'lesson_dates': l_dates,
+                    'join_date': join_dates.get(g.id)
+                }
+
+            # Oydagi mavjud davomat yozuvlarini olish (select_related('group') N+1 query larni oldini oladi)
+            attendance_qs = Attendance.objects.filter(
+                student=student,
+                date__year=year,
+                date__month=month
+            ).select_related('group')
+            if req_group_id:
+                attendance_qs = attendance_qs.filter(group_id=req_group_id)
+
+            # Tarixiy yozuvlarda mavjud boshqa guruhlarni ham guruhlar ro'yxatiga qo'shish
+            known_group_ids = {g.id for g in active_groups}
+            for att in attendance_qs:
+                if att.group and att.group.id not in known_group_ids:
+                    active_groups.append(att.group)
+                    known_group_ids.add(att.group.id)
+
+            att_by_date = {}
+            for att in attendance_qs:
+                att_date_str = str(att.date)
+                if att_date_str not in att_by_date:
+                    att_by_date[att_date_str] = []
+                att_by_date[att_date_str].append(att)
+
+            # Oydagi barcha kunlar bo'yicha matritsani qurish
+            _, last_day_num = monthrange(year, month)
+            days_data = []
+
+            total_scheduled = 0
+            total_passed = 0
+            attended_count = 0
+            absent_count = 0
+            unconfirmed_count = 0
+            future_count = 0
+
+            for day_num in range(1, last_day_num + 1):
+                curr_date = date_type(year, month, day_num)
+                curr_date_str = str(curr_date)
+                is_today = (curr_date == today)
+                is_future = (curr_date > today)
+
+                # Bu kunda darsi bor guruhlarni tekshirish
+                day_groups_with_lesson = []
+                for gid, ginfo in group_lessons_map.items():
+                    if curr_date in ginfo['lesson_dates']:
+                        day_groups_with_lesson.append(ginfo)
+
+                is_lesson = len(day_groups_with_lesson) > 0
+                records_today = att_by_date.get(curr_date_str, [])
+
+                status_str = "no_lesson"
+                lesson_groups_names = []
+
+                if is_lesson:
+                    total_scheduled += 1
+                    lesson_groups_names = [g['name'] for g in day_groups_with_lesson]
+
+                    # O'quvchi bu darsdan keyin qo'shilganmi?
+                    joined_all = any(
+                        (not ginfo['join_date'] or curr_date >= ginfo['join_date'])
+                        for ginfo in day_groups_with_lesson
+                    )
+
+                    if not joined_all:
+                        status_str = "not_joined"
+                    elif is_future:
+                        status_str = "future"
+                        future_count += 1
+                    else:
+                        total_passed += 1
+                        # O'tib bo'lgan yoki bugungi dars
+                        if records_today:
+                            confirmed_records = [r for r in records_today if r.marked_by_id is not None]
+                            if confirmed_records:
+                                if any(r.is_present for r in confirmed_records):
+                                    status_str = "present"
+                                    attended_count += 1
+                                else:
+                                    status_str = "absent"
+                                    absent_count += 1
+                            else:
+                                status_str = "unconfirmed"
+                                unconfirmed_count += 1
+                        else:
+                            status_str = "unconfirmed"
+                            unconfirmed_count += 1
+                elif records_today:
+                    # Jadvaldan tashqari dars kuni olingan davomat
+                    confirmed_records = [r for r in records_today if r.marked_by_id is not None]
+                    if confirmed_records:
+                        if any(r.is_present for r in confirmed_records):
+                            status_str = "present"
+                            attended_count += 1
+                            total_passed += 1
+                        else:
+                            status_str = "absent"
+                            absent_count += 1
+                            total_passed += 1
+                        lesson_groups_names = [r.group_name or (r.group.name if r.group else "Guruh") for r in records_today]
+                    else:
+                        status_str = "unconfirmed"
+
+                days_data.append({
+                    "date": curr_date_str,
+                    "day": day_num,
+                    "day_of_week": curr_date.weekday(),  # 0=Dushanba, 6=Yakshanba
+                    "is_lesson_day": is_lesson or (len(records_today) > 0),
+                    "status": status_str,
+                    "groups": lesson_groups_names,
+                    "is_today": is_today
+                })
+
+            if total_passed > 0:
+                attendance_rate = round((attended_count / total_passed * 100), 1)
+            else:
+                # Agar darslar faqat kelajakda bo'lsa yoki dars bo'lmagan bo'lsa
+                attendance_rate = 0 if future_count > 0 else 100.0
+
+            return Response({
+                "student_id": student.id,
+                "student_name": student.full_name,
+                "year": year,
+                "month": month,
+                "groups": [{"id": g.id, "name": g.name} for g in all_available_groups],
+                "stats": {
+                    "total_scheduled": total_scheduled,
+                    "total_passed": total_passed,
+                    "attended_count": attended_count,
+                    "absent_count": absent_count,
+                    "unconfirmed_count": unconfirmed_count,
+                    "future_count": future_count,
+                    "attendance_rate": attendance_rate
+                },
+                "days": days_data
+            })
+        except Exception as e:
+            logger.exception("student_monthly action xatoligi: %s", str(e))
+            return Response(
+                {"detail": "Davomat ma'lumotlarini yuklashda xatolik yuz berdi."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

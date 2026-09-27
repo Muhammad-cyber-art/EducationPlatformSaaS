@@ -20,6 +20,8 @@ import GroupsHeader from"./Groups/GroupsHeader";
 import GroupsTabs from"./Groups/GroupsTabs";
 import GroupCard from"./Groups/GroupCard";
 import GroupsEmptyState from"./Groups/GroupsEmptyState";
+import GroupsTimetable from "./Groups/GroupsTimetable";
+import { LayoutGrid, Calendar } from "lucide-react";
 
 export default function GroupsListPage() {
  const { currentBranchId, currentBranchName, isLoading: branchLoading, hasAccess } = useCurrentBranch();
@@ -31,6 +33,7 @@ export default function GroupsListPage() {
  const searchTerm = useSelector(state => state.mentor.searchQuery);
  const activeTab = useSelector(state => state.mentor.activeTab);
  const [debouncedSearch, setDebouncedSearch] = useState("");
+ const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'timetable'
  const { ref, inView } = useInView();
 
  const { data: userData = {} } = useQuery({
@@ -115,17 +118,61 @@ export default function GroupsListPage() {
  <div className="p-3 sm:p-6 space-y-10">
  <GroupsHeader
  {...{ currentBranchName, isLoading, isFetching, searchTerm, setSearchQuery, canCreateGroup, navigate, currentBranchId, dispatch }}
- groupsCount={filteredData.length}
+ groupsCount={viewMode === "timetable" ? groupsArr.length : filteredData.length}
  />
 
- <GroupsTabs {...{ activeTab, setTab, dispatch }} />
+  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+    {viewMode === "grid" ? (
+      <GroupsTabs {...{ activeTab, setTab, dispatch }} />
+    ) : (
+      <div className="flex items-center gap-2 text-[var(--gold)]">
+        <Calendar size={18} />
+        <span className="text-[12px] font-black uppercase tracking-widest">
+          Haftalik Dars Jadvali
+        </span>
+      </div>
+    )}
+
+    {/* Rejim tanlagich: Kartochkalar vs Dars Jadvali */}
+    <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--bg-panel)]/40 border border-[var(--border-glass)] self-start sm:self-auto shrink-0 shadow-sm">
+      <button
+        onClick={() => setViewMode("grid")}
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+          viewMode === "grid"
+            ? "bg-[var(--gold)] text-black shadow-sm"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        }`}
+      >
+        <LayoutGrid size={14} />
+        <span>Kartochkalar</span>
+      </button>
+
+      <button
+        onClick={() => setViewMode("timetable")}
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+          viewMode === "timetable"
+            ? "bg-[var(--gold)] text-black shadow-sm"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        }`}
+      >
+        <Calendar size={14} />
+        <span>Dars Jadvali</span>
+      </button>
+    </div>
+  </div>
 
  <div className="min-h-[500px]">
- {isLoading && !filteredData.length ? (
+ {isLoading && !groupsArr.length ? (
  <div className="flex flex-col items-center justify-center py-40 gap-4 opacity-50">
  <Loader2 className="animate-spin text-[var(--gold)]" size={48} />
  <p className="text-[10px] font-black tracking-[0.3em] capitalize">Ma'lumotlar yuklanmoqda...</p>
  </div>
+ ) : viewMode === "timetable" ? (
+   <GroupsTimetable
+     groups={groupsArr}
+     currentBranchId={effectiveBranchId}
+     readOnly={!canCreateGroup}
+   />
  ) : filteredData.length > 0 ? (
  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-4 sm:gap-8">
  {filteredData.map((item) => (
@@ -136,14 +183,16 @@ export default function GroupsListPage() {
  <GroupsEmptyState currentBranchName={currentBranchName} />
  )}
 
- <div ref={ref} className="py-10 flex justify-center">
- {isFetchingNextPage && (
- <div className="flex items-center gap-2 text-[var(--gold)]">
- <Loader2 size={24} className="animate-spin" />
- <span className="text-[10px] font-black capitalize tracking-widest">Yana yuklanmoqda...</span>
- </div>
+ {viewMode === "grid" && (
+   <div ref={ref} className="py-10 flex justify-center">
+   {isFetchingNextPage && (
+   <div className="flex items-center gap-2 text-[var(--gold)]">
+   <Loader2 size={24} className="animate-spin" />
+   <span className="text-[10px] font-black capitalize tracking-widest">Yana yuklanmoqda...</span>
+   </div>
+   )}
+   </div>
  )}
- </div>
  </div>
 
  {canCreateGroup && (

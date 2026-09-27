@@ -11,6 +11,14 @@ color_validator = RegexValidator(
 )
 
 
+def tenant_user_image_path(instance, filename):
+    """Foydalanuvchi rasmlarini har bir tenant schemasi bo'yicha alohida saqlash."""
+    from tenants.context import get_current_tenant
+    tenant = get_current_tenant()
+    schema = tenant.schema_name if tenant else 'common'
+    return f"tenants/{schema}/users/{filename}"
+
+
 class CustomUserManager(BaseUserManager):
     def create_user(self, password=None, **extra_fields):
         user = self.model(**extra_fields)
@@ -32,7 +40,7 @@ class UserModel(AbstractUser):
     )
     color = models.CharField(max_length=7, default="#ffffff", validators=[color_validator])
     image = models.ImageField(
-        upload_to='users/', 
+        upload_to=tenant_user_image_path, 
         null=True, 
         blank=True,
         validators=[validate_image_file]
@@ -60,6 +68,10 @@ class UserModel(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     subject = models.CharField(max_length=50, blank=True, null=True)
     telegram_chat_id = models.CharField(max_length=50, blank=True, null=True, verbose_name="Telegram Chat ID (Admin Bot)")
+
+    class Meta:
+        ordering = ['-id']
+
     
     def is_super_admin(self):
         return self.role == 'super_admin'

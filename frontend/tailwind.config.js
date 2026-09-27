@@ -10,6 +10,9 @@ export default {
       fontFamily: {
         sans: ['Manrope', 'sans-serif'],
       },
+      borderRadius: {
+        'btn': 'var(--btn-radius, 10px)',
+      },
       colors: {
         gold: {
           DEFAULT: '#b8860b',

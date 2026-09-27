@@ -26,6 +26,7 @@
 
   --font-sans: 'Manrope', sans-serif;
   --overlay-bg: #000000;
+  --btn-radius: 10px;
 }
 
 [data-theme='light'] {
@@ -35,8 +36,8 @@
   --card-bg: #ffffff;
   --card-bg-for-grps: #ffffff;
   --sidebar-bg: #ffffff;
-  --border-glass: 1px solid rgba(150, 123, 79, 0.15);
-  --border-highlight: 1px solid rgba(150, 123, 79, 0.3);
+  --border-glass: rgba(150, 123, 79, 0.15);
+  --border-highlight: rgba(150, 123, 79, 0.3);
 
   /* Deep Espresso & Aged Bronze Typography */
   --text-primary: #120f0d;
@@ -51,6 +52,7 @@
   --gold-dim: rgba(150, 123, 79, 0.1);
   --gold-glow: 0 15px 50px rgba(150, 123, 79, 0.25);
   --overlay-bg: #fdfaf5;
+  --btn-radius: 10px;
 }
 
 /* Light Mode Enhancement Layer */
@@ -111,11 +113,75 @@
   color: inherit !important;
 }
 
-/* Specific Text Color Overrides */
-[data-theme='light'] [class*='text-white'],
+/* Specific Text Color Overrides for standard content */
 [data-theme='light'] [class*='text-slate'],
 [data-theme='light'] [class*='text-gray'] {
-  color: #4a3d31 !important;
+  color: #4a3d31;
+}
+
+/* Light theme default text color for plain text-white elements */
+[data-theme='light'] [class*='text-white'] {
+  color: #4a3d31;
+}
+
+/* ========================================================================= */
+/* CRITICAL: TO'Q RANGLI TUGMALAR VA BLOKLAR ICHIDA OQ MATNNI SAQLASH        */
+/* White text protection on dark / colored backgrounds, buttons, and badges  */
+/* ========================================================================= */
+[data-theme='light'] .text-white-force,
+[data-theme='light'] .text-white-force *,
+[data-theme='light'] .keep-white,
+[data-theme='light'] .keep-white *,
+[data-theme='light'] button.text-white,
+[data-theme='light'] button[class~='text-white'],
+[data-theme='light'] button [class~='text-white'],
+[data-theme='light'] button[class*='bg-red']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-red']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-emerald']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-emerald']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-green']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-green']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-blue']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-blue']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-amber']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-amber']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-black']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-black']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-zinc']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-zinc']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] button[class*='bg-[#']:not([class*='hover:']):not([class*='/']),
+[data-theme='light'] button[class*='bg-[#']:not([class*='hover:']):not([class*='/']) *,
+[data-theme='light'] [class*='bg-red-6'] [class*='text-white'],
+[data-theme='light'] [class*='bg-red-7'] [class*='text-white'],
+[data-theme='light'] [class*='bg-red-8'] [class*='text-white'],
+[data-theme='light'] [class*='bg-red-9'] [class*='text-white'],
+[data-theme='light'] [class*='bg-emerald-6'] [class*='text-white'],
+[data-theme='light'] [class*='bg-emerald-7'] [class*='text-white'],
+[data-theme='light'] [class*='bg-green-6'] [class*='text-white'],
+[data-theme='light'] [class*='bg-green-7'] [class*='text-white'],
+[data-theme='light'] [class*='bg-blue-6'] [class*='text-white'],
+[data-theme='light'] [class*='bg-blue-7'] [class*='text-white'],
+[data-theme='light'] [class*='bg-black'] [class*='text-white'],
+[data-theme='light'] [class*='bg-zinc-8'] [class*='text-white'],
+[data-theme='light'] [class*='bg-zinc-9'] [class*='text-white'],
+[data-theme='light'] [class*='bg-[#16a34a]'],
+[data-theme='light'] [class*='bg-[#16a34a]'] *,
+[data-theme='light'] [class*='bg-[#991b1b]'],
+[data-theme='light'] [class*='bg-[#991b1b]'] *,
+[data-theme='light'] [class*='bg-[#0a0a0a]'] [class*='text-white'],
+[data-theme='light'] [class*='bg-[#080808]'] [class*='text-white'],
+[data-theme='light'] [class*='bg-[#000000]'] [class*='text-white'],
+[data-theme='light'] .dark-tooltip,
+[data-theme='light'] .dark-tooltip * {
+  color: #ffffff !important;
+}
+
+[data-theme='light'] [class*='bg-[#16a34a]'] svg,
+[data-theme='light'] [class*='bg-[#991b1b]'] svg,
+[data-theme='light'] [class*='bg-red-'] svg.text-white,
+[data-theme='light'] [class*='bg-emerald-'] svg.text-white {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* Inputs & Forms */
@@ -136,6 +202,10 @@
 /* Buttons */
 [data-theme='light'] button {
   border-color: rgba(150, 123, 79, 0.2) !important;
+}
+
+[data-theme='light'] button:not(.lux-btn-primary):not([class*='bg-red']):not([class*='bg-emerald']):not([class*='bg-green']):not([class*='bg-blue']):not([class*='bg-amber']):not([class*='bg-black']):not([class*='bg-zinc']):not([class*='bg-[#']):not(.text-white):not([class~='text-white']) {
+  color: #4a3d31;
 }
 
 [data-theme='light'] button:hover {
@@ -210,6 +280,7 @@
   .lux-btn {
     padding: 6px 12px !important;
     font-size: 9px !important;
+    border-radius: var(--btn-radius, 10px) !important;
   }
 
   h1 {
@@ -299,8 +370,6 @@ body {
   position: relative;
 }
 
-<<<<<<< HEAD
-=======
 .glass {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(253, 250, 245, 0.85) 100%);
   backdrop-filter: blur(24px) !important;
@@ -322,7 +391,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: 0 8px 30px -10px rgba(0, 0, 0, 0.5);
 }
->>>>>>> 287466b90ab36425849749250b1d50f5882f5c2a
 .lux-card-for-grps {
   background: var(--card-bg-for-grps);
   border-radius: 20px;
@@ -393,13 +461,25 @@ h2 {
   filter: none;
 }
 
-/* BUTTONS */
+/* ========================================================================= */
+/* UNIFIED BUTTON CORNER RADIUS                                              */
+/* Consistent radius across all buttons, controls, and actions               */
+/* Default shape matches the modern rounded rectangle style in the header     */
+/* ========================================================================= */
+button,
+.lux-btn,
+button[type="button"],
+button[type="submit"],
+button[type="reset"] {
+  border-radius: var(--btn-radius, 10px) !important;
+}
+
 .lux-btn {
   background: rgba(255, 255, 255, 0.02);
   color: var(--gold);
   border: 1px solid rgba(184, 134, 11, 0.3);
   padding: 12px 32px;
-  border-radius: 999px;
+  border-radius: var(--btn-radius, 10px) !important;
   font-weight: 800;
   font-size: 11px;
   text-transform: capitalize;

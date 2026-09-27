@@ -145,3 +145,51 @@ class AuthAPITests(APITestCase):
         User.objects.create_user(username='sam_mentor', password='pw', role='mentor', branch=self.branch2)
         response = self.client.get(url)
         self.assertEqual(len(response.data.get('results', response.data)), 2) # mentor1 and sam_mentor
+
+
+class CrossTenantAuthSecurityTests(APITestCase):
+    """Multi-tenant JWT xavfsizligini tekshiruvchi testlar."""
+
+    def setUp(self):
+        from tenants.models import Tenant, Domain
+        self.tenant_a = Tenant.objects.create(name="Markaz A", schema_name="tenant_markaz_a")
+        self.domain_a = Domain.objects.create(domain="a.crm.uz", tenant=self.tenant_a, is_primary=True)
+
+        self.tenant_b = Tenant.objects.create(name="Markaz B", schema_name="tenant_markaz_b")
+        self.domain_b = Domain.objects.create(domain="b.crm.uz", tenant=self.tenant_b, is_primary=True)
+
+        self.user_a = User.objects.create_user(username="admin_a", password="password123", role="admin")
+
+    def test_login_returns_tenant_info_in_claims(self):
+        """Login qilganda JWT tokenida tenant_schema bo'lishi kerak."""
+        from authenticatsiya.serializers import LoginSerializer
+        from tenants.context import set_current_tenant, clear_current_tenant
+
+        set_current_tenant(self.tenant_a)
+        try:
+            token = LoginSerializer.get_token(self.user_a)
+            self.assertEqual(token.get('tenant_schema'), self.tenant_a.schema_name)
+            self.assertEqual(token.get('tenant_id'), self.tenant_a.id)
+        finally:
+            clear_current_tenant()
+
+    def test_cross_tenant_token_replay_rejected(self):
+        """A markaz tokeni bilan B markaz domeniga kirish taqiqlanishi kerak (401)."""
+        from authenticatsiya.serializers import LoginSerializer
+        from tenants.context import set_current_tenant, clear_current_tenant
+
+        # 1. A markazda login qilib token olamiz
+        set_current_tenant(self.tenant_a)
+        try:
+            refresh = LoginSerializer.get_token(self.user_a)
+            access_token = str(refresh.access_token)
+        finally:
+            clear_current_tenant()
+
+        # 2. Ushbu tokenni B markaz domeniga yuboramiz
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+        response = self.client.get('/api/user/me/', HTTP_HOST='b.crm.uz')
+
+        # 3. 401 Unauthorized qaytishi SHART
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn("boshqa o'quv markaziga tegishli", str(response.data))

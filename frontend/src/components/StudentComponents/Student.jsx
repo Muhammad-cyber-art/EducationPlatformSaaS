@@ -17,6 +17,7 @@ import StudentDossier from "./Student/StudentDossier";
 import StudentGroupsSection from "./Student/StudentGroupsSection";
 import StudentHistorySection from "./Student/StudentHistorySection";
 import StudentFinanceSection from "./Student/StudentFinanceSection";
+import StudentAttendanceHeatmap from "./Student/StudentAttendanceHeatmap";
 import StudentModals from "./Student/StudentModals";
 import UnenrollSelectModal from "./Student/UnenrollSelectModal";
 import JoinGroupModal from "./Student/Modals/JoinGroupModal";
@@ -116,6 +117,8 @@ export default function StudentProfilePage() {
     branchGroups,
     transfers,
     studentLoading,
+    historyLoading,
+    paymentLoading,
     permissions,
     userRole,
   } = useStudentProfile(student_id, branchID.currentBranchId, dispatch);
@@ -283,34 +286,32 @@ export default function StudentProfilePage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6 sm:space-y-8 lg:space-y-12 bg-[var(--bg-void)]/20 min-h-screen">
-      <div className="flex flex-col gap-1 sm:gap-2">
-        <StudentHeader
-          {...{
-            isEditing,
-            userRole,
-            handleSaveEdit,
-            dispatch,
-          }}
-          canEditStudent={permissions.canEditStudent}
-        />
+      <StudentHeader
+        {...{
+          isEditing,
+          userRole,
+          handleSaveEdit,
+          dispatch,
+        }}
+        canEditStudent={permissions.canEditStudent}
+      />
 
-        <StudentProfileHeader
-          {...{
-            studentData,
-            isEditing,
-            editData,
-            previewImage,
-            primaryPayment,
-            student_id,
-            dispatch,
-            handleImageChange,
-            disconnectBotMutation,
-          }}
-        />
-      </div>
-
+      {/* Main Content Layout */}
       {isEditing ? (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <StudentProfileHeader
+            {...{
+              studentData,
+              isEditing,
+              editData,
+              previewImage,
+              primaryPayment,
+              student_id,
+              dispatch,
+              handleImageChange,
+              disconnectBotMutation,
+            }}
+          />
           <StudentEditForm
             {...{
               editData,
@@ -323,15 +324,29 @@ export default function StudentProfilePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 items-start">
-          {/* Left Sidebar: Dossier */}
-          <div className="xl:col-span-4 xl:sticky xl:top-6">
+          {/* CHAP USTUN: Profil + Shaxsiy Ma'lumotlar (Dossier) */}
+          <div className="xl:col-span-4 space-y-5 sm:space-y-6 xl:sticky xl:top-6">
+            <StudentProfileHeader
+              {...{
+                studentData,
+                isEditing,
+                editData,
+                previewImage,
+                primaryPayment,
+                student_id,
+                dispatch,
+                handleImageChange,
+                disconnectBotMutation,
+              }}
+            />
+
             <StudentDossier
               {...{ studentData, student_id, dispatch }}
               canConfirmPayment={permissions.canConfirmPayment}
             />
           </div>
 
-          {/* Right Content: Groups & History */}
+          {/* O'NG USTUN: Guruhlar Bloki + Moliya & Tarix & Davomat */}
           <div className="xl:col-span-8 space-y-6 lg:space-y-8">
             <StudentGroupsSection
               {...{
@@ -359,9 +374,18 @@ export default function StudentProfilePage() {
                 handlePaymentConfirm,
                 handleDeleteHistory,
                 dispatch,
+                historyLoading,
+                paymentLoading,
               }}
               canConfirmPayment={permissions.canConfirmPayment}
               studentStatus={studentData?.status}
+            />
+
+            {/* GITHUB-STYLE CONTRIBUTION / ATTENDANCE HEATMAP CALENDAR */}
+            <StudentAttendanceHeatmap
+              studentId={student_id}
+              studentName={studentData?.full_name}
+              studentGroups={studentData?.groups || []}
             />
           </div>
         </div>

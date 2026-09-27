@@ -1,0 +1,48 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.env
+local_settings.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/venv/
+backend/.venv/
+env/
+venv/
+*.egg-info/
+*.pickle
+
+# Logs & Databases
+*.log
+logs/
+db.sqlite3
+db.sqlite3-journal
+
+# Media & Static
+/media
+/static
+/staticfiles
+
+# Docker volume mounts (if created locally)
+postgres_data/
+redis_data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+.npm
+package-lock.json.bak
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

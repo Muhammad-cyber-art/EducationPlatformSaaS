@@ -64,33 +64,33 @@ class RequestLoggingMiddleware(MiddlewareMixin):
 
 class RateLimitMiddleware(MiddlewareMixin):
     """
-    Oddiy rate limiting (DDoS himoyasi).
-    Production uchun django-ratelimit yoki Redis ishlatish tavsiya etiladi.
+    Taqsimlangan (distributed) Rate Limiting (DDoS va Brute-force himoyasi).
+    Redis kesh mexanizmi orqali ishlaydi (Workerlar orasida xavfsiz, thread-safe va xotira sizmaydi).
     """
-    request_counts = {}
+    RATE_LIMIT = 15  # 1 daqiqada ruxsat etilgan maksimal urinishlar soni
+    BLOCK_WINDOW = 60  # daqiqalik oyna (sekundlarda)
 
     def process_request(self, request):
         if '/login/' in request.path or '/register/' in request.path:
             ip = RequestLoggingMiddleware.get_client_ip(request)
+            cache_key = f"ratelimit:{ip}:{request.path}"
 
-            import time
-            current_time = int(time.time() / 60)
-            key = f"{ip}_{current_time}"
-
-            if key in self.request_counts:
-                self.request_counts[key] += 1
-                if self.request_counts[key] > 10:
-                    logger.warning(f"Rate limit exceeded for IP: {ip}")
+            try:
+                from django.core.cache import cache
+                count = cache.get(cache_key, 0)
+                if count >= self.RATE_LIMIT:
+                    logger.warning(f"Rate limit exceeded for IP: {ip} on {request.path}")
                     return JsonResponse(
-                        {'error': "Juda ko'p so'rov. Iltimos, bir oz kuting."},
+                        {
+                            'error': "Juda ko'p so'rov yuborildi. Iltimos, 1 daqiqa kuting.",
+                            'code': 'RATE_LIMIT_EXCEEDED'
+                        },
                         status=429
                     )
-            else:
-                self.request_counts[key] = 1
-
-            # Eski keylarni tozalash (memory leak oldini olish)
-            old_keys = [k for k in self.request_counts if not k.endswith(str(current_time))]
-            for old_key in old_keys:
-                del self.request_counts[old_key]
+                cache.set(cache_key, count + 1, timeout=self.BLOCK_WINDOW)
+            except Exception as e:
+                logger.debug(f"RateLimit cache fallback/warning: {e}")
+                return None
 
         return None
+

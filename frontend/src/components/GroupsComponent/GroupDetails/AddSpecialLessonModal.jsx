@@ -119,7 +119,7 @@ export default function AddSpecialLessonModal({ isOpen, onClose, groupId, onAdde
 
           <button
             onClick={onClose}
-            className="w-full py-3 text-[9px] font-black text-[var(--text-muted)] capitalize tracking-widest hover:text-white transition-all underline underline-offset-4"
+            className="w-full py-3 text-[10px] font-black text-[var(--text-secondary)] capitalize tracking-widest hover:text-[var(--gold)] transition-all underline underline-offset-4"
           >
             Bekor qilish
           </button>

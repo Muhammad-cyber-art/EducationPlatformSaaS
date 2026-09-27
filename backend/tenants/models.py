@@ -79,7 +79,7 @@ class Tenant(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        status = "✅" if self.is_active else "🔒"
+        status = "[ACTIVE]" if self.is_active else "[LOCKED]"
         return f"{status} {self.name} ({self.schema_name})"
 
     def clean(self):

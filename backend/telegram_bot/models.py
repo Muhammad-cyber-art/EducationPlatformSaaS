@@ -4,6 +4,7 @@ class BotProfile(models.Model):
     ROLE_CHOICES = (
         ('super_admin', 'Super Admin'),
         ('admin', 'Admin'),
+        ('mentor', 'Mentor'),
         ('teacher', 'Teacher'),
         ('student', 'Student'),
     )

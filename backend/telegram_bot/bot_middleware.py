@@ -62,5 +62,6 @@ def require_roles(*allowed_roles):
 require_admin = require_roles('admin', 'super_admin')
 require_super_admin = require_roles('super_admin')
 require_student = require_roles('student')
-require_teacher = require_roles('teacher')
-require_auth = require_roles('admin', 'super_admin', 'student', 'teacher')
+require_teacher = require_roles('teacher', 'mentor')
+require_mentor = require_roles('mentor', 'teacher')
+require_auth = require_roles('admin', 'super_admin', 'student', 'teacher', 'mentor')

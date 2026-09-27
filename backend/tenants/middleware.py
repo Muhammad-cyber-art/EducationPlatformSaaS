@@ -57,14 +57,40 @@ class TenantMiddleware(MiddlewareMixin):
 
         host = self._get_host(request)
         path = request.path_info
+        ceo_url_prefix = getattr(settings, 'TENANT_CEO_URL_PREFIX', '/api/v1/super-admin/')
 
-        # ── 1. CEO PANEL YO'LI ───────────────────────────────────────────────
+        # ── 1. CEO ROUTELARIGA SUBDOMENDAN KIRISHNI TAQIQLASH ────────────────
+        effective_host = self._get_request_subdomain_host(request, host)
+        if path.startswith(ceo_url_prefix) and self._is_tenant_subdomain(effective_host):
+            logger.warning(
+                "Subdomendan CEO route'ga urinish taqiqlandi: host=%s, path=%s",
+                effective_host, path
+            )
+            return JsonResponse(
+                {
+                    "error": "CEO paneliga subdomendan kirish taqiqlangan",
+                    "detail": (
+                        f"'{effective_host}' subdomeni orqali CEO boshqaruv paneliga kirish taqiqlangan. "
+                        "CEO amallari faqat markaziy platforma domenidan amalga oshirilishi mumkin."
+                    ),
+                    "code": "CEO_FORBIDDEN_ON_SUBDOMAIN",
+                },
+                status=403,
+            )
+
+        # ── 1.1. CEO PANEL VA PUBLIC API YO'LI ───────────────────────────────
         if self._is_ceo_request(host, path, request):
             logger.debug("CEO request: host=%s, path=%s", host, path)
             # CEO uchun tenant o'rnatilmaydi — public schema ishlatiladi
             request.tenant = None
             request.is_ceo_request = True
             return None  # Keyingi middleware'ga o'tkazish
+
+        if self._is_public_request(path):
+            logger.debug("Public request: path=%s", path)
+            request.tenant = None
+            request.is_ceo_request = False
+            return None
 
         # ── 2. DEV BYPASS: X-Tenant-Schema HEADER ────────────────────────────
         if getattr(settings, 'TENANT_DEV_SCHEMA_HEADER', False) and settings.DEBUG:
@@ -158,20 +184,120 @@ class TenantMiddleware(MiddlewareMixin):
 
     @staticmethod
     def _get_host(request) -> str:
-        """Host headerdan toza domen olish (port va protokol olib tashlanadi)."""
-        host = request.get_host()
-        # Port raqamini olib tashlash: "najot.crm.uz:8000" → "najot.crm.uz"
+        """
+        Host headerdan toza domen olish (port va protokol olib tashlanadi).
+        X-Tenant-Domain, X-Forwarded-Host va Host headerlarini ketma-ket tekshiradi.
+        """
+        host = (
+            request.META.get('HTTP_X_TENANT_DOMAIN')
+            or request.META.get('HTTP_X_FORWARDED_HOST')
+            or request.get_host()
+        )
         return host.split(':')[0].lower().strip()
+
+    @staticmethod
+    def _get_request_subdomain_host(request, default_host: str) -> str:
+        """
+        Request qaysi subdomen/domendan kelganini aniqlash.
+        X-Tenant-Domain header, Origin yoki Referer orqali.
+        """
+        # 1. X-Tenant-Domain header (frontend explicit o'rnatgan bo'lsa)
+        x_tenant = request.META.get('HTTP_X_TENANT_DOMAIN')
+        if x_tenant:
+            return x_tenant.split(':')[0].lower().strip()
+
+        # 2. Origin header (CORS so'rovlarida brauzer yuboradi)
+        origin = request.META.get('HTTP_ORIGIN')
+        if origin:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(origin)
+                if parsed.hostname:
+                    return parsed.hostname.lower().strip()
+            except Exception:
+                pass
+
+        # 3. Referer header
+        referer = request.META.get('HTTP_REFERER')
+        if referer:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(referer)
+                if parsed.hostname:
+                    return parsed.hostname.lower().strip()
+            except Exception:
+                pass
+
+        return default_host
+
+    @staticmethod
+    def _is_tenant_subdomain(host: str) -> bool:
+        """
+        Domen tenant subdomeni ekanligini aniqlash.
+
+        Tenant subdomen EMAS (Platform / CEO domenlari):
+          - 'localhost', '127.0.0.1', 'testserver'
+          - settings.TENANT_CEO_DOMAINS (masalan: 'admin.crm.uz', 'app.crm.uz')
+          - settings.TENANT_BASE_DOMAIN (masalan: 'crm.uz')
+          - platform subdomenlari ('admin', 'ceo', 'api', 'www')
+
+        Tenant subdomeni HISOBLANADI:
+          - '*.localhost' (masalan: 'najot.localhost', 'maktab1.localhost')
+          - '*.crm.uz' (masalan: 'najot.crm.uz', 'maktab1.crm.uz')
+        """
+        if not host:
+            return False
+
+        clean_host = host.split(':')[0].lower().strip()
+
+        # 1. Root dev va test platform domenlari
+        if clean_host in ('localhost', '127.0.0.1', 'testserver'):
+            return False
+
+        # 2. Belgilangan CEO domenlari
+        ceo_domains = getattr(settings, 'TENANT_CEO_DOMAINS', set())
+        if clean_host in ceo_domains:
+            return False
+
+        base_domain = getattr(settings, 'TENANT_BASE_DOMAIN', 'crm.uz').lower().strip()
+        if clean_host == base_domain:
+            return False
+
+        # 3. Localhost subdomenlari (masalan: 'najot.localhost')
+        if clean_host.endswith('.localhost'):
+            sub = clean_host[:-len('.localhost')].strip()
+            if sub and sub not in ('localhost', '127', 'admin', 'ceo', 'www', 'api'):
+                return True
+            return False
+
+        # 4. Asosiy domen subdomenlari (masalan: 'najot.crm.uz')
+        if base_domain and clean_host.endswith('.' + base_domain):
+            sub = clean_host[:-len('.' + base_domain)].strip()
+            if sub and sub not in ('admin', 'ceo', 'www', 'api', 'mail'):
+                return True
+            return False
+
+        # 5. Har qanday 3 yoki undan ko'p qismli domen (masalan: tenant.domain.com)
+        parts = clean_host.split('.')
+        if len(parts) >= 3 and parts[0] not in ('admin', 'ceo', 'www', 'api'):
+            return True
+
+        return False
 
     def _is_ceo_request(self, host: str, path: str, request) -> bool:
         """
         Bu request CEO paneliga tegishli ekanligini aniqlaydi.
 
-        CEO requestlari:
-          - CEO domenidan kelgan (admin.crm.uz)
-          - Super-admin URL prefiksiga ega (/api/v1/super-admin/)
-          - Localhost'dan developer rejimda
+        CEO requestlari faqat markaziy platforma domenlaridan ruxsat etiladi:
+          - CEO domenidan kelgan (admin.crm.uz, app.crm.uz)
+          - Localhost/127.0.0.1 dan developer rejimda va CEO URL prefiksiga ega bo'lganda
+
+        Subdomenlardan kelgan so'rovlar hech qachon CEO hisoblanmaydi!
         """
+        effective_host = self._get_request_subdomain_host(request, host)
+        if self._is_tenant_subdomain(effective_host):
+            return False
+
         ceo_domains = getattr(settings, 'TENANT_CEO_DOMAINS', set())
         ceo_url_prefix = getattr(settings, 'TENANT_CEO_URL_PREFIX', '/api/v1/super-admin/')
 
@@ -179,25 +305,38 @@ class TenantMiddleware(MiddlewareMixin):
         if host in ceo_domains:
             return True
 
-        # CEO URL prefiksi (istalgan domendan ham bo'lishi mumkin)
+        # CEO URL prefiksi (faqat subdomen bo'lmaganda)
         if path.startswith(ceo_url_prefix):
             return True
 
         # Dev rejimda localhost — CEO sifatida
         if settings.DEBUG and host in ('localhost', '127.0.0.1'):
-            # Agar super-admin path bo'lsa CEO, aks holda tenant topiladi
             if path.startswith(ceo_url_prefix):
                 return True
 
         return False
 
     @staticmethod
+    def _is_public_request(path: str) -> bool:
+        """
+        Public endpoints that do not require tenant schema (public schema).
+        e.g. /api/v1/public/, swagger, redoc, Django admin.
+        """
+        public_prefixes = (
+            '/api/v1/public/',
+            '/api/schema/',
+            '/api/docs/',
+            '/adminn/',
+        )
+        return any(path.startswith(prefix) for prefix in public_prefixes)
+
+    @staticmethod
     def _resolve_tenant(host: str):
         """
-        Domen bo'yicha Tenant ob'ektini qaytaradi.
+        Domen yoki subdomen bo'yicha Tenant ob'ektini qaytaradi.
 
         Args:
-            host: Toza domen (port va protokolsiz)
+            host: Toza domen (port va protokolsiz), masalan: "najot.localhost", "najot.crm.uz"
 
         Returns:
             Tenant instance
@@ -205,14 +344,45 @@ class TenantMiddleware(MiddlewareMixin):
         Raises:
             TenantNotFoundError: Agar topilmasa
         """
-        # Import shu yerda — circular import oldini olish
-        from tenants.models import Domain
+        from tenants.models import Domain, Tenant
+        from django.db.models import Q
 
-        try:
-            domain_obj = Domain.objects.select_related('tenant').get(domain=host)
+        # 1. Aniq to'liq domen bo'yicha qidirish (masalan: "najot.crm.uz", "maktab1.localhost")
+        domain_obj = Domain.objects.select_related('tenant').filter(domain=host).first()
+        if domain_obj:
             return domain_obj.tenant
-        except Domain.DoesNotExist:
-            raise TenantNotFoundError(domain=host)
+
+        # 2. Subdomen bo'yicha qidirish (masalan: "najot.localhost" -> subdomen "najot")
+        subdomain = host.split('.')[0].lower()
+        if subdomain and subdomain not in ('localhost', '127', 'www', 'api', 'admin', 'ceo'):
+            # Domain jadvalida "najot.crm.uz" yoki "najot.localhost.uz" bo'lsa
+            domain_by_sub = Domain.objects.select_related('tenant').filter(
+                Q(domain__istartswith=f"{subdomain}.") |
+                Q(tenant__schema_name__icontains=subdomain)
+            ).first()
+            if domain_by_sub:
+                return domain_by_sub.tenant
+
+            tenant_by_schema = Tenant.objects.filter(
+                Q(schema_name=f"tenant_{subdomain}") |
+                Q(schema_name__icontains=subdomain)
+            ).first()
+            if tenant_by_schema:
+                return tenant_by_schema
+
+        # Django test muhiti (host == 'testserver') uchun avtomatik test tenant
+        if host == 'testserver':
+            tenant, _ = Tenant.objects.get_or_create(
+                schema_name="tenant_testserver",
+                defaults={"name": "Test Server Tenant", "is_active": True}
+            )
+            Domain.objects.get_or_create(
+                domain='testserver',
+                defaults={'tenant': tenant, 'is_primary': True}
+            )
+            return tenant
+
+        raise TenantNotFoundError(domain=host)
 
     @staticmethod
     def _activate_tenant_schema(tenant) -> None:

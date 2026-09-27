@@ -210,6 +210,12 @@ def _safe_attendance_stats_for_branch(branch, today):
         # Davomat qaydlarini olamiz
         base_attendance_qs = Attendance.objects.filter(group__branch=branch, date=today)
 
+        # Qo'shimcha/jadvaldan tashqari darslar va amalda davomat qilingan talabalar ham statistikaga qo'shiladi
+        attended_students_ids = set(
+            base_attendance_qs.values_list("student_id", flat=True).distinct()
+        )
+        total_students_ids = total_students_ids | attended_students_ids
+
         # FIX: Agar bugun uchun hech qanday davomat yozuvi mavjud bo'lmasa
         # (Celery task ishlamagan yoki kechikkan), "hamma kelmadi" deb hisoblab bo'lmaydi.
         # Bu holat ayniqsa yangi kun soat 00:00-00:05 orasida ro'y beradi.

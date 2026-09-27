@@ -84,3 +84,18 @@ class HomeworkAttendsTests(APITestCase):
         # Verify 2 result records created
         mock_test = MockTest.objects.get(subject='Math')
         self.assertEqual(mock_test.results.count(), 2)
+
+    def test_student_monthly_attendance_endpoint(self):
+        self.client.force_authenticate(user=self.super_admin)
+        url = reverse('attendance-student-monthly')
+        today = timezone.localdate()
+        response = self.client.get(url, {
+            'student_id': self.student1.id,
+            'year': today.year,
+            'month': today.month
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['student_id'], self.student1.id)
+        self.assertIn('stats', response.data)
+        self.assertIn('days', response.data)
+        self.assertIn('attendance_rate', response.data['stats'])

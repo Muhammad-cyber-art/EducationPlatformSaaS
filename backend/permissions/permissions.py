@@ -77,6 +77,12 @@ class HasModulePermission(permissions.BasePermission):
             # Boshqa finance view'lari mentorlar uchun emas
             return False
 
+        # 4. Arxiv (archive) moduli uchun:
+        if module_name == 'archive':
+            if user_role in ['super_admin', 'admin'] or request.user.is_superuser:
+                return True
+            return False
+
         # Modul bo'yicha ruxsat bormi?
         has_module_access = bool(perms.get(module_name))
 

@@ -113,6 +113,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import BranchAccess  # Yangi modelni import qilamiz
+from tenants.context import get_current_tenant
 
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -124,11 +125,29 @@ class LoginSerializer(TokenObtainPairSerializer):
                 # Topilsa, attrs['username'] ni haqiqiy username'ga almashtiramiz
                 attrs['username'] = user.username
         
-        return super().validate(attrs)
+        data = super().validate(attrs)
+
+        # Tenant ma'lumotlarini login javobiga qo'shish
+        current_tenant = get_current_tenant()
+        if current_tenant:
+            data['tenant'] = {
+                'id': current_tenant.id,
+                'name': current_tenant.name,
+                'schema_name': current_tenant.schema_name,
+            }
+
+        return data
 
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
+
+        # ── TENANT BOG'LASH (CROSS-TENANT SECURITY) ───────────────────────
+        current_tenant = get_current_tenant()
+        if current_tenant:
+            token['tenant_schema'] = current_tenant.schema_name
+            token['tenant_id'] = current_tenant.id
+            token['tenant_name'] = current_tenant.name
 
         # OLDINGI KODLARINGIZ (o'zgartirilmadi)
         token['role'] = user.role

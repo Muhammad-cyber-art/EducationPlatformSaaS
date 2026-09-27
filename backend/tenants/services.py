@@ -115,17 +115,28 @@ class TenantProvisioningService:
             # Qadam 2: PostgreSQL schema yaratish
             self._create_postgres_schema(schema_name)
 
-        # Qadam 3: Schema ichida migratsiya (transaction tashqarisida — alohida connection)
-        self._run_migrations_for_schema(schema_name)
+        try:
+            # Qadam 3: Schema ichida migratsiya (transaction tashqarisida — alohida connection)
+            self._run_migrations_for_schema(schema_name)
 
-        # Qadam 4: Birinchi admin user yaratish (tenant schema ichida)
-        admin_user = self._create_first_admin(
-            schema_name=schema_name,
-            email=admin_email,
-            password=admin_password,
-            full_name=admin_full_name,
-            phone=admin_phone,
-        )
+            # Qadam 4: Birinchi admin user yaratish (tenant schema ichida)
+            admin_user = self._create_first_admin(
+                schema_name=schema_name,
+                email=admin_email,
+                password=admin_password,
+                full_name=admin_full_name,
+                phone=admin_phone,
+            )
+        except Exception as exc:
+            logger.error(
+                "Provisioning xatolik bilan to'xtadi, rollback bajarilmoqda: schema=%s, xato=%s",
+                schema_name, exc
+            )
+            try:
+                TenantDeprovisioningService().deprovision(tenant, drop_schema=True)
+            except Exception as cleanup_exc:
+                logger.error("Rollback jarayonida xatolik: %s", cleanup_exc)
+            raise
 
         logger.info(
             "Provisioning muvaffaqiyatli tugadi: tenant=%s, schema=%s",
@@ -293,6 +304,8 @@ class TenantProvisioningService:
                 [sys.executable, "manage.py", "migrate_tenant_schema", schema_name],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=120,  # 2 daqiqa timeout
             )
 

@@ -292,11 +292,11 @@ const AddGroup = () => {
           </div>
 
           {/* ACTIONS */}
-          <div className="flex items-center justify-end gap-5 pt-4 pb-10">
+          <div className="flex items-center justify-end gap-4 pt-4 pb-10">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="text-[10px] font-black text-[var(--text-muted)] capitalize tracking-widest hover:text-[var(--gold)] transition-colors"
+              className="px-6 py-3 rounded-xl border border-[var(--border-glass)] bg-[var(--bg-panel)]/40 hover:bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40 text-[11px] font-bold capitalize tracking-wider transition-all"
             >
               Bekor qilish
             </button>
