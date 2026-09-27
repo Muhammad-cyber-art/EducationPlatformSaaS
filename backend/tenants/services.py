@@ -67,6 +67,7 @@ class TenantProvisioningService:
         trial_days: int = 30,
         city: str = "",
         contact_phone: str = "",
+        telegram_bot_token: str = "",
     ) -> dict:
         """
         Yangi tenant to'liq provisioning jarayonini bajaradi.
@@ -82,6 +83,7 @@ class TenantProvisioningService:
             trial_days: Sinov davri (kun)
             city: Markaz shahri
             contact_phone: Markaz aloqa telefoni
+            telegram_bot_token: Markaz shaxsiy Telegram bot tokeni
 
         Returns:
             dict: {
@@ -108,7 +110,7 @@ class TenantProvisioningService:
         # ── Asosiy jarayon (transaction ichida) ───────────────────────────────
         with transaction.atomic():
             # Qadam 1: Public schema yozuvlari
-            tenant = self._create_tenant_record(name, schema_name, city, contact_phone)
+            tenant = self._create_tenant_record(name, schema_name, city, contact_phone, telegram_bot_token)
             domain_obj = self._create_domain_record(tenant, domain)
             subscription = self._create_subscription_record(tenant, plan, trial_days)
 
@@ -197,7 +199,7 @@ class TenantProvisioningService:
         return schema_name
 
     def _create_tenant_record(
-        self, name: str, schema_name: str, city: str, contact_phone: str
+        self, name: str, schema_name: str, city: str, contact_phone: str, telegram_bot_token: str = ""
     ) -> Tenant:
         """public.tenants_tenant ga yozuv qo'shadi."""
         tenant = Tenant.objects.create(
@@ -206,6 +208,7 @@ class TenantProvisioningService:
             is_active=True,
             city=city.strip() if city else None,
             contact_phone=contact_phone.strip() if contact_phone else None,
+            telegram_bot_token=telegram_bot_token.strip() if telegram_bot_token else None,
         )
         logger.debug("Tenant yozuvi yaratildi: id=%s, schema=%s", tenant.id, schema_name)
         return tenant

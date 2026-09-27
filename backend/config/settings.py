@@ -396,7 +396,10 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
 
-    # Faqat productionda loglarni faylga yozamiz
+    # Log katalogi mavjudligini ta'minlash (FileHandler ochilishidan oldin)
+    LOG_DIR = os.path.join(BASE_DIR, 'logs')
+    os.makedirs(LOG_DIR, exist_ok=True)
+
     LOGGING = {
         'version': 1,
         'disable_existing_loggers': False,
@@ -410,7 +413,7 @@ if not DEBUG:
             'file': {
                 'level': 'ERROR',
                 'class': 'logging.FileHandler',
-                'filename': os.path.join(BASE_DIR, 'logs', 'django_error.log'),
+                'filename': os.path.join(LOG_DIR, 'django_error.log'),
                 'formatter': 'verbose',
             },
         },
@@ -422,11 +425,6 @@ if not DEBUG:
             },
         },
     }
-    
-    # Log katalogi mavjudligini tekshirish
-    LOG_DIR = os.path.join(BASE_DIR, 'logs')
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
 
 # Max upload sizes (10MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760

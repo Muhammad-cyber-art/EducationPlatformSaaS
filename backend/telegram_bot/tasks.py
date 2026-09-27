@@ -6,13 +6,13 @@ from .utils import _send_message_sync, get_student_telegram_ids
 logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
-def send_telegram_message_task(self, chat_id, text):
+def send_telegram_message_task(self, chat_id, text, bot_token=None):
     """
     Yagona Telegram xabarini Celery orqali xavfsiz va ishonchli yuborish.
     Retry va exponential backoff qo'llab-quvvatlanadi.
     """
     try:
-        response = _send_message_sync(chat_id, text)
+        response = _send_message_sync(chat_id, text, bot_token=bot_token)
         if response is None or response.status_code != 200:
             raise Exception(f"Telegram API xatolik qaytardi: {getattr(response, 'text', 'No response')}")
         return True
@@ -24,7 +24,7 @@ def send_telegram_message_task(self, chat_id, text):
         return False
 
 @shared_task
-def send_attendance_notifications_task(attendance_ids):
+def send_attendance_notifications_task(attendance_ids, bot_token=None):
     """
     Davomat xabarnomalarini fonda (Celery orqali) navbat bilan yuborish.
     """
@@ -37,13 +37,13 @@ def send_attendance_notifications_task(attendance_ids):
         try:
             # async_send=False qilamiz, chunki o'zi fon taskida ketayapti, 
             # har bir xabar uchun alohida thread shartmas, aksincha ularni navbat bilan yuboramiz.
-            send_attendance_notification(att, async_send=False)
+            send_attendance_notification(att, async_send=False, bot_token=bot_token)
             time.sleep(0.05) # Telegram bot limitini buzmaslik uchun
         except Exception as e:
             logger.error(f"Error in send_attendance_notifications_task for att {att.id}: {e}")
 
 @shared_task
-def send_broadcast_message_task(chat_ids, message):
+def send_broadcast_message_task(chat_ids, message, bot_token=None):
     """
     Ommaviy xabarlarni (Broadcast) fonda, navbat bilan yuborish.
     """
@@ -55,7 +55,7 @@ def send_broadcast_message_task(chat_ids, message):
     
     for chat_id in ids_list:
         try:
-            _send_message_sync(chat_id, message)
+            _send_message_sync(chat_id, message, bot_token=bot_token)
             time.sleep(0.05) # ~20 xabar/sekund (Telegram limitiga mos)
         except Exception as e:
             logger.error(f"Error in send_broadcast_message_task for chat {chat_id}: {e}")
@@ -71,11 +71,13 @@ from finance.models.transaction import FinanceTransaction
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=60)
 def generate_and_send_report(self, report_type, bot_profile_id):
+    filepath = None
     try:
+        import tempfile
         profile = BotProfile.objects.select_related('user').get(id=bot_profile_id)
         chat_id = profile.telegram_id
         
-        filepath = f"/tmp/{report_type}_{chat_id}.xlsx"
+        filepath = os.path.join(tempfile.gettempdir(), f"{report_type}_{chat_id}.xlsx")
         
         if report_type == "daily_branch" or report_type == "monthly_attendance":
             base_query = Attendance.objects.all()
@@ -106,7 +108,7 @@ def generate_and_send_report(self, report_type, bot_profile_id):
         retry_delay = (2 ** self.request.retries) * 60
         raise self.retry(exc=exc, countdown=retry_delay)
     finally:
-        if os.path.exists(filepath):
+        if filepath and os.path.exists(filepath):
             os.remove(filepath)
 
 @shared_task
@@ -127,5 +129,10 @@ def trigger_monthly_finance_reports():
     for sa in super_admins:
         generate_and_send_report.delay("monthly_finance", sa.id)
 
-from .reports_bot_logic import *
+from .reports_bot_logic import (
+    generate_and_send_report_pandas,
+    trigger_daily_branch_reports_pandas,
+    trigger_monthly_attendance_reports_pandas,
+    trigger_monthly_finance_reports_pandas,
+)
 

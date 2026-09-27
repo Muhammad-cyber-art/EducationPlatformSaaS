@@ -1,4 +1,7 @@
 services:
+  # ─────────────────────────────────────────────────────────────────
+  # 1. PostgreSQL
+  # ─────────────────────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
     restart: always
@@ -11,21 +14,32 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ─────────────────────────────────────────────────────────────────
+  # 2. Redis
+  # ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     restart: always
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ─────────────────────────────────────────────────────────────────
+  # 3. Django (Gunicorn)
+  # ─────────────────────────────────────────────────────────────────
   web:
     build: ./backend
     restart: always
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile -
     ports:
       - "127.0.0.1:8000:8000"
     env_file:
@@ -34,39 +48,53 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - static_volume:/app/static
       - media_volume:/app/media
+      - bot_persistence:/app/bot_persistence
 
+  # ─────────────────────────────────────────────────────────────────
+  # 4. Celery Worker
+  # ─────────────────────────────────────────────────────────────────
   celery_worker:
     build: ./backend
     restart: always
-    command: celery -A config worker -Q default,heavy_reports -l info
+    command: celery -A config worker -Q default,heavy_reports -l info --concurrency=2
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - media_volume:/app/media
       - static_volume:/app/static
 
+  # ─────────────────────────────────────────────────────────────────
+  # 5. Celery Beat (Scheduled tasks)
+  # ─────────────────────────────────────────────────────────────────
   celery_beat:
     build: ./backend
     restart: always
-    command: celery -A config beat -l info
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - media_volume:/app/media
       - static_volume:/app/static
 
+  # ─────────────────────────────────────────────────────────────────
+  # 6. Telegram Bot
+  # Har bir tenant uchun token CEO paneldan kiritiladi.
+  # Bu service barcha faol tokenlarni avtomatik topib ishga tushiradi.
+  # ─────────────────────────────────────────────────────────────────
   telegram_bot:
     build: ./backend
     restart: always
@@ -74,20 +102,31 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_started
     volumes:
       - media_volume:/app/media
       - static_volume:/app/static
+      # Pickle fayllar alohida volume da saqlanadi — restart bo'lganda conversation statelari saqlanadi
+      - bot_persistence:/app/bot_persistence
 
+  # ─────────────────────────────────────────────────────────────────
+  # 7. Frontend (React/Vite → Nginx static)
+  # ─────────────────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=${VITE_API_URL:-/api/}
+        VITE_API_URL: ${VITE_API_URL:-/}
     restart: always
 
+  # ─────────────────────────────────────────────────────────────────
+  # 8. Nginx (Reverse Proxy)
+  # ─────────────────────────────────────────────────────────────────
   nginx:
     image: nginx:stable-alpine
     restart: always
@@ -96,8 +135,10 @@ services:
       - "443:443"
     volumes:
       - ./backend/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_volume:/app/static
-      - media_volume:/app/media
+      - static_volume:/app/static:ro
+      - media_volume:/app/media:ro
+      # SSL sertifikatlar (Let's Encrypt o'rnatilgach faollashtiring)
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - web
       - frontend
@@ -107,3 +148,5 @@ volumes:
   redis_data:
   static_volume:
   media_volume:
+  # Telegram bot pickle persistence (conversation statelari saqlanadi)
+  bot_persistence:

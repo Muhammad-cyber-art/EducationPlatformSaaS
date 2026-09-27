@@ -78,6 +78,7 @@ export default function CEOTenantDetail() {
     city: '',
     contact_phone: '',
     plan: 'starter',
+    telegram_bot_token: '',
   });
   const [tenantSubmitting, setTenantSubmitting] = useState(false);
 
@@ -116,6 +117,7 @@ export default function CEOTenantDetail() {
         city: tenant.city || '',
         contact_phone: tenant.contact_phone || '',
         plan: tenant.subscription?.plan || 'starter',
+        telegram_bot_token: tenant.telegram_bot_token || '',
       });
       if (tenant.super_admin) {
         setAdminForm({
@@ -761,6 +763,42 @@ export default function CEOTenantDetail() {
               </span>
             </div>
 
+            {/* Telegram Bot Setting */}
+            <div className="pt-3" style={{ borderTop: '1px solid var(--border-glass)' }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                  Telegram Bot
+                </p>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                    tenant.telegram_bot_token
+                      ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                      : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                  }`}
+                >
+                  {tenant.telegram_bot_token ? 'Ulangan' : 'Ulanmagan'}
+                </span>
+              </div>
+              {tenant.telegram_bot_token ? (
+                <div className="p-2 rounded-lg font-mono text-[11px] flex items-center justify-between" style={{ background: 'var(--bg-void)' }}>
+                  <span className="truncate max-w-[190px]" style={{ color: 'var(--text-secondary)' }}>
+                    {tenant.telegram_bot_token.slice(0, 10)}••••••••••••{tenant.telegram_bot_token.slice(-5)}
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(tenant.telegram_bot_token, 'token')}
+                    className="hover:text-[var(--gold)] ml-2"
+                    title="Token nusxalash"
+                  >
+                    <Copy size={12} />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11px] italic" style={{ color: 'var(--text-muted)' }}>
+                  Bot token kiritilmagan. Yuqoridagi "Markazni Tahrirlash" tugmasi orqali token qo'shishingiz mumkin.
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center justify-between">
               <span style={{ color: 'var(--text-muted)' }}>Oxirgi yangilanish:</span>
               <span style={{ color: 'var(--text-secondary)' }}>
@@ -1102,6 +1140,23 @@ export default function CEOTenantDetail() {
                   <option value="pro">Pro (Professional)</option>
                   <option value="enterprise">Enterprise (Katta korporativ)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  Telegram Bot Token (ixtiyoriy)
+                </label>
+                <input
+                  type="text"
+                  value={tenantForm.telegram_bot_token}
+                  onChange={(e) => setTenantForm({ ...tenantForm, telegram_bot_token: e.target.value })}
+                  placeholder="Masalan: 123456789:AAHkjlfsd..."
+                  className="w-full px-3 py-2 rounded-xl text-xs font-mono outline-none"
+                  style={{ background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text-primary)' }}
+                />
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Ushbu o'quv markazning shaxsiy Telegram bot tokeni (@BotFather dan olingan).
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3">

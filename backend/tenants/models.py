@@ -69,6 +69,13 @@ class Tenant(models.Model):
         null=True,
         verbose_name="Aloqa telefon raqami",
     )
+    telegram_bot_token = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        verbose_name="Telegram Bot Token",
+        help_text="Ushbu o'quv markazining shaxsiy Telegram bot tokeni (ixtiyoriy)",
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Yaratilgan sana")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Yangilangan sana")
 

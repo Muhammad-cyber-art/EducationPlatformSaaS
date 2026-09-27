@@ -32,12 +32,18 @@ const StudentDossier = ({ studentData, canConfirmPayment, dispatch }) => {
             label="Eslatmalar"
             value={studentData?.notes || "Qo'shimcha eslatmalar yo'q"}
           />
-          {studentData?.telegram_id && (
+          {studentData?.telegram_id ? (
             <ProfileAttribute
               icon={<Send size={14} className="text-[#0088cc]" />}
               label="Telegram"
               value={"ULANGAN"}
               colorClass="text-[#0088cc] bg-[#0088cc]/10 border border-[#0088cc]/20"
+            />
+          ) : (
+            <ProfileAttribute
+              icon={<Send size={14} className="opacity-20" />}
+              label="Telegram"
+              value={"ULANMAGAN"}
             />
           )}
         </div>

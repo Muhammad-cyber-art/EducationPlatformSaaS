@@ -22,6 +22,7 @@ function Field({ label, required, children }) {
 
 const INITIAL = {
   name: '', domain: '', city: '', contact_phone: '',
+  telegram_bot_token: '',
   plan: 'starter', trial_days: 30,
   admin_email: '', admin_password: '', admin_full_name: '', admin_phone: '',
 };
@@ -148,6 +149,17 @@ export default function AddTenantModal({ onClose }) {
                       onBlur={(e)  => e.target.style.borderColor = 'var(--input-border)'} />
                   </Field>
                 </div>
+                <Field label="Telegram Bot Token (ixtiyoriy)">
+                  <input value={form.telegram_bot_token} onChange={(e) => set('telegram_bot_token', e.target.value)}
+                    placeholder="Masalan: 123456789:AAHkjlfsd..."
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all font-mono"
+                    style={INPUT_STYLE}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--gold)'}
+                    onBlur={(e)  => e.target.style.borderColor = 'var(--input-border)'} />
+                  <span className="text-[11px] block mt-1" style={{ color: 'var(--text-muted)' }}>
+                    O'quv markazning shaxsiy Telegram bot tokeni (@BotFather dan olingan). Keyinchalik ham kiritish mumkin.
+                  </span>
+                </Field>
               </>
             )}
 

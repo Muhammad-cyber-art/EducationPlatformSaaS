@@ -72,7 +72,7 @@ class TenantListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "schema_name", "is_active",
             "primary_domain", "plan", "sub_status", "sub_expires_at",
-            "city", "created_at",
+            "city", "telegram_bot_token", "created_at",
         ]
 
     def get_primary_domain(self, obj) -> str | None:
@@ -189,7 +189,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         model  = Tenant
         fields = [
             "id", "name", "schema_name", "is_active",
-            "city", "contact_phone",
+            "city", "contact_phone", "telegram_bot_token",
             "domains", "primary_domain", "subscription",
             "stats", "super_admin",
             "created_at", "updated_at",
@@ -229,6 +229,10 @@ class TenantCreateSerializer(serializers.Serializer):
     domain        = serializers.CharField(max_length=253, help_text="Tenant domeni, masalan: najot.crm.uz")
     city          = serializers.CharField(max_length=100, required=False, default="")
     contact_phone = serializers.CharField(max_length=20,  required=False, default="")
+    telegram_bot_token = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, default="",
+        help_text="Telegram bot tokeni (ixtiyoriy)"
+    )
 
     # Obuna
     plan          = serializers.ChoiceField(

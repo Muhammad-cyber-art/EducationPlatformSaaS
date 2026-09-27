@@ -261,7 +261,27 @@ class StudentSerializer(serializers.ModelSerializer):
         Status o'zgarganda custom_fee'ni nazorat qilish.
         Agar status 'regular' bo'lsa, custom_fee tozalanadi.
         Agar boshqa status bo'lib, summa kiritilmasa, u avtomatik 0 bo'ladi (eski qiymat qolib ketmasligi uchun).
+        Bo'sh string ("") qiymatli nullable fieldlar None ga aylantiriladi.
         """
+        # Nullable string fieldlar uchun "" → None konversiyasi
+        nullable_str_fields = ["phone", "parent_phone", "parent_name", "address", "notes", "telegram_id", "parent_telegram_id"]
+        for field in nullable_str_fields:
+            if field in attrs and attrs[field] == "":
+                attrs[field] = None
+
+        # Telefon raqamlarini to'g'ri formatlash (ortiqcha tire, probellardan tozalash)
+        import re
+        for phone_field in ["phone", "parent_phone"]:
+            if phone_field in attrs and attrs[phone_field]:
+                raw_val = str(attrs[phone_field]).strip()
+                digits = re.sub(r'\D', '', raw_val)
+                if len(digits) == 9:
+                    attrs[phone_field] = digits
+                elif len(digits) == 12 and digits.startswith('998'):
+                    attrs[phone_field] = digits[3:]
+                elif digits:
+                    attrs[phone_field] = digits
+
         status = attrs.get("status")
         # Agar status attrs ichida bo'lsa (ya'ni o'zgarayotgan bo'lsa)
         if status:

@@ -209,6 +209,7 @@ class TenantListCreateView(CEOAuthMixin, APIView):
                 trial_days      = data.get("trial_days", 30),
                 city            = data.get("city", ""),
                 contact_phone   = data.get("contact_phone", ""),
+                telegram_bot_token = data.get("telegram_bot_token", ""),
             )
 
             tenant = result["tenant"]
@@ -278,6 +279,9 @@ class TenantDetailView(CEOAuthMixin, APIView):
             tenant.city = data["city"].strip()
         if "contact_phone" in data:
             tenant.contact_phone = data["contact_phone"].strip()
+        if "telegram_bot_token" in data:
+            val = data["telegram_bot_token"]
+            tenant.telegram_bot_token = val.strip() if val and val.strip() else None
 
         tenant.save()
 

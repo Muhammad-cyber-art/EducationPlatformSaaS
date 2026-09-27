@@ -129,7 +129,7 @@ export default function CEOTenants() {
           <table className="w-full">
             <thead>
               <tr style={{ background: 'var(--bg-void)', borderBottom: '1px solid var(--border-glass)' }}>
-                {['Markaz', 'Domen', 'Tarif', 'Holat', 'Obuna', 'Amallar'].map((h) => (
+                {['Markaz', 'Domen', 'Tarif', 'Telegram Bot', 'Holat', 'Obuna', 'Amallar'].map((h) => (
                   <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider"
                     style={{ color: 'var(--text-muted)' }}>{h}</th>
                 ))}
@@ -138,7 +138,7 @@ export default function CEOTenants() {
             <tbody>
               {tenantsLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center">
+                  <td colSpan={7} className="px-5 py-12 text-center">
                     <div className="flex items-center justify-center gap-3" style={{ color: 'var(--text-muted)' }}>
                       <span className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full inline-block" />
                       Yuklanmoqda...
@@ -147,7 +147,7 @@ export default function CEOTenants() {
                 </tr>
               ) : tenants.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-16 text-center">
+                  <td colSpan={7} className="px-5 py-16 text-center">
                     <p className="text-4xl mb-3">🏫</p>
                     <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                       {search ? 'Qidiruv natijalari topilmadi' : 'Hali markaz qo\'shilmagan'}
@@ -177,6 +177,20 @@ export default function CEOTenants() {
 
                   <td className="px-5 py-4">
                     <PlanChip plan={tenant.plan || 'starter'} />
+                  </td>
+
+                  <td className="px-5 py-4">
+                    {tenant.telegram_bot_token ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                        <span>🤖</span> Ulangan
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs"
+                        style={{ background: 'rgba(255, 255, 255, 0.04)', color: 'var(--text-muted)' }}>
+                        Ulanmagan
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-5 py-4">

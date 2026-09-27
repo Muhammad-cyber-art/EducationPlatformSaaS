@@ -17,13 +17,16 @@ async def auth_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     user_id = str(update.effective_user.id)
+    schema_name = context.bot_data.get('tenant_schema')
     
-    # Keshdan tekshirishni olib tashlaymiz (har safar bazadan eng yangi ma'lumotni olamiz).
-    # Chunki PicklePersistence ishlatilganda eski keshdagi model aloqalari (ORM relations) asinxron muhitda xatolik beradi (SynchronousOnlyOperation).
-    # Bazadan tortib olish (select_related orqali kerakli bog'liqliklar bilan)
-    profile = await sync_to_async(
-        lambda: BotProfile.objects.select_related('user__branch', 'student').filter(telegram_id=user_id, is_active=True).first()
-    )()
+    def _fetch_profile():
+        if schema_name:
+            from tenants.utils import tenant_schema_context
+            with tenant_schema_context(schema_name):
+                return BotProfile.objects.select_related('user__branch', 'student').filter(telegram_id=user_id, is_active=True).first()
+        return BotProfile.objects.select_related('user__branch', 'student').filter(telegram_id=user_id, is_active=True).first()
+    
+    profile = await sync_to_async(_fetch_profile)()
     
     if profile:
         context.user_data['bot_profile'] = profile

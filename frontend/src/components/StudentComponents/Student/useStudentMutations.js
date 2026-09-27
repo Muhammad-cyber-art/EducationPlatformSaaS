@@ -8,14 +8,16 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
   const editMutation = useMutation({
     mutationFn: async (data) => {
       const formData = new FormData();
+      // Nullable string fieldlar — bo'sh qilinganda backendga "" yuboriladi,
+      // backend ularni null ga aylantiradi
+      const nullableFields = ["phone", "parent_phone", "parent_name", "address", "notes", "telegram_id", "parent_telegram_id"];
       Object.keys(data).forEach((key) => {
         if (key === "image") {
           if (data[key] instanceof File) formData.append("image", data[key]);
-        } else if (
-          data[key] !== null &&
-          data[key] !== undefined &&
-          data[key] !== ""
-        ) {
+        } else if (nullableFields.includes(key)) {
+          // Bo'sh string → backendga "" yuboriladi (backend null ga aylantiradi)
+          formData.append(key, data[key] ?? "");
+        } else if (data[key] !== null && data[key] !== undefined && data[key] !== "") {
           formData.append(key, data[key]);
         }
       });

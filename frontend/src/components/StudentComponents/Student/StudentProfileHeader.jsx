@@ -90,11 +90,17 @@ const StudentProfileHeader = ({
             </a>
           )}
 
-          {!isEditing && studentData?.telegram_id && (
+          {!isEditing && (studentData?.telegram_id || studentData?.parent_telegram_id) && (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0088cc]/10 border border-[#0088cc]/20 text-[#0088cc] shadow-sm">
                 <Send size={14} className="fill-current" />
-                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-widest">Bot Ulangan</span>
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-widest">
+                  {studentData?.telegram_id && studentData?.parent_telegram_id
+                    ? "Bot Ulangan (2 ta)"
+                    : studentData?.telegram_id
+                    ? "Bot Ulangan"
+                    : "Bot Ulangan (Ota-ona)"}
+                </span>
               </div>
               
               {/* Disconnect Button (Ghost) */}

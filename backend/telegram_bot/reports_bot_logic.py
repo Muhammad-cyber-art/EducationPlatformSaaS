@@ -31,12 +31,17 @@ def get_isolated_queryset(queryset, user):
         return queryset.none()
     return queryset.none()
 
-def send_document_sync(chat_id, filepath, caption="", filename=None):
+def send_document_sync(chat_id, filepath, caption="", filename=None, bot_token=None):
     """Sinxron hujjat jo'natish bot orqali."""
     import requests
     from django.conf import settings
-    bot_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    from telegram_bot.utils import get_tenant_bot_token
+    token = get_tenant_bot_token(bot_token)
+    if not token:
+        logger.warning(f"Telegram bot token topilmadi (chat_id: {chat_id}). Hujjat jo'natilmadi.")
+        return None
+
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
     import time
     for attempt in range(3):
         try:
@@ -64,14 +69,13 @@ def send_document_sync(chat_id, filepath, caption="", filename=None):
             
     return None
 
-from reports.services_new import DailyAttendanceReport, MonthlyFinanceReport, GroupAttendanceReport
+from reports.services_new import DailyAttendanceReport, MonthlyFinanceReport, GroupAttendanceReport, MonthlyAttendanceReport
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=60)
-def generate_and_send_report_pandas(self, report_type, user_id, is_manual=False, group_id=None):
+def generate_and_send_report_pandas(self, report_type, user_id, is_manual=False, group_id=None, schema_name=None, bot_token=None):
     """
     Report generation using the Unified Excel Reporting Engine (openpyxl).
-    Ensures os.remove() is called in a finally block.
-    If is_manual=True, fetches data for the current period up to now.
+    Multi-tenant qo'llab-quvvatlaydi (schema_name bo'yicha mos tenant bazasida ishlaydi).
     """
     import tempfile
     from django.core.cache import cache
@@ -85,13 +89,14 @@ def generate_and_send_report_pandas(self, report_type, user_id, is_manual=False,
     temp_dir = tempfile.gettempdir()
     filepath = None
     
-    try:
+    def _execute():
+        nonlocal filepath
         user = UserModel.objects.get(id=user_id)
         
         chat_id = None
         from django.core.exceptions import ObjectDoesNotExist
         try:
-            if user.bot_profile and user.bot_profile.is_active:
+            if hasattr(user, 'bot_profile') and user.bot_profile and user.bot_profile.is_active:
                 chat_id = user.bot_profile.telegram_id
         except ObjectDoesNotExist:
             pass
@@ -119,6 +124,14 @@ def generate_and_send_report_pandas(self, report_type, user_id, is_manual=False,
             )
             period_str = f"{target_date.strftime('%Y-%m')}"
             filename = f"{period_str} moliyaviy hisobot.xlsx"
+
+        elif report_type == "monthly_attendance":
+            target_date = now if is_manual else (now.replace(day=1) - timezone.timedelta(days=1))
+            service = MonthlyAttendanceReport(
+                user=user, target_year=target_date.year, target_month=target_date.month, is_manual=is_manual
+            )
+            period_str = f"{target_date.strftime('%Y-%m')}"
+            filename = f"{period_str} oylik davomat hisoboti.xlsx"
             
         elif report_type == "group_attendance" and group_id:
             service = GroupAttendanceReport(
@@ -144,7 +157,15 @@ def generate_and_send_report_pandas(self, report_type, user_id, is_manual=False,
         if is_manual:
             caption += f"⏱ So'rov vaqti: {now.strftime('%Y-%m-%d %H:%M')}"
             
-        send_document_sync(chat_id, filepath, caption, filename=filename)
+        send_document_sync(chat_id, filepath, caption, filename=filename, bot_token=bot_token)
+
+    try:
+        if schema_name:
+            from tenants.utils import tenant_schema_context
+            with tenant_schema_context(schema_name):
+                _execute()
+        else:
+            _execute()
         
     except Exception as exc:
         # Retries with exponential backoff
@@ -158,26 +179,108 @@ def generate_and_send_report_pandas(self, report_type, user_id, is_manual=False,
         # Cleanup lock and temp file
         cache.delete(lock_key)
         if filepath and os.path.exists(filepath):
-            os.remove(filepath)
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass
 
 from django.db.models import Q
 
 @shared_task
 def trigger_daily_branch_reports_pandas():
-    admins = UserModel.objects.filter(
-        Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
-        role='admin', 
-        is_active=True
-    ).distinct()
-    for admin in admins:
-        generate_and_send_report_pandas.delay("daily_branch", admin.id)
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+    active_tenants = Tenant.objects.filter(is_active=True)
+    if not active_tenants.exists():
+        admins = UserModel.objects.filter(
+            Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
+            role='admin', 
+            is_active=True
+        ).distinct()
+        for admin in admins:
+            generate_and_send_report_pandas.delay("daily_branch", admin.id)
+        return
+
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                admins = UserModel.objects.filter(
+                    Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
+                    role='admin', 
+                    is_active=True
+                ).distinct()
+                for admin in admins:
+                    generate_and_send_report_pandas.delay(
+                        "daily_branch", 
+                        admin.id, 
+                        schema_name=tenant.schema_name, 
+                        bot_token=tenant.telegram_bot_token
+                    )
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun kunlik hisobot xatolik: {exc}")
+
+@shared_task
+def trigger_monthly_attendance_reports_pandas():
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+    active_tenants = Tenant.objects.filter(is_active=True)
+    if not active_tenants.exists():
+        admins = UserModel.objects.filter(
+            Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
+            role='admin', 
+            is_active=True
+        ).distinct()
+        for admin in admins:
+            generate_and_send_report_pandas.delay("monthly_attendance", admin.id)
+        return
+
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                admins = UserModel.objects.filter(
+                    Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
+                    role='admin', 
+                    is_active=True
+                ).distinct()
+                for admin in admins:
+                    generate_and_send_report_pandas.delay(
+                        "monthly_attendance", 
+                        admin.id, 
+                        schema_name=tenant.schema_name, 
+                        bot_token=tenant.telegram_bot_token
+                    )
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun oylik davomat hisoboti xatolik: {exc}")
 
 @shared_task
 def trigger_monthly_finance_reports_pandas():
-    super_admins = UserModel.objects.filter(
-        Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
-        role='super_admin', 
-        is_active=True
-    ).distinct()
-    for sa in super_admins:
-        generate_and_send_report_pandas.delay("monthly_finance", sa.id)
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+    active_tenants = Tenant.objects.filter(is_active=True)
+    if not active_tenants.exists():
+        super_admins = UserModel.objects.filter(
+            Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
+            role='super_admin', 
+            is_active=True
+        ).distinct()
+        for sa in super_admins:
+            generate_and_send_report_pandas.delay("monthly_finance", sa.id)
+        return
+
+    for tenant in active_tenants:
+        try:
+            with tenant_schema_context(tenant.schema_name):
+                super_admins = UserModel.objects.filter(
+                    Q(bot_profile__is_active=True) | Q(telegram_chat_id__isnull=False),
+                    role='super_admin', 
+                    is_active=True
+                ).distinct()
+                for sa in super_admins:
+                    generate_and_send_report_pandas.delay(
+                        "monthly_finance", 
+                        sa.id, 
+                        schema_name=tenant.schema_name, 
+                        bot_token=tenant.telegram_bot_token
+                    )
+        except Exception as exc:
+            logger.error(f"Tenant {tenant.schema_name} uchun moliyaviy hisobot xatolik: {exc}")

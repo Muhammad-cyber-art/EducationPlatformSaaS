@@ -11,11 +11,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# BOT_TOKEN ni settings dan olish (settings.py da .env dan yuklanadi)
-BOT_TOKEN = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+# BOT_TOKEN ni settings dan olish (settings.py da .env dan yuklanadi - fallback sifatida)
+GLOBAL_BOT_TOKEN = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
 
-if not BOT_TOKEN:
-    logger.warning("TELEGRAM_BOT_TOKEN sozlanmagan! .env faylini tekshiring.")
+def get_tenant_bot_token(explicit_token=None):
+    """
+    Joriy tenantga tegishli bot tokenni aniqlash.
+    1. Agar explicit_token berilgan bo'lsa - uni ishlatadi.
+    2. Agar joriy thread context'ida tenant bo'lsa va unda telegram_bot_token bo'lsa - uni oladi.
+    3. Aks holda fallback sifatida GLOBAL_BOT_TOKEN (settings dan) oladi.
+    """
+    if explicit_token:
+        return explicit_token
+    try:
+        from tenants.context import get_current_tenant
+        tenant = get_current_tenant()
+        if tenant and getattr(tenant, 'telegram_bot_token', None):
+            return tenant.telegram_bot_token
+    except Exception:
+        pass
+    return GLOBAL_BOT_TOKEN
 
 def get_student_telegram_ids(student):
     """
@@ -33,23 +48,33 @@ def get_student_telegram_ids(student):
         
     return chat_ids
 
-def send_telegram_message_async(chat_id, text):
+def send_telegram_message_async(chat_id, text, bot_token=None):
     """Xabarni Celery foni orqali jo'natish (ishonchli, retry mexanizmi bilan)"""
     if not chat_id:
         return
     
+    token = get_tenant_bot_token(bot_token)
+    if not token:
+        logger.warning(f"Telegram token yo'q! Xabar jo'natilmadi (chat_id: {chat_id}).")
+        return
+    
     try:
         from .tasks import send_telegram_message_task
-        send_telegram_message_task.delay(chat_id, text)
+        send_telegram_message_task.delay(chat_id, text, bot_token=token)
     except Exception as exc:
         logger.warning(f"Celery task dispatch failed ({exc}), falling back to background thread.")
-        thread = threading.Thread(target=_send_message_sync, args=(chat_id, text), daemon=True)
+        thread = threading.Thread(target=_send_message_sync, args=(chat_id, text), kwargs={'bot_token': token}, daemon=True)
         thread.start()
 
 
-def _send_message_sync(chat_id, text, max_retries=3):
+def _send_message_sync(chat_id, text, max_retries=3, bot_token=None):
     """Xabarni yuborishning sinxron qismi (Retry mexanizmi bilan)"""
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    token = get_tenant_bot_token(bot_token)
+    if not token:
+        logger.warning(f"Telegram bot token topilmadi (chat_id: {chat_id}). Xabar jo'natilmadi.")
+        return None
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         'chat_id': chat_id,
         'text': text,
@@ -92,8 +117,13 @@ def get_isolated_queryset(queryset, bot_profile):
         return queryset.none()
     return queryset.none()
 
-def send_document_sync(chat_id, filepath, caption=''):
-    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendDocument'
+def send_document_sync(chat_id, filepath, caption='', bot_token=None):
+    token = get_tenant_bot_token(bot_token)
+    if not token:
+        logger.warning(f"Telegram bot token topilmadi (chat_id: {chat_id}). Hujjat jo'natilmadi.")
+        return None
+
+    url = f'https://api.telegram.org/bot{token}/sendDocument'
     try:
         with open(filepath, 'rb') as f:
             files = {'document': f}

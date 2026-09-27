@@ -3,7 +3,7 @@ import { X, Save, Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 
 const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
-  const { register, handleSubmit, reset } = useForm();
+  const { register, handleSubmit, reset, formState: { errors } } = useForm();
   const [showPassword, setShowPassword] = React.useState(false);
 
   useEffect(() => {
@@ -23,8 +23,10 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
   const onSubmit = (data) => {
     // Agar parol bo'sh bo'lsa uni yubormaymiz, faqat o'zgargan maydonlarni yuboramiz
     const payload = { ...data };
-    if (!payload.password) {
+    if (!payload.password || !payload.password.trim()) {
       delete payload.password;
+    } else {
+      payload.password = payload.password.trim();
     }
     onSave(payload);
   };
@@ -49,6 +51,7 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
                 className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-primary)] rounded-xl px-4 py-2.5 text-sm focus:border-[var(--gold)] focus:outline-none transition-colors"
                 placeholder="Ismingiz..."
               />
+              {errors.first_name && <p className="text-[11px] text-red-500">{errors.first_name.message}</p>}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-[var(--text-secondary)]">Familya</label>
@@ -58,6 +61,7 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
                 className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-primary)] rounded-xl px-4 py-2.5 text-sm focus:border-[var(--gold)] focus:outline-none transition-colors"
                 placeholder="Familyangiz..."
               />
+              {errors.last_name && <p className="text-[11px] text-red-500">{errors.last_name.message}</p>}
             </div>
           </div>
 
@@ -69,6 +73,7 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
               className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-primary)] rounded-xl px-4 py-2.5 text-sm focus:border-[var(--gold)] focus:outline-none transition-colors"
               placeholder="+998901234567"
             />
+            {errors.phone_number && <p className="text-[11px] text-red-500">{errors.phone_number.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -79,6 +84,7 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
               className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-primary)] rounded-xl px-4 py-2.5 text-sm focus:border-[var(--gold)] focus:outline-none transition-colors"
               placeholder="admin123"
             />
+            {errors.username && <p className="text-[11px] text-red-500">{errors.username.message}</p>}
           </div>
 
           <div className="space-y-1.5 relative">
@@ -86,7 +92,14 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                {...register('password')}
+                {...register('password', {
+                  validate: (val) => {
+                    if (val && val.length > 0 && val.length < 6) {
+                      return "Parol kamida 6 ta belgidan iborat bo'lishi kerak";
+                    }
+                    return true;
+                  }
+                })}
                 className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-primary)] rounded-xl px-4 py-2.5 text-sm focus:border-[var(--gold)] focus:outline-none transition-colors pr-10"
                 placeholder="Parolni o'zgartirish uchun kiriting..."
               />
@@ -98,6 +111,7 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            {errors.password && <p className="text-[11px] text-red-500 font-medium">{errors.password.message}</p>}
             <p className="text-[10px] text-[var(--text-secondary)]">Agar parolni o'zgartirmasangiz, bo'sh qoldiring.</p>
           </div>
 

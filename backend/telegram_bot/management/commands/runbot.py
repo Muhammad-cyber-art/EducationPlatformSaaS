@@ -30,68 +30,186 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.error(msg="Bot ishlashida xatolik yuz berdi:", exc_info=context.error)
 
 
-class Command(BaseCommand):
-    help = 'Telegram botni ishga tushirish (Barcha rollar uchun universal bot)'
+def build_bot_application(token, schema_name=None, tenant_name=None):
+    """Har bir tenant uchun mustaqil Application va Persistence ob'ektini qurish"""
+    prefix = f"_{schema_name}" if schema_name else ""
 
-    def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('Bot ishga tushmoqda...'))
-        print(">>> Bot polling rejimida ishga tushirildi...")
-        
-        if not TOKEN:
-            self.stdout.write(self.style.ERROR('XATO: TELEGRAM_BOT_TOKEN settings.py da topilmadi!'))
-            return
-
-        persistence_path = os.path.join(str(settings.BASE_DIR), "bot_persistence.pickle")
-        
-        # Agar pickle fayli mavjud bo'lsa, lekin bo'sh (0 bayt) yoki buzilgan bo'lsa, uni o'chiramiz
-        if os.path.exists(persistence_path):
+    # Pickle fayllar alohida papkada saqlanadi (Docker volume ga mount qilinadi)
+    persistence_dir = os.path.join(str(settings.BASE_DIR), "bot_persistence")
+    os.makedirs(persistence_dir, exist_ok=True)
+    persistence_path = os.path.join(persistence_dir, f"bot{prefix}.pickle")
+    
+    # Agar pickle fayli mavjud bo'lsa, lekin bo'sh (0 bayt) yoki buzilgan bo'lsa, uni tozalaymiz
+    if os.path.exists(persistence_path):
+        try:
+            if os.path.getsize(persistence_path) == 0:
+                logger.warning(f"bot_persistence{prefix}.pickle bo'sh (0 bayt), o'chirilmoqda.")
+                os.remove(persistence_path)
+            else:
+                import pickle
+                with open(persistence_path, 'rb') as f:
+                    data = pickle.load(f)
+                    # Eski pickle fayllarda tenant_schema xato qiymat bo'lishi mumkin —
+                    # uni tozalab yangi schemaga o'rnatamiz
+                    if isinstance(data, dict) and isinstance(data.get('bot_data'), dict):
+                        old_schema = data['bot_data'].get('tenant_schema')
+                        if old_schema != schema_name:
+                            logger.warning(
+                                f"Pickle faylda eski schema '{old_schema}' topildi, "
+                                f"'{schema_name}' bilan almashtirilmoqda. Pickle o'chirilmoqda."
+                            )
+                            os.remove(persistence_path)
+        except Exception as e:
+            logger.warning(f"bot_persistence{prefix}.pickle shikastlangan ({e}), yangidan boshlanmoqda.")
             try:
-                if os.path.getsize(persistence_path) == 0:
-                    logger.warning("bot_persistence.pickle bo'sh (0 bayt) ekanligi aniqlandi, o'chirilmoqda.")
-                    os.remove(persistence_path)
-                else:
-                    import pickle
-                    with open(persistence_path, 'rb') as f:
-                        pickle.load(f)
-            except Exception as e:
-                logger.warning(f"bot_persistence.pickle shikastlangan ({e}), tozalab yangidan boshlanmoqda.")
-                try:
-                    os.remove(persistence_path)
-                except Exception:
-                    pass
+                os.remove(persistence_path)
+            except Exception:
+                pass
 
-        persistence = PicklePersistence(filepath=persistence_path)
-        app = ApplicationBuilder().token(TOKEN).persistence(persistence).build()
+    persistence = PicklePersistence(filepath=persistence_path)
 
-        # TypeHandler barcha update'lardan oldin ishlashi uchun group=-1
-        app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
-
-        # Conversation handler for authentication
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("start", start)],
-            states={
-                PHONE: [MessageHandler(filters.CONTACT, contact_handler)],
-                CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_handler)],
-            },
-            fallbacks=[CommandHandler("cancel", cancel)],
-            name="auth_conversation",
-            persistent=True,
-            allow_reentry=True,
+    # post_init: persistence yuklanganidan KEYIN bot_data ni o'rnatamiz
+    # Bu pickle fayldan eski bot_data yuklansa ham bizning schema qiymatimiz to'g'ri bo'lishini kafolatlaydi
+    async def _post_init(application):
+        application.bot_data['tenant_schema'] = schema_name
+        application.bot_data['tenant_name'] = tenant_name
+        logger.info(
+            f"[BOT_INIT] Bot tayyor | schema={schema_name!r} | tenant={tenant_name!r} | "
+            f"bot_data tenant_schema={application.bot_data.get('tenant_schema')!r}"
         )
 
-        # Handlers
-        app.add_handler(conv_handler)
-        app.add_handler(CommandHandler("help", help_command))
-        app.add_handler(CommandHandler("menu", show_main_menu))
-        app.add_handler(CommandHandler("admin", admin_panel))
-        app.add_handler(CallbackQueryHandler(button_callback))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-        
-        # Xatoliklarni ushlovchi handler
-        app.add_error_handler(error_handler)
+    app = ApplicationBuilder().token(token).persistence(persistence).post_init(_post_init).build()
 
-        self.stdout.write(self.style.SUCCESS('Bot muvaffaqiyatli ishga tushdi (Polling mode)'))
-        app.run_polling(drop_pending_updates=True)
+    # TypeHandler barcha update'lardan oldin ishlashi uchun group=-1
+    app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
+
+    # Conversation handler for authentication
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            PHONE: [MessageHandler(filters.CONTACT, contact_handler)],
+            CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_handler)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        name=f"auth_conversation{prefix}",
+        persistent=True,
+        allow_reentry=True,
+    )
+
+    # Handlers
+    app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("menu", show_main_menu))
+    app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    app.add_error_handler(error_handler)
+
+    return app
+
+
+class Command(BaseCommand):
+    help = "Telegram botni ishga tushirish (Multi-tenant va har bir o'quv markaz uchun alohida bot)"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--schema',
+            type=str,
+            default=None,
+            help="Aniq bir tenant schemasi uchun botni ishga tushirish (masalan: tenant_najot)"
+        )
+        parser.add_argument(
+            '--tenant',
+            type=str,
+            default=None,
+            help="Tenant nomi yoki subdomaini bo'yicha botni ishga tushirish"
+        )
+
+    def handle(self, *args, **options):
+        self.stdout.write(self.style.SUCCESS("Bot boshqaruv tizimi ishga tushmoqda..."))
+        target_schema = options.get('schema')
+        target_tenant = options.get('tenant')
+
+        try:
+            from tenants.models import Tenant
+
+            # 1. Aniq bitta tenant ko'rsatilgan bo'lsa
+            if target_schema or target_tenant:
+                query = Q(schema_name=target_schema) if target_schema else (Q(subdomain=target_tenant) | Q(name__iexact=target_tenant))
+                tenant = Tenant.objects.filter(query).first()
+                if not tenant:
+                    self.stdout.write(self.style.ERROR(f"XATO: Ko'rsatilgan o'quv markaz topilmadi (schema: {target_schema}, tenant: {target_tenant})!"))
+                    return
+                
+                token = tenant.telegram_bot_token
+                if not token:
+                    self.stdout.write(self.style.ERROR(f"XATO: '{tenant.name}' ({tenant.schema_name}) o'quv markazi uchun telegram_bot_token kiritilmagan!\nCEO paneldan o'quv markazni tahrirlab bot tokenni kiriting."))
+                    return
+
+                self.stdout.write(self.style.SUCCESS(f">>> '{tenant.name}' ({tenant.schema_name}) uchun bot polling rejimida ishga tushirilmoqda..."))
+                app = build_bot_application(token, schema_name=tenant.schema_name, tenant_name=tenant.name)
+                app.run_polling(drop_pending_updates=True)
+                return
+
+            # 2. Argument berilmagan bo'lsa: Bazadagi barcha bot tokeni bor faol tenantlarni qidiramiz
+            active_tenants = list(Tenant.objects.filter(is_active=True).exclude(Q(telegram_bot_token__isnull=True) | Q(telegram_bot_token='')))
+        except Exception as db_err:
+            logger.warning(f"Tenantlarni bazadan o'qishda xatolik ({db_err}). Fallback tekshirilmoqda...")
+            active_tenants = []
+        
+        if not active_tenants:
+            # Fallback: settings.TELEGRAM_BOT_TOKEN
+            fallback_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+            if fallback_token:
+                self.stdout.write(self.style.WARNING("Ogohlantirish: O'quv markazlarda alohida bot token topilmadi. Fallback (.env / settings.TELEGRAM_BOT_TOKEN) ishlatilmoqda..."))
+                app = build_bot_application(fallback_token, schema_name=None, tenant_name='Global')
+                app.run_polling(drop_pending_updates=True)
+                return
+            else:
+                self.stdout.write(self.style.ERROR("XATO: Hech bir o'quv markazda telegram bot token topilmadi va settings.TELEGRAM_BOT_TOKEN ham bo'sh!\nCEO paneldan o'quv markazga bot token kiriting yoki --schema parametrini bering."))
+                return
+
+        if len(active_tenants) == 1:
+            t = active_tenants[0]
+            self.stdout.write(self.style.SUCCESS(f">>> 1 ta faol bot topildi: '{t.name}' ({t.schema_name}). Ishga tushirilmoqda..."))
+            app = build_bot_application(t.telegram_bot_token, schema_name=t.schema_name, tenant_name=t.name)
+            app.run_polling(drop_pending_updates=True)
+            return
+
+        # 3. Bir nechta o'quv markaz botlari bo'lsa: ularni parallel polling qilamiz
+        self.stdout.write(self.style.SUCCESS(f">>> {len(active_tenants)} ta o'quv markaz botlari parallel ishga tushirilmoqda:"))
+        apps = []
+        for t in active_tenants:
+            self.stdout.write(f"  • {t.name} (schema: {t.schema_name})")
+            apps.append(build_bot_application(t.telegram_bot_token, schema_name=t.schema_name, tenant_name=t.name))
+        
+        import asyncio
+        async def run_all():
+            for app in apps:
+                await app.initialize()
+                await app.start()
+                await app.updater.start_polling(drop_pending_updates=True)
+            self.stdout.write(self.style.SUCCESS(">>> Barcha botlar muvaffaqiyatli ishga tushdi va xabarlarni tinglamoqda..."))
+            stop_event = asyncio.Event()
+            try:
+                await stop_event.wait()
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                pass
+            finally:
+                for app in apps:
+                    try:
+                        if app.updater and app.updater.running:
+                            await app.updater.stop()
+                        if app.running:
+                            await app.stop()
+                        await app.shutdown()
+                    except Exception as err:
+                        logger.error(f"Bot to'xtatishda xatolik: {err}")
+
+        try:
+            asyncio.run(run_all())
+        except KeyboardInterrupt:
+            self.stdout.write(self.style.SUCCESS("Botlar to'xtatildi."))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start komandasi - ro'yxatdan o'tish jarayoni"""
@@ -124,102 +242,163 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return PHONE
 
-@sync_to_async
-def process_contact_and_create_profile(clean_phone, chat_id):
+def _internal_process_contact(clean_phone, chat_id):
     """
     Telefon raqami bo'yicha UserModel va Student qidirish va BotProfile yaratish.
+    Bazada raqam har qanday formatda ('93-69709-26', '+998 93 697 09 26', '936970926' va h.k.)
+    saqlangan bo'lsa ham, normalize qilinib moslik aniqlanadi.
     """
-    possible_numbers = {clean_phone}
-    if clean_phone.startswith('998'):
-        possible_numbers.add(clean_phone[3:])
-    else:
-        possible_numbers.add('998' + clean_phone)
+    from django.db import connection
 
-    # 1. Admin/Super Admin/Mentor/Teacher qidirish
-    for phone in possible_numbers:
-        user = UserModel.objects.select_related('branch').filter(
-            Q(phone_number=phone) | Q(phone_number__endswith=phone[-9:]),
+    try:
+        # Joriy schema ni log ga yozish (debugging uchun)
+        with connection.cursor() as cur:
+            cur.execute("SHOW search_path")
+            current_sp = cur.fetchone()
+        logger.info(f"[PROCESS_CONTACT] start | chat_id={chat_id} | phone={clean_phone!r} | search_path={current_sp}")
+    except Exception as sp_err:
+        logger.warning(f"[PROCESS_CONTACT] search_path o'qishda xatolik: {sp_err}")
+
+    def normalize_digits(p):
+        return re.sub(r'\D', '', str(p or ''))
+
+    norm_incoming = normalize_digits(clean_phone)
+    local_9 = norm_incoming[-9:] if len(norm_incoming) >= 9 else norm_incoming
+    with_998 = '998' + local_9 if len(local_9) == 9 else norm_incoming
+    possible_numbers = {norm_incoming, local_9, with_998}
+    logger.info(f"[PROCESS_CONTACT] possible_numbers={possible_numbers}")
+
+    def is_phone_match(raw_db_phone):
+        if not raw_db_phone:
+            return False
+        norm_db = normalize_digits(raw_db_phone)
+        if not norm_db:
+            return False
+        if norm_db in possible_numbers:
+            return True
+        if len(norm_db) >= 9 and len(local_9) >= 9:
+            return norm_db[-9:] == local_9
+        return norm_db.endswith(local_9) or local_9.endswith(norm_db)
+
+    try:
+        # 1. Admin/Super Admin/Mentor/Teacher qidirish
+        all_users = UserModel.objects.select_related('branch').filter(
             role__in=['admin', 'super_admin', 'mentor', 'teacher'],
-            is_active=True
-        ).first()
-        if user:
-            # Eski profillarni tozalash (xuddi shu chat_id bo'lsa o'chiramiz, boshqa odamniki bo'lishi mumkin)
-            BotProfile.objects.filter(telegram_id=chat_id).exclude(user=user).delete()
-            
-            profile, created = BotProfile.objects.update_or_create(
-                user=user,
-                defaults={
-                    'telegram_id': chat_id,
-                    'phone_number': user.phone_number,
-                    'role': user.role,
-                    'is_active': True
-                }
-            )
-            # UserModel bilan ham telegram_chat_id ni sinxronlashtirish
-            if user.telegram_chat_id != chat_id:
-                user.telegram_chat_id = chat_id
-                user.save(update_fields=['telegram_chat_id'])
-            return profile, 'admin_confirm_needed'
-
-    # 2. Student qidirish
-    found_student_names = []
-    student_profile_created = False
-    profile = None
-    
-    for phone in possible_numbers:
-        students = Student.objects.filter(
-            Q(phone=phone) | Q(phone__endswith=phone[-9:]) | Q(parent_phone=phone) | Q(parent_phone__endswith=phone[-9:]),
-            is_active=True
+            is_active=True,
+            phone_number__isnull=False
         )
-        for student in students:
-            # ✅ SENIOR FIX: Student modelini o'ziga ham telegram_id larni yozib qo'yish
+        user_count = all_users.count()
+        logger.info(f"[PROCESS_CONTACT] Foydalanuvchilar (admin/mentor) soni: {user_count}")
+        for user in all_users:
+            if is_phone_match(user.phone_number):
+                logger.info(f"[PROCESS_CONTACT] Admin topildi: {user.username} [{user.role}]")
+                BotProfile.objects.filter(telegram_id=chat_id).exclude(user=user).delete()
+                profile, created = BotProfile.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        'telegram_id': chat_id,
+                        'phone_number': user.phone_number,
+                        'role': user.role,
+                        'is_active': True
+                    }
+                )
+                # UserModel bilan ham telegram_chat_id ni sinxronlashtirish
+                if user.telegram_chat_id != chat_id:
+                    user.telegram_chat_id = chat_id
+                    user.save(update_fields=['telegram_chat_id'])
+                return profile, 'admin_confirm_needed'
+
+        # 2. Student qidirish
+        all_students = Student.objects.filter(is_active=True)
+        student_count = all_students.count()
+        logger.info(f"[PROCESS_CONTACT] Faol o'quvchilar soni: {student_count}")
+
+        found_student_names = []
+        student_profile_created = False
+        profile = None
+
+        for student in all_students:
+            phone_match = is_phone_match(student.phone)
+            parent_match = is_phone_match(student.parent_phone)
+            logger.debug(f"[PROCESS_CONTACT]   student={student.full_name!r} phone={student.phone!r}(match={phone_match}) parent_phone={student.parent_phone!r}(match={parent_match})")
+
+            if not phone_match and not parent_match:
+                continue
+
+            logger.info(f"[PROCESS_CONTACT] O'quvchi TOPILDI: {student.full_name} | phone_match={phone_match} | parent_match={parent_match}")
+
+            # Student modeliga telegram_id yozib qo'yish
             update_fields = []
-            
-            # Agar o'zining raqami mos kelsa
-            if student.phone and (student.phone == phone or student.phone.endswith(phone[-9:])):
-                if student.telegram_id != chat_id:
-                    student.telegram_id = chat_id
-                    update_fields.append('telegram_id')
-            
-            # Agar ota-onaning raqami mos kelsa
-            if student.parent_phone and (student.parent_phone == phone or student.parent_phone.endswith(phone[-9:])):
-                if student.parent_telegram_id != chat_id:
-                    student.parent_telegram_id = chat_id
-                    update_fields.append('parent_telegram_id')
-                    
+            if phone_match and student.telegram_id != chat_id:
+                student.telegram_id = chat_id
+                update_fields.append('telegram_id')
+            if parent_match and student.parent_telegram_id != chat_id:
+                student.parent_telegram_id = chat_id
+                update_fields.append('parent_telegram_id')
             if update_fields:
                 student.save(update_fields=update_fields)
+                logger.info(f"[PROCESS_CONTACT] Student.{update_fields} yangilandi.")
 
             if not student_profile_created:
-                # Eski profillarni tozalash
                 BotProfile.objects.filter(telegram_id=chat_id).exclude(student=student).delete()
-                
                 profile, created = BotProfile.objects.update_or_create(
                     student=student,
                     defaults={
                         'telegram_id': chat_id,
-                        'phone_number': student.phone or student.parent_phone or phone,
+                        'phone_number': student.phone or student.parent_phone or clean_phone,
                         'role': 'student',
                         'is_active': True
                     }
                 )
+                logger.info(f"[PROCESS_CONTACT] BotProfile {'yaratildi' if created else 'yangilandi'}: id={profile.id}")
                 student_profile_created = True
-            
-            # Guruhlarni yig'ish
-            active_groups = student.groups.filter(enrollments__is_active=True).distinct()
-            if not active_groups and student.group:
-                active_groups = [student.group]
-            
-            if not active_groups:
+
+            # Guruhlarni to'g'ri usulda olish (M2M reverse lookup xatosini oldini olish)
+            try:
+                from groups.models import GroupEnrollment
+                active_enrollment_groups = list(
+                    GroupEnrollment.objects.filter(
+                        student=student, is_active=True
+                    ).select_related('group').values_list('group__name', flat=True)
+                )
+            except Exception as ge:
+                logger.warning(f"[PROCESS_CONTACT] GroupEnrollment xatosi: {ge}")
+                active_enrollment_groups = []
+
+            if not active_enrollment_groups and student.group_id:
+                try:
+                    active_enrollment_groups = [student.group.name]
+                except Exception:
+                    active_enrollment_groups = []
+
+            if not active_enrollment_groups:
                 found_student_names.append(f"{student.full_name.strip()} (Guruhsiz)")
             else:
-                for group in active_groups:
-                    found_student_names.append(f"{student.full_name.strip()} ({group.name})")
+                for group_name in active_enrollment_groups:
+                    found_student_names.append(f"{student.full_name.strip()} ({group_name})")
 
-    if student_profile_created:
-        return profile, found_student_names
-    
-    return None, None
+        if student_profile_created:
+            logger.info(f"[PROCESS_CONTACT] Natija: student topildi, guruhlar={found_student_names}")
+            return profile, found_student_names
+
+        logger.info(f"[PROCESS_CONTACT] Natija: hech kim topilmadi (phone={clean_phone!r})")
+        return None, None
+
+    except Exception as exc:
+        logger.error(f"[PROCESS_CONTACT] XATOLIK: {exc}", exc_info=True)
+        return None, None
+
+@sync_to_async
+def process_contact_and_create_profile(clean_phone, chat_id, schema_name=None):
+    """
+    Telefon raqami bo'yicha UserModel va Student qidirish va BotProfile yaratish.
+    Agar schema_name berilgan bo'lsa, mos tenant schemasida bajariladi.
+    """
+    if schema_name:
+        from tenants.utils import tenant_schema_context
+        with tenant_schema_context(schema_name):
+            return _internal_process_contact(clean_phone, chat_id)
+    return _internal_process_contact(clean_phone, chat_id)
 
 async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kontakt kelganda uni bazada qidirish (student va admin)"""
@@ -227,8 +406,9 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = contact.phone_number
     clean_phone = re.sub(r'\D', '', phone)
     chat_id = str(update.effective_chat.id)
+    schema_name = context.bot_data.get('tenant_schema')
     
-    profile, result = await process_contact_and_create_profile(clean_phone, chat_id)
+    profile, result = await process_contact_and_create_profile(clean_phone, chat_id, schema_name=schema_name)
     
     if profile:
         context.user_data['bot_profile'] = profile
@@ -256,12 +436,16 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return ConversationHandler.END
     else:
+        keyboard = [[KeyboardButton("📞 Telefon raqamni yuborish", request_contact=True)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         await update.message.reply_html(
             f"❌ <b>Kechirasiz!</b>\n\n"
             f"Tizimda <code>{phone}</code> raqami topilmadi.\n"
-            f"Iltimos, markazga murojaat qilib, raqamingizni to'g'irlatib oling."
+            f"Iltimos, markazga murojaat qilib, raqamingizni to'g'irlatib oling.\n\n"
+            f"Yoki <b>boshqa raqam</b> bilan qaytadan urinib ko'ring:",
+            reply_markup=reply_markup
         )
-        return ConversationHandler.END
+        return PHONE
 
 async def confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin tasdiqlash jarayoni"""
@@ -269,10 +453,18 @@ async def confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if text == 'HA':
         profile = context.user_data.get('bot_profile')
+        schema_name = context.bot_data.get('tenant_schema')
         if profile:
             if profile.user and profile.user.telegram_chat_id != str(update.effective_chat.id):
                 profile.user.telegram_chat_id = str(update.effective_chat.id)
-                await sync_to_async(profile.user.save)(update_fields=['telegram_chat_id'])
+                def _save_user_chat_id():
+                    if schema_name:
+                        from tenants.utils import tenant_schema_context
+                        with tenant_schema_context(schema_name):
+                            profile.user.save(update_fields=['telegram_chat_id'])
+                    else:
+                        profile.user.save(update_fields=['telegram_chat_id'])
+                await sync_to_async(_save_user_chat_id)()
 
             keyboard = [[KeyboardButton("Menyuga qaytish")]]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -404,6 +596,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     role = context.user_data.get('role')
     profile = context.user_data.get('bot_profile')
+    schema_name = context.bot_data.get('tenant_schema')
     
     if role == 'student':
         await query.answer("Kechirasiz, menyudan foydalanish vaqtincha cheklangan.", show_alert=True)
@@ -420,10 +613,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await query.edit_message_text(f"<b>⏳ Hisobot tayyorlanmoqda...</b>\n\nHisobot tez orada yuboriladi.", parse_mode='HTML')
             
-            if getattr(settings, 'DEBUG', False):
-                await sync_to_async(generate_and_send_report_pandas)("daily_branch", profile.user_id, is_manual=True)
-            else:
-                generate_and_send_report_pandas.delay("daily_branch", profile.user_id, is_manual=True)
+            def _trigger_daily():
+                token = getattr(getattr(context, 'bot', None), 'token', None)
+                if getattr(settings, 'DEBUG', False):
+                    if schema_name:
+                        from tenants.utils import tenant_schema_context
+                        with tenant_schema_context(schema_name):
+                            generate_and_send_report_pandas("daily_branch", profile.user_id, is_manual=True, schema_name=schema_name, bot_token=token)
+                    else:
+                        generate_and_send_report_pandas("daily_branch", profile.user_id, is_manual=True, schema_name=schema_name, bot_token=token)
+                else:
+                    generate_and_send_report_pandas.delay("daily_branch", profile.user_id, is_manual=True, schema_name=schema_name, bot_token=token)
+            await sync_to_async(_trigger_daily)()
         else:
             await query.edit_message_text("<b>❌ Ruxsat yo'q!</b>", parse_mode='HTML')
     
@@ -435,10 +636,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await query.edit_message_text(f"<b>⏳ Oylik moliyaviy hisobot tayyorlanmoqda...</b>\n\nHisobot tez orada yuboriladi.", parse_mode='HTML')
             
-            if getattr(settings, 'DEBUG', False):
-                await sync_to_async(generate_and_send_report_pandas)("monthly_finance", profile.user_id, is_manual=True)
-            else:
-                generate_and_send_report_pandas.delay("monthly_finance", profile.user_id, is_manual=True)
+            def _trigger_fin():
+                token = getattr(getattr(context, 'bot', None), 'token', None)
+                if getattr(settings, 'DEBUG', False):
+                    if schema_name:
+                        from tenants.utils import tenant_schema_context
+                        with tenant_schema_context(schema_name):
+                            generate_and_send_report_pandas("monthly_finance", profile.user_id, is_manual=True, schema_name=schema_name, bot_token=token)
+                    else:
+                        generate_and_send_report_pandas("monthly_finance", profile.user_id, is_manual=True, schema_name=schema_name, bot_token=token)
+                else:
+                    generate_and_send_report_pandas.delay("monthly_finance", profile.user_id, is_manual=True, schema_name=schema_name, bot_token=token)
+            await sync_to_async(_trigger_fin)()
         else:
             await query.edit_message_text("<b>❌ Ruxsat yo'q!</b>", parse_mode='HTML')
             
@@ -447,11 +656,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from asgiref.sync import sync_to_async
             from groups.models import Group
             
-            # Fetch active groups for the branch
-            if role == 'super_admin':
-                groups = await sync_to_async(list)(Group.objects.filter(is_faol=True).order_by('branch__name', 'name'))
-            else:
-                groups = await sync_to_async(list)(Group.objects.filter(branch_id=profile.user.branch_id, is_faol=True).order_by('name'))
+            def _get_groups():
+                if schema_name:
+                    from tenants.utils import tenant_schema_context
+                    with tenant_schema_context(schema_name):
+                        if role == 'super_admin':
+                            return list(Group.objects.filter(is_faol=True).order_by('branch__name', 'name'))
+                        return list(Group.objects.filter(branch_id=profile.user.branch_id, is_faol=True).order_by('name'))
+                else:
+                    if role == 'super_admin':
+                        return list(Group.objects.filter(is_faol=True).order_by('branch__name', 'name'))
+                    return list(Group.objects.filter(branch_id=profile.user.branch_id, is_faol=True).order_by('name'))
+            
+            groups = await sync_to_async(_get_groups)()
                 
             if not groups:
                 await query.edit_message_text("<b>❌ Faol guruhlar topilmadi.</b>", parse_mode='HTML')
@@ -485,10 +702,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await query.edit_message_text(f"<b>⏳ Guruh davomat hisoboti tayyorlanmoqda...</b>\n\nTez orada yuboriladi.", parse_mode='HTML')
             
-            if getattr(settings, 'DEBUG', False):
-                await sync_to_async(generate_and_send_report_pandas)("group_attendance", profile.user_id, is_manual=True, group_id=group_id)
-            else:
-                generate_and_send_report_pandas.delay("group_attendance", profile.user_id, is_manual=True, group_id=group_id)
+            def _trigger_grp_download():
+                token = getattr(getattr(context, 'bot', None), 'token', None)
+                if getattr(settings, 'DEBUG', False):
+                    if schema_name:
+                        from tenants.utils import tenant_schema_context
+                        with tenant_schema_context(schema_name):
+                            generate_and_send_report_pandas("group_attendance", profile.user_id, is_manual=True, group_id=group_id, schema_name=schema_name, bot_token=token)
+                    else:
+                        generate_and_send_report_pandas("group_attendance", profile.user_id, is_manual=True, group_id=group_id, schema_name=schema_name, bot_token=token)
+                else:
+                    generate_and_send_report_pandas.delay("group_attendance", profile.user_id, is_manual=True, group_id=group_id, schema_name=schema_name, bot_token=token)
+            await sync_to_async(_trigger_grp_download)()
     elif callback_data == 'my_groups':
         if role in ['teacher', 'mentor']:
             from asgiref.sync import sync_to_async
@@ -498,13 +723,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not mentor_user:
                 await query.edit_message_text("<b>❌ O'qituvchi ma'lumotlari topilmadi.</b>", parse_mode='HTML')
                 return
-                
-            groups = await sync_to_async(list)(
-                Group.objects.filter(
-                    Q(mentor=mentor_user) | Q(additional_mentors__mentor=mentor_user),
-                    is_faol=True
-                ).distinct().order_by('name')
-            )
+            
+            def _get_mentor_groups():
+                if schema_name:
+                    from tenants.utils import tenant_schema_context
+                    with tenant_schema_context(schema_name):
+                        return list(
+                            Group.objects.filter(
+                                Q(mentor=mentor_user) | Q(additional_mentors__mentor=mentor_user),
+                                is_faol=True
+                            ).distinct().order_by('name')
+                        )
+                else:
+                    return list(
+                        Group.objects.filter(
+                            Q(mentor=mentor_user) | Q(additional_mentors__mentor=mentor_user),
+                            is_faol=True
+                        ).distinct().order_by('name')
+                    )
+            
+            groups = await sync_to_async(_get_mentor_groups)()
             
             if not groups:
                 text = "📚 <b>Sizga biriktirilgan faol guruhlar topilmadi.</b>"

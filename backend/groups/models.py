@@ -212,12 +212,12 @@ class Student(models.Model):
         max_length=7, default="#ffffff", validators=[color_validator]
     )
     full_name = models.CharField(max_length=200)
-    phone = models.CharField(max_length=20, blank=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
     birth_date = models.DateField(null=True, blank=True)
-    parent_name = models.CharField(max_length=200, blank=True)
-    parent_phone = models.CharField(max_length=20, blank=True)
-    address = models.CharField(max_length=300, blank=True)
-    notes = models.TextField(blank=True)
+    parent_name = models.CharField(max_length=200, blank=True, null=True)
+    parent_phone = models.CharField(max_length=20, blank=True, null=True)
+    address = models.CharField(max_length=300, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
     joined_at = models.DateTimeField(auto_now_add=True)
     image = models.ImageField(
         upload_to=tenant_student_image_path, null=True, blank=True, validators=[validate_image_file]
@@ -269,6 +269,30 @@ class Student(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        # Telefon raqamlarini to'g'ri formatlash (ortiqcha belgilardan tozalash)
+        import re
+        if self.phone:
+            digits = re.sub(r'\D', '', str(self.phone))
+            if len(digits) == 9:
+                self.phone = digits
+            elif len(digits) == 12 and digits.startswith('998'):
+                self.phone = digits[3:]
+            elif digits:
+                self.phone = digits
+            else:
+                self.phone = None
+
+        if self.parent_phone:
+            digits = re.sub(r'\D', '', str(self.parent_phone))
+            if len(digits) == 9:
+                self.parent_phone = digits
+            elif len(digits) == 12 and digits.startswith('998'):
+                self.parent_phone = digits[3:]
+            elif digits:
+                self.parent_phone = digits
+            else:
+                self.parent_phone = None
+
         # Agar guruh biriktirilgan bo'lsa va branch hali yo'q bo'lsa,
         # branchni guruhdan olamiz
         if self.group and not self.branch:

@@ -31,45 +31,35 @@ def sync_student_telegram_id(sender, instance, created, **kwargs):
         if clean_phone.isdigit() and len(clean_phone) >= 9:
             last_9 = clean_phone[-9:]
             
-            # BUG FIX #4: Faqat faol o'quvchilar orasidan qidirish (arxivlanganlar ham qo'shiladi - lidlar sifatida).
-            # Avval is_active va is_archived filterlari yo'q edi — o'chirilgan o'quvchilardan
-            # ham telegram_id nusxalanishi mumkin edi.
-            candidates = Student.objects.exclude(id=instance.id).filter(
+            # TUZATISH: DB-da filter — Python iteratsiyasi yo'q
+            candidate = Student.objects.exclude(id=instance.id).filter(
                 is_active=True,
+            ).filter(
+                Q(phone__endswith=last_9) | Q(parent_phone__endswith=last_9)
             ).filter(
                 Q(telegram_id__isnull=False, telegram_id__gt='') |
                 Q(parent_telegram_id__isnull=False, parent_telegram_id__gt='')
-            )
-            
-            found = False
-            for other in candidates:
-                if other.phone:
-                    other_clean = re.sub(r'\D', '', other.phone)
-                    if other_clean.endswith(last_9):
-                        update_fields['telegram_id'] = other.telegram_id or other.parent_telegram_id
-                        found = True
-                        break
-                if other.parent_phone:
-                    other_p_clean = re.sub(r'\D', '', other.parent_phone)
-                    if other_p_clean.endswith(last_9):
-                        update_fields['telegram_id'] = other.parent_telegram_id or other.telegram_id
-                        found = True
-                        break
+            ).only('phone', 'parent_phone', 'telegram_id', 'parent_telegram_id').first()
 
-            # Agar faol o'quvchilar orasidan topilmasa, arxivlanganlardan qidiramiz (Senior Fix)
-            if not found:
+            if candidate:
+                if candidate.phone and re.sub(r'\D', '', candidate.phone).endswith(last_9):
+                    update_fields['telegram_id'] = candidate.telegram_id or candidate.parent_telegram_id
+                elif candidate.parent_phone and re.sub(r'\D', '', candidate.parent_phone).endswith(last_9):
+                    update_fields['telegram_id'] = candidate.parent_telegram_id or candidate.telegram_id
+
+            # Agar faol o'quvchilar orasidan topilmasa, arxivlanganlardan qidiramiz
+            if 'telegram_id' not in update_fields:
                 from archivebase.models import ArchivedStudent
-                archived_candidates = ArchivedStudent.objects.filter(
+                for arch in ArchivedStudent.objects.filter(
                     Q(metadata__telegram_id__isnull=False) | Q(metadata__parent_telegram_id__isnull=False)
-                )
-                for arch in archived_candidates:
+                ):
                     meta = arch.metadata
-                    arch_phone = meta.get('phone')
-                    if arch_phone:
-                        arch_phone_clean = re.sub(r'\D', '', arch_phone)
-                        if arch_phone_clean.endswith(last_9):
-                            update_fields['telegram_id'] = meta.get('telegram_id') or meta.get('parent_telegram_id')
-                            break
+                    arch_phone = meta.get('phone', '')
+                    if arch_phone and re.sub(r'\D', '', arch_phone).endswith(last_9):
+                        tg_id = meta.get('telegram_id') or meta.get('parent_telegram_id')
+                        if tg_id:
+                            update_fields['telegram_id'] = tg_id
+                        break
     
     # 2. Ota-ona raqami orqali qidirish
     if instance.parent_phone and not instance.parent_telegram_id:
@@ -77,44 +67,35 @@ def sync_student_telegram_id(sender, instance, created, **kwargs):
         if clean_p.isdigit() and len(clean_p) >= 9:
             last_9_p = clean_p[-9:]
             
-            # BUG FIX #4: Faqat faol o'quvchilar orasidan qidirish (arxivlanganlar ham qo'shiladi - lidlar sifatida).
-            # Ota-ona raqami bo'yicha ham xuddi shu muammo mavjud edi.
-            candidates = Student.objects.exclude(id=instance.id).filter(
+            # TUZATISH: DB-da filter — Python iteratsiyasi yo'q
+            candidate_p = Student.objects.exclude(id=instance.id).filter(
                 is_active=True,
+            ).filter(
+                Q(phone__endswith=last_9_p) | Q(parent_phone__endswith=last_9_p)
             ).filter(
                 Q(telegram_id__isnull=False, telegram_id__gt='') |
                 Q(parent_telegram_id__isnull=False, parent_telegram_id__gt='')
-            )
-            
-            found_p = False
-            for other_p in candidates:
-                if other_p.parent_phone:
-                    other_p_clean = re.sub(r'\D', '', other_p.parent_phone)
-                    if other_p_clean.endswith(last_9_p):
-                        update_fields['parent_telegram_id'] = other_p.parent_telegram_id or other_p.telegram_id
-                        found_p = True
-                        break
-                if other_p.phone:
-                    other_clean = re.sub(r'\D', '', other_p.phone)
-                    if other_clean.endswith(last_9_p):
-                        update_fields['parent_telegram_id'] = other_p.telegram_id or other_p.parent_telegram_id
-                        found_p = True
-                        break
+            ).only('phone', 'parent_phone', 'telegram_id', 'parent_telegram_id').first()
 
-            # Agar faol o'quvchilar orasidan topilmasa, arxivlanganlardan qidiramiz (Senior Fix)
-            if not found_p:
+            if candidate_p:
+                if candidate_p.parent_phone and re.sub(r'\D', '', candidate_p.parent_phone).endswith(last_9_p):
+                    update_fields['parent_telegram_id'] = candidate_p.parent_telegram_id or candidate_p.telegram_id
+                elif candidate_p.phone and re.sub(r'\D', '', candidate_p.phone).endswith(last_9_p):
+                    update_fields['parent_telegram_id'] = candidate_p.telegram_id or candidate_p.parent_telegram_id
+
+            # Agar faol o'quvchilar orasidan topilmasa, arxivlanganlardan qidiramiz
+            if 'parent_telegram_id' not in update_fields:
                 from archivebase.models import ArchivedStudent
-                archived_candidates = ArchivedStudent.objects.filter(
+                for arch_p in ArchivedStudent.objects.filter(
                     Q(metadata__telegram_id__isnull=False) | Q(metadata__parent_telegram_id__isnull=False)
-                )
-                for arch_p in archived_candidates:
+                ):
                     meta_p = arch_p.metadata
-                    arch_p_phone = meta_p.get('parent_phone') or meta_p.get('phone')
-                    if arch_p_phone:
-                        arch_p_clean = re.sub(r'\D', '', arch_p_phone)
-                        if arch_p_clean.endswith(last_9_p):
-                            update_fields['parent_telegram_id'] = meta_p.get('parent_telegram_id') or meta_p.get('telegram_id')
-                            break
+                    arch_p_phone = meta_p.get('parent_phone', '') or meta_p.get('phone', '')
+                    if arch_p_phone and re.sub(r'\D', '', arch_p_phone).endswith(last_9_p):
+                        tg_id_p = meta_p.get('parent_telegram_id') or meta_p.get('telegram_id')
+                        if tg_id_p:
+                            update_fields['parent_telegram_id'] = tg_id_p
+                        break
     
     if update_fields:
         Student.objects.filter(id=instance.id).update(**update_fields)
@@ -122,7 +103,7 @@ def sync_student_telegram_id(sender, instance, created, **kwargs):
             setattr(instance, key, value)
 
 
-def send_attendance_notification(attendance, async_send=True):
+def send_attendance_notification(attendance, async_send=True, bot_token=None):
     """Davomat xabarnomasi - Takrorlanishni oldini olish bilan"""
     # Arxivlangan guruh yoki o'quvchiga xabar yubormaslik
     if not is_valid_for_notification(attendance.student, attendance.group):
@@ -146,10 +127,10 @@ def send_attendance_notification(attendance, async_send=True):
     sent = False
     for cid in chat_ids:
         if async_send:
-            transaction.on_commit(lambda c=cid: send_telegram_message_async(c, text))
+            transaction.on_commit(lambda c=cid, bt=bot_token: send_telegram_message_async(c, text, bot_token=bt))
         else:
             from .utils import _send_message_sync
-            _send_message_sync(cid, text)
+            _send_message_sync(cid, text, bot_token=bot_token)
         sent = True
     
     # Holatni saqlab qo'yamiz (takror yubormaslik uchun)
@@ -190,7 +171,7 @@ def notify_new_student(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Payment)
 def notify_payment(sender, instance, created, **kwargs):
-    """To'lov tasdiqlanganda — faqat yangi to'lov yoki status o'zgarganda"""
+    """To'lov tasdiqlanganda — faqat yangi to'lov yoki is_paid=True o'zgarganda"""
     if not instance.is_paid:
         return
     
@@ -198,11 +179,11 @@ def notify_payment(sender, instance, created, **kwargs):
     if not is_valid_for_notification(instance.student, instance.group):
         return
     
-    # Takroriy xabarnomani oldini olish: faqat yangi yaratilgan yoki is_paid yangi True bo'lganda
+    # TUZATISH #7: update_fields=None bo'lsa ham tekshiriladi.
     update_fields = kwargs.get('update_fields')
     if not created:
-        # Agar update_fields berilgan bo'lsa va is_paid o'zgartirilmagan bo'lsa, o'tkazib yuboramiz
-        if update_fields and 'is_paid' not in update_fields:
+        # update_fields yo'q (oddiy .save()) yoki 'is_paid' da o'zgarish yo'q — o'tkazamiz
+        if not update_fields or 'is_paid' not in update_fields:
             return
         # Bulk update yoki boshqa sabab bilan qayta saqlanganda — xabar yubormaslik
         # (faqat explicit is_paid=True o'zgarishida yuborish)

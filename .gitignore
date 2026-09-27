@@ -32,6 +32,7 @@ db.sqlite3-journal
 # Docker volume mounts (if created locally)
 postgres_data/
 redis_data/
+backend/bot_persistence/
 
 # Frontend
 frontend/node_modules/

@@ -101,7 +101,9 @@ class BroadcastMessageView(APIView):
         # Xabarlarni yuborish (Faqat Celery orqali)
         try:
             from .tasks import send_broadcast_message_task
-            send_broadcast_message_task.delay(list(target_chat_ids), final_message)
+            from .utils import get_tenant_bot_token
+            bot_token = get_tenant_bot_token()
+            send_broadcast_message_task.delay(list(target_chat_ids), final_message, bot_token=bot_token)
         except Exception as e:
             # Celery/Redis ishlamayotgan bo'lsa xato qaytaramiz (Background thread ishlatish xavfli)
             return Response({"error": f"Xabarlarni yuborishda xatolik yuz berdi (Celery yoki Redis ishlamayapti): {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

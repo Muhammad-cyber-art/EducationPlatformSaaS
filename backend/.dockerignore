@@ -16,3 +16,4 @@ list_urls.py
 .env
 .env.*
 *.pickle
+bot_persistence/

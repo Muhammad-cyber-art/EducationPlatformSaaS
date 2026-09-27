@@ -41,7 +41,8 @@ const SuperAdminProfile = () => {
       setIsEditModalOpen(false);
     },
     onError: (error) => {
-      const msg = error.response?.data?.detail || error.response?.data?.username?.[0] || "Xatolik yuz berdi";
+      const data = error.response?.data;
+      const msg = data?.detail || data?.password?.[0] || data?.username?.[0] || (typeof data === 'string' ? data : "Xatolik yuz berdi");
       toast.error(msg);
     }
   });

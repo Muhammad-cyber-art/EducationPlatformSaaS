@@ -682,16 +682,18 @@ class StudentViewSet(viewsets.ModelViewSet):
         serializer = GroupTransferSerializer(transfers, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], url_path='disconnect-bot')
+    @action(detail=True, methods=['post'], url_path='disconnect-bot',
+            permission_classes=[IsAdminOrSuperAdmin])
     def disconnect_bot(self, request, pk=None):
-        """O'quvchini Telegram botdan uzish"""
+        """O'quvchini Telegram botdan to'liq uzish (student va ota-ona IDlari ham tozalanadi)"""
         student = self.get_object()
         
         from telegram_bot.models import BotProfile
         BotProfile.objects.filter(student=student).delete()
         
         student.telegram_id = None
-        student.save(update_fields=['telegram_id'])
+        student.parent_telegram_id = None
+        student.save(update_fields=['telegram_id', 'parent_telegram_id'])
         
         return Response({"status": "success", "message": "Botdan muvaffaqiyatli uzildi"}, status=200)
 

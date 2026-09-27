@@ -97,7 +97,21 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         # 2. Parolni yangilash
         if password and password.strip():
-            instance.set_password(password)
+            clean_pass = password.strip()
+            if len(clean_pass) < 6:
+                raise serializers.ValidationError({"password": "Parol kamida 6 ta belgidan iborat bo'lishi kerak."})
+            instance.set_password(clean_pass)
+
+        # Username sanitizatsiyasi
+        username = validated_data.get('username')
+        if username and ('<' in username or '>' in username or 'script' in username.lower()):
+            raise serializers.ValidationError({"username": "Username xavfli belgilar o'z ichiga olmaydi."})
+
+        # 3. Nullable string fieldlar uchun "" → None konversiyasi
+        nullable_str_fields = ['phone_number', 'subject']
+        for field in nullable_str_fields:
+            if field in validated_data and validated_data[field] == '':
+                validated_data[field] = None
 
         old_phone = instance.phone_number
         
@@ -118,12 +132,15 @@ from tenants.context import get_current_tenant
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         username_or_email = attrs.get('username')
-        if username_or_email and '@' in username_or_email:
-            # Email orqali foydalanuvchini qidiramiz
-            user = UserModel.objects.filter(email=username_or_email).first()
-            if user:
-                # Topilsa, attrs['username'] ni haqiqiy username'ga almashtiramiz
-                attrs['username'] = user.username
+        if username_or_email:
+            username_or_email = username_or_email.strip()
+            attrs['username'] = username_or_email
+            if '@' in username_or_email:
+                # Email orqali foydalanuvchini qidiramiz (case-insensitive)
+                user = UserModel.objects.filter(email__iexact=username_or_email).first()
+                if user:
+                    # Topilsa, attrs['username'] ni haqiqiy username'ga almashtiramiz
+                    attrs['username'] = user.username
         
         data = super().validate(attrs)
 
