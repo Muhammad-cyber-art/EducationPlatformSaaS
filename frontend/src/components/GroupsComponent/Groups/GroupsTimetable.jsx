@@ -13,6 +13,7 @@ import {
   Search,
   BookOpen
 } from "lucide-react";
+import { get_user_info } from "../../Authorized/getRole";
 
 const WEEKDAYS = [
   { id: "mon", key: 1, name: "Dushanba", short: "Du", dayType: "odd" },
@@ -25,6 +26,7 @@ const WEEKDAYS = [
 
 export default function GroupsTimetable({ groups = [], currentBranchId, readOnly }) {
   const navigate = useNavigate();
+  const userInfo = get_user_info();
   const [selectedDay, setSelectedDay] = useState("all"); // 'all' or day id ('mon', etc.)
   const [mentorFilter, setMentorFilter] = useState("");
   const [timetableSearch, setTimetableSearch] = useState("");
@@ -305,10 +307,20 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
                   dayGroups.map((group) => {
                     const cardColor = group.color || "#b8860b";
 
+                    const handleGroupClick = () => {
+                      const role = userInfo?.role;
+                      const bParam = currentBranchId ? `?branch=${currentBranchId}` : "";
+                      if (role === "mentor") {
+                        navigate(`/mentor/groups/${group.id}${bParam}`);
+                      } else {
+                        navigate(`/admin/groups/${group.id}${bParam}`);
+                      }
+                    };
+
                     return (
                       <div
                         key={`${day.id}-${group.id}`}
-                        onClick={() => navigate(`${group.id}?branch=${currentBranchId}`)}
+                        onClick={handleGroupClick}
                         className="group relative p-3 rounded-xl bg-[var(--bg-void)]/60 hover:bg-[var(--bg-void)] border border-[var(--border-glass)] hover:border-[var(--gold)]/40 transition-all cursor-pointer shadow-sm active:scale-[0.99] overflow-hidden"
                       >
                         {/* Guruh rangli chap chiziq */}

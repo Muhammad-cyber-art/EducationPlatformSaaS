@@ -49,7 +49,7 @@ def get_student_telegram_ids(student):
     return chat_ids
 
 def send_telegram_message_async(chat_id, text, bot_token=None):
-    """Xabarni Celery foni orqali jo'natish (ishonchli, retry mexanizmi bilan)"""
+    """Xabarni fon oqimida (daemon thread) jo'natish — asosiy HTTP so'rovni 0ms ham to'xtatmaydi."""
     if not chat_id:
         return
     
@@ -59,12 +59,15 @@ def send_telegram_message_async(chat_id, text, bot_token=None):
         return
     
     try:
-        from .tasks import send_telegram_message_task
-        send_telegram_message_task.delay(chat_id, text, bot_token=token)
-    except Exception as exc:
-        logger.warning(f"Celery task dispatch failed ({exc}), falling back to background thread.")
-        thread = threading.Thread(target=_send_message_sync, args=(chat_id, text), kwargs={'bot_token': token}, daemon=True)
+        thread = threading.Thread(
+            target=_send_message_sync,
+            args=(chat_id, text),
+            kwargs={'bot_token': token},
+            daemon=True
+        )
         thread.start()
+    except Exception as exc:
+        logger.error(f"Telegram thread yaratishda xato: {exc}")
 
 
 def _send_message_sync(chat_id, text, max_retries=3, bot_token=None):
@@ -124,12 +127,51 @@ def send_document_sync(chat_id, filepath, caption='', bot_token=None):
         return None
 
     url = f'https://api.telegram.org/bot{token}/sendDocument'
+    safe_caption = caption[:1024] if caption else ''
     try:
         with open(filepath, 'rb') as f:
             files = {'document': f}
-            data = {'chat_id': chat_id, 'caption': caption}
+            data = {'chat_id': chat_id, 'caption': safe_caption, 'parse_mode': 'HTML'}
             response = requests.post(url, files=files, data=data, timeout=30)
+            if response.status_code != 200 and "can't parse entities" in response.text.lower():
+                # HTML parse error bo'lsa, plain text sifatida qayta urinish
+                f.seek(0)
+                data = {'chat_id': chat_id, 'caption': safe_caption}
+                response = requests.post(url, files=files, data=data, timeout=30)
             return response
     except Exception as e:
         logger.error(f'Telegram document yuborishda xatolik: {e}')
         return None
+
+
+def send_homework_notification_async(homework_id, bot_token=None):
+    """
+    Yangi uyga vazifa xabarnomasini fon oqimida (daemon thread) jo'natish.
+    Bu funksiya darhol qaytadi va HTTP so'rovni 0ms ham to'xtatmaydi.
+    Thread ichida tegishli tenant sxema konteksti saqlanadi.
+    """
+    from django.db import connection
+    schema_name = getattr(connection, 'schema_name', None)
+    token = get_tenant_bot_token(bot_token)
+
+    def _worker():
+        try:
+            from .tasks import send_homework_notification_task
+            if schema_name:
+                from tenants.utils import tenant_schema_context
+                with tenant_schema_context(schema_name):
+                    send_homework_notification_task(homework_id, bot_token=token)
+            else:
+                send_homework_notification_task(homework_id, bot_token=token)
+        except Exception as err:
+            logger.error(f"send_homework_notification_async xatolik (hw_id: {homework_id}): {err}")
+        finally:
+            try:
+                from django.db import connection as conn
+                conn.close()
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+

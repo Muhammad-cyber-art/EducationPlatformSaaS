@@ -40,23 +40,24 @@ class HomeworkListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Homework
-        # 'group' bu yerda ID raqamini bildiradi (masalan: 1)
-        # 'group_name' esa faqat o'qish uchun guruh nomini bildiradi
-        fields = ('id', 'title', 'description', 'group', 'group_name', 'stats', 'created_at')
+        fields = ('id', 'title', 'description', 'file', 'group', 'group_name', 'stats', 'created_at')
         
-    from drf_spectacular.utils import extend_schema_field
     @extend_schema_field(serializers.DictField())
     def get_stats(self, obj) -> dict:
+        total = getattr(obj, 'total_submissions', None)
+        if total is None:
+            total = obj.submissions.count()
+        completed = getattr(obj, 'completed_submissions', None)
+        if completed is None:
+            completed = obj.submissions.filter(status='full').count()
         return {
-            "total": obj.submissions.count(),
-            "completed": obj.submissions.filter(status='full').count()
+            "total": total,
+            "completed": completed
         }
+
 # 4. Vazifa ustiga bosilganda chiqadigan sahifa uchun (To'liq variant)
 class HomeworkDetailSerializer(serializers.ModelSerializer):
     group_name = serializers.CharField(source='group.name', read_only=True)
-    # BUG FIX: Faqat guruhda FAOL bo'lgan o'quvchilar ko'rsatiladi.
-    # Avval barcha submission'lar (unenrolled o'quvchilar ham) qaytarilar edi —
-    # bu frontend'da null student_name crash'ga olib kelar edi.
     students_status = serializers.SerializerMethodField()
 
     @extend_schema_field(HomeworkSubmissionSerializer(many=True))
@@ -75,7 +76,7 @@ class HomeworkDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Homework
-        fields = ('id', 'title', 'description', 'group_name', 'students_status', 'created_at')
+        fields = ('id', 'title', 'description', 'file', 'group_name', 'students_status', 'created_at')
 
 class MockTestResultSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.full_name', read_only=True)
@@ -94,10 +95,15 @@ class MockTestListSerializer(serializers.ModelSerializer):
         
     @extend_schema_field(serializers.DictField())
     def get_stats(self, obj) -> dict:
-        # Oddiy statistika: nechta o'quvchi baholangan
+        total = getattr(obj, 'total_results', None)
+        if total is None:
+            total = obj.results.count()
+        graded = getattr(obj, 'graded_results', None)
+        if graded is None:
+            graded = obj.results.exclude(score='').count()
         return {
-            "total": obj.results.count(),
-            "graded": obj.results.exclude(score='').count()
+            "total": total,
+            "graded": graded
         }
 
 class MockTestDetailSerializer(serializers.ModelSerializer):

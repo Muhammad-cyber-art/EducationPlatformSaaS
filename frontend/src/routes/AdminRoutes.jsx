@@ -26,11 +26,16 @@ import MentorFinance from"../components/mentorsComponent/MentorFinance";
 import AdminProfile from"../components/adminComponents/adminProfile";
 import ArchivePage from"../components/adminComponents/ArchivePage";
 import AdminExpenses from"../components/adminComponents/Expenses/AdminExpenses";
+import TimetablePage from"../components/GroupsComponent/TimetablePage";
+import GroupAssignmentsPage from "../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage";
 
 
 export const AdminRoutes = (
  <Route path="/admin" element={<AdminPanel />}>
  <Route index element={<AdminPageFirst />} />
+
+ {/* Timetable Section */}
+ <Route path="timetable" element={<TimetablePage />} />
 
  {/* Mentors Section */}
  <Route path="mentors" element={<MentorsLayout />}>
@@ -46,6 +51,7 @@ export const AdminRoutes = (
 
  <Route path=":group_id" element={<GroupDetailLayout />}>
  <Route index element={<GroupDetailPage />} />
+ <Route path="assignments" element={<GroupAssignmentsPage />} />
  <Route path="add_student" element={<StudentAdd />} />
  <Route path="students" element={<StudentLayout />}>
  <Route index element={<GroupsStudent />} />

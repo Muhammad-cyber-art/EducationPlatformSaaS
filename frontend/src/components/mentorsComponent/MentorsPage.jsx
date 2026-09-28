@@ -80,10 +80,15 @@ export default function MentorsPage() {
  }, [data]);
 
  return (
- <div className="p-3 sm:p-6 space-y-12">
+ <div className="px-3 sm:px-6 pt-3 pb-6 space-y-3.5">
  <MentorsHeader
- {...{ currentBranchName, isLoading, isFetching, searchTerm, setSearchQuery, canCreateMentor, navigate, effectiveBranchId, viewMode, setViewMode, dispatch }}
+ currentBranchName={currentBranchName}
  mentorsCount={mentors.length}
+ canCreateMentor={canCreateMentor}
+ navigate={navigate}
+ effectiveBranchId={effectiveBranchId}
+ viewMode={viewMode}
+ setViewMode={setViewMode}
  />
 
  <div className="min-h-[500px]">

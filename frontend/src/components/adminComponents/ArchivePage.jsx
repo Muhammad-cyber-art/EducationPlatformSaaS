@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { User, Users, Layers, RotateCcw, Trash2, X } from "lucide-react";
 import { useCurrentBranch } from "../Authorized/useBranchId";
 import { get_user_info } from "../Authorized/getRole";
@@ -23,13 +24,13 @@ export default function ArchivePage() {
     ? superAdminBranchId
     : currentBranchId;
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const globalSearch = useSelector((state) => state.mentor?.searchQuery || "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    const timer = setTimeout(() => setDebouncedSearch(globalSearch), 400);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [globalSearch]);
 
   const {
     studentsQuery,
@@ -100,7 +101,7 @@ export default function ArchivePage() {
         : groupsQuery;
 
   return (
-    <div className="animate-lux-fade space-y-10 pb-20 relative">
+    <div className="animate-lux-fade px-3 sm:px-6 pt-3 pb-12 space-y-3.5 relative">
       {/* Atmosphere Background */}
       <div className="fixed inset-0 pointer-events-none -z-10">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-radial-gradient opacity-[0.03]"></div>
@@ -156,7 +157,7 @@ export default function ArchivePage() {
         </div>
       )}
 
-      <ArchiveHeader searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+      <ArchiveHeader />
 
       <ArchiveTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
 

@@ -1,5 +1,6 @@
 import React from "react";
-import { UserCheck, Trash2, Target, MessageSquare, Activity, BookOpen, Archive, DownloadCloud } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { UserCheck, Trash2, Target, MessageSquare, DownloadCloud, FolderKanban, ChevronRight } from "lucide-react";
 
 const GroupSidebar = ({
     groupinfo,
@@ -14,6 +15,7 @@ const GroupSidebar = ({
     handleDownloadMonthlyReport,
     uiDispatch
 }) => {
+    const navigate = useNavigate();
     return (
         <div className="xl:col-span-2 space-y-4">
             {/* PRIMARY MENTOR */}
@@ -118,49 +120,37 @@ const GroupSidebar = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
                 {canSeeHomework && (
-                    <>
-                        <button
-                            disabled={!isGroupLogicActive}
-                            onClick={() => uiDispatch({ type: "SET_FIELD", field: "isHomeworkModalOpen", value: true })}
-                            className={`flex flex-col sm:flex-row items-center justify-center gap-2 p-2.5 rounded-xl border transition-all ${isGroupLogicActive ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-400 hover:bg-indigo-600 hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
-                        >
-                            <Activity size={16} />
-                            <span className="text-[8px] font-black capitalize tracking-widest text-center">Vazifa</span>
-                        </button>
-                        <button
-                            disabled={!isGroupLogicActive}
-                            onClick={() => uiDispatch({ type: "SET_FIELD", field: "isMockTestModalOpen", value: true })}
-                            className={`flex flex-col sm:flex-row items-center justify-center gap-2 p-2.5 rounded-xl border transition-all ${isGroupLogicActive ? 'bg-rose-600/20 border-rose-500/30 text-rose-400 hover:bg-rose-600 hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
-                        >
-                            <Target size={16} />
-                            <span className="text-[8px] font-black capitalize tracking-widest text-center">Mock</span>
-                        </button>
-                    </>
+                    <button
+                        onClick={() => navigate("assignments")}
+                        className="w-full relative group overflow-hidden p-3.5 rounded-2xl bg-gradient-to-r from-[var(--gold)]/20 via-[var(--bg-panel)] to-[var(--bg-void)] border border-[var(--gold)]/40 hover:border-[var(--gold)] text-[var(--text-primary)] hover:shadow-[0_0_25px_rgba(184,134,11,0.2)] transition-all duration-300 flex items-center justify-between"
+                        title="Topshiriqlar bo'limi: Uy vazifalar, Mock testlar va Tarix"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-[var(--gold)] text-black flex items-center justify-center shadow-md shadow-[var(--gold-glow)] group-hover:scale-110 transition-transform duration-300 shrink-0">
+                                <FolderKanban size={20} />
+                            </div>
+                            <div className="text-left">
+                                <span className="text-xs font-black tracking-tight text-[var(--text-primary)] group-hover:text-[var(--gold)] transition-colors block">
+                                    Topshiriqlar
+                                </span>
+                                <span className="text-[8px] font-bold text-[var(--text-muted)] tracking-wider block mt-0.5">
+                                    Vazifa • Mock • Tarix
+                                </span>
+                            </div>
+                        </div>
+                        <ChevronRight size={18} className="text-[var(--gold)] group-hover:translate-x-1 transition-transform shrink-0" />
+                    </button>
                 )}
-                <button
-                    onClick={() => uiDispatch({ type: "SET_FIELD", field: "isViewAllModalOpen", value: true })}
-                    className="flex flex-col sm:flex-row items-center justify-center gap-2 p-2.5 rounded-xl border border-[var(--gold)]/30 bg-[var(--gold)]/10 text-[var(--gold)] hover:bg-[var(--gold)] hover:text-black transition-all"
-                >
-                    <BookOpen size={16} />
-                    <span className="text-[8px] font-black capitalize tracking-widest text-center">Tarix</span>
-                </button>
-                <button
-                    onClick={() => uiDispatch({ type: "SET_FIELD", field: "isStorageOpen", value: true })}
-                    className="flex flex-col sm:flex-row items-center justify-center gap-2 p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"
-                >
-                    <Archive size={16} />
-                    <span className="text-[8px] font-black capitalize tracking-widest text-center">Arxiv</span>
-                </button>
                 {(isAdmin || isSuperAdmin || isMentor) && (
                     <button
                         onClick={handleDownloadMonthlyReport}
-                        className="flex flex-col sm:flex-row items-center justify-center gap-2 p-2.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-white transition-all"
+                        className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-white transition-all"
                         title="Oylik hisobotni ko'rish / yuklab olish"
                     >
                         <DownloadCloud size={16} />
-                        <span className="text-[8px] font-black capitalize tracking-widest text-center">Oylik</span>
+                        <span className="text-[8px] font-black capitalize tracking-widest text-center">Oylik hisobot</span>
                     </button>
                 )}
             </div>

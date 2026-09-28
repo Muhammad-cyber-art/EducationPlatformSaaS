@@ -20,6 +20,7 @@ import GroupsListPage from"../components/GroupsComponent/GroupsPage";
 import AddGroup from"../components/GroupsComponent/AddGroup";
 import GroupDetailLayout from"../components/GroupsComponent/GroupDetailLayout";
 import GroupDetailPage from"../components/GroupsComponent/GroupDetails";
+import GroupAssignmentsPage from "../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage";
 import StudentAdd from"../components/StudentComponents/AddStudent";
 import StudentLayout from"../components/StudentComponents/StudentLayout";
 import GroupsStudent from"../components/GroupsComponent/GrupsStudent";
@@ -90,6 +91,7 @@ export const SuperAdminRoutes = (
  <Route path="addgroup" element={<AddGroup />} />
  <Route path=":group_id" element={<GroupDetailLayout />}>
  <Route index element={<GroupDetailPage />} />
+ <Route path="assignments" element={<GroupAssignmentsPage />} />
  <Route path="add_student" element={<StudentAdd />} />
  <Route path="students" element={<StudentLayout />}>
  <Route index element={<GroupsStudent />} />

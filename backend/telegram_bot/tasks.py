@@ -60,6 +60,78 @@ def send_broadcast_message_task(chat_ids, message, bot_token=None):
         except Exception as e:
             logger.error(f"Error in send_broadcast_message_task for chat {chat_id}: {e}")
 
+@shared_task
+def send_homework_notification_task(homework_id, bot_token=None):
+    """Guruh o'quvchilariga yangi uyga vazifa haqida xabar va yuklangan faylni yuborish."""
+    from homework_attends.models import Homework
+    from groups.models import GroupEnrollment
+    from .utils import get_student_telegram_ids, send_document_sync, _send_message_sync, get_tenant_bot_token
+    import os
+
+    try:
+        hw = Homework.objects.select_related('group', 'mentor').get(id=homework_id)
+    except Homework.DoesNotExist:
+        logger.warning(f"Homework {homework_id} topilmadi.")
+        return
+
+    # Guruhdagi faol o'quvchilar
+    active_student_ids = GroupEnrollment.objects.filter(
+        group=hw.group,
+        is_active=True
+    ).values_list('student_id', flat=True)
+
+    students = hw.group.students.filter(
+        id__in=active_student_ids,
+        is_archived=False,
+        is_active=True
+    )
+
+    all_chat_ids = set()
+    for student in students:
+        ids = get_student_telegram_ids(student)
+        all_chat_ids.update(ids)
+
+    if not all_chat_ids:
+        logger.info(f"Homework {homework_id}: Guruh o'quvchilarida Telegram ID mavjud emas.")
+        return
+
+    mentor_name = hw.mentor.get_full_name() if hw.mentor and hasattr(hw.mentor, 'get_full_name') and hw.mentor.get_full_name() else (hw.mentor.username if hw.mentor else "O'qituvchi")
+    group_name = hw.group.name if hw.group else "Guruh"
+    desc = hw.description.strip() if hw.description else "Tavsif berilmagan."
+
+    message_text = (
+        f"📚 <b>Yangi uyga vazifa!</b>\n\n"
+        f"👥 <b>Guruh:</b> {group_name}\n"
+        f"📝 <b>Mavzu:</b> {hw.title}\n"
+        f"👨‍🏫 <b>O'qituvchi:</b> {mentor_name}\n"
+        f"📅 <b>Sana:</b> {hw.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+        f"📋 <b>Vazifa tavsifi:</b>\n{desc}"
+    )
+
+    file_path = None
+    if hw.file:
+        try:
+            if hasattr(hw.file, 'path') and os.path.exists(hw.file.path):
+                file_path = hw.file.path
+        except Exception as e:
+            logger.warning(f"Homework {homework_id} fayl yo'lini olishda xatolik: {e}")
+
+    token = get_tenant_bot_token(bot_token)
+
+    for chat_id in all_chat_ids:
+        try:
+            if file_path:
+                caption = message_text[:1000] if len(message_text) > 1000 else message_text
+                resp = send_document_sync(chat_id, file_path, caption=caption, bot_token=token)
+                if not resp or resp.status_code != 200:
+                    _send_message_sync(chat_id, message_text, bot_token=token)
+            else:
+                _send_message_sync(chat_id, message_text, bot_token=token)
+            time.sleep(0.05)
+        except Exception as err:
+            logger.error(f"Homework xabari yuborishda xatolik (chat_id: {chat_id}): {err}")
+
+
 import os
 import pandas as pd
 from django.db import connection

@@ -9,6 +9,7 @@ import {
   LogOut,
   Diamond,
   Layers,
+  CalendarDays,
   ChevronRight,
   Dna,
   CheckCircle2,
@@ -48,6 +49,7 @@ export default function SideBar({ isOpen, onClose }) {
   const menuItems = [
     { name: "Asosiy", path: "/admin", icon: <LayoutDashboard size={20} /> },
     { name: "Guruhlar", path: "/admin/groups", icon: <Layers size={20} /> },
+    { name: "Dars Jadvali", path: "/admin/timetable", icon: <CalendarDays size={20} /> },
     { name: "O'qituvchilar", path: "/admin/mentors", icon: <UserSquare2 size={20} /> },
     { name: "Kutishlar Zali", path: "/admin/waiting-hall", icon: <UserPlus size={20} /> },
     { name: "O'quvchilar", path: "/admin/all_students", icon: <GraduationCap size={20} /> },
@@ -74,7 +76,7 @@ export default function SideBar({ isOpen, onClose }) {
       <div className={`lux-sidebar ${isOpen ? 'open' : ''}`}>
 
         {/* LOGO SECTION */}
-        <div className="mb-12 px-2 flex items-center justify-between">
+        <div className="mb-4 px-2 flex items-center justify-between">
           <div className="flex items-center gap-4 group cursor-pointer" onClick={() => navigate('/admin')}>
             <div className="w-12 h-12 flex items-center justify-center transition-all">
               <img src="/YNlogo_without_word.png" alt="Logo" className="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]" />
@@ -89,9 +91,7 @@ export default function SideBar({ isOpen, onClose }) {
 
         {/* NAVIGATION SECTIONS */}
         <div className="flex-1 overflow-y-auto pr-2 -mr-2 scrollbar-hide space-y-10">
-
           <section>
-            <h2 className="text-[9px] font-black text-[var(--gold)] capitalize tracking-[0.4em] px-4 mb-6 opacity-50">Asosiy Bo'limlar</h2>
             <nav className="space-y-1.5">
               {menuItems.map((item) => {
                 const linkTo = getLinkWithBranch(item.path);
@@ -121,7 +121,7 @@ export default function SideBar({ isOpen, onClose }) {
           {/* BRANCH PORTALS */}
           {(userInfo?.accessible_branches?.length > 0) && (
             <section>
-              <h2 className="text-[9px] font-black text-[var(--gold)] capitalize tracking-[0.4em] px-4 mb-6 opacity-50">Biriktirilgan Filiallar</h2>
+              <h2 className="text-[9px] font-black text-[var(--gold)] capitalize px-2 mb-2 opacity-50">Filiallar</h2>
               <div className="space-y-1.5">
                 {/* Main Branch Portal */}
                 <Link
@@ -161,28 +161,6 @@ export default function SideBar({ isOpen, onClose }) {
 
         {/* FOOTER SECTION */}
         <div className="mt-auto pt-8 border-t border-[var(--border-glass)] space-y-4">
-          <Link
-            to="/admin/profile"
-            onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-            className="lux-card !p-3 !bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center gap-3 hover:border-[var(--gold)]/30 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] flex items-center justify-center overflow-hidden group-hover:border-[var(--gold)]/20">
-              {userInfo?.image ? (
-                <img src={userInfo.image} className="w-full h-full object-cover" alt="" />
-              ) : (
-                <Dna size={18} className="text-[var(--gold)]" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-black text-[var(--text-primary)] truncate capitalize group-hover:text-[var(--gold)] transition-colors">{userInfo?.first_name || "Tizimda"}</p>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                <p className="text-[8px] text-[var(--text-muted)] font-black capitalize tracking-widest">Tizimda</p>
-              </div>
-            </div>
-            <ChevronRight size={12} className="text-[var(--text-muted)] group-hover:text-[var(--gold)] group-hover:translate-x-0.5 transition-all" />
-          </Link>
-
           <button
             onClick={handleLogout}
             className="w-full h-12 rounded-2xl bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 hover:border-red-500/30 text-red-500 flex items-center justify-center gap-3 transition-all active:scale-95 group font-black text-[10px] capitalize tracking-[0.2em]"

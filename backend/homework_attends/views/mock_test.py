@@ -26,7 +26,7 @@ class MockTestViewSet(ModelViewSet):
         if getattr(self, 'swagger_fake_view', False):
             return MockTest.objects.none()
         user = self.request.user
-        group_id = self.request.query_params.get('group_id')
+        group_id = self.request.query_params.get('group_id') or self.request.query_params.get('group')
         
         if user.role == 'super_admin':
             queryset = MockTest.objects.all()
@@ -41,7 +41,12 @@ class MockTestViewSet(ModelViewSet):
         if group_id:
             queryset = queryset.filter(group_id=group_id)
 
-        if self.action == 'retrieve':
+        if self.action == 'list':
+            queryset = queryset.annotate(
+                total_results=models.Count('results', distinct=True),
+                graded_results=models.Count('results', filter=~models.Q(results__score=''), distinct=True)
+            )
+        elif self.action == 'retrieve':
             queryset = queryset.prefetch_related('results__student')
 
         return queryset.select_related('group').distinct()

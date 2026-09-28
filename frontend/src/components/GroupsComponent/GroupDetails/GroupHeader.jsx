@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { UserPlus, Send, MoreVertical, Edit3, UserRoundPlus, Activity, Target, Trash2, Check, ArrowRightLeft } from "lucide-react";
+import { UserPlus, Send, MoreVertical, Edit3, UserRoundPlus, Activity, Target, Trash2, Check, ArrowRightLeft, FolderKanban } from "lucide-react";
 import GoBackButton from "../../sendback";
 
 const GroupHeader = ({
@@ -244,22 +244,15 @@ const GroupHeader = ({
               </button>
             )}
             {canSeeHomework && (
-              <>
-                <button
-                  disabled={!isGroupLogicActive}
-                  onClick={() => { uiDispatch({ type: "SET_FIELD", field: "isHomeworkModalOpen", value: true }); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false }); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-500/10 text-indigo-400 text-[10px] font-black capitalize tracking-widest rounded-xl transition-all ${!isGroupLogicActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Activity size={14} /> Vazifa qo'shish
-                </button>
-                <button
-                  disabled={!isGroupLogicActive}
-                  onClick={() => { uiDispatch({ type: "SET_FIELD", field: "isMockTestModalOpen", value: true }); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false }); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-rose-500/10 text-rose-400 text-[10px] font-black capitalize tracking-widest rounded-xl transition-all ${!isGroupLogicActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Target size={14} /> Mock qo'shish
-                </button>
-              </>
+              <button
+                onClick={() => {
+                  uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false });
+                  navigate("assignments");
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--gold)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all"
+              >
+                <FolderKanban size={14} /> Topshiriqlar
+              </button>
             )}
             <div className="h-[1px] bg-[var(--border-glass)] my-1 mx-2"></div>
             {canDeleteGroup && (
@@ -292,22 +285,15 @@ const GroupHeader = ({
               </button>
             )}
             {canSeeHomework && (
-              <>
-                <button
-                  disabled={!isGroupLogicActive}
-                  onClick={() => { uiDispatch({ type: "SET_FIELD", field: "isHomeworkModalOpen", value: true }); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false }); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-500/10 text-indigo-400 text-[10px] font-black capitalize tracking-widest rounded-xl transition-all ${!isGroupLogicActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Activity size={14} /> Vazifa qo'shish
-                </button>
-                <button
-                  disabled={!isGroupLogicActive}
-                  onClick={() => { uiDispatch({ type: "SET_FIELD", field: "isMockTestModalOpen", value: true }); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false }); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-rose-500/10 text-rose-400 text-[10px] font-black capitalize tracking-widest rounded-xl transition-all ${!isGroupLogicActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Target size={14} /> Mock qo'shish
-                </button>
-              </>
+              <button
+                onClick={() => {
+                  uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false });
+                  navigate("assignments");
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--gold)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all"
+              >
+                <FolderKanban size={14} /> Topshiriqlar
+              </button>
             )}
             <div className="h-[1px] bg-[var(--border-glass)] my-1 mx-2"></div>
             {canDeleteGroup && (

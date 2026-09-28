@@ -733,9 +733,9 @@ class GroupSerializer(serializers.ModelSerializer):
         # Barcha studentlar uchun ushbu oydagi to'lovlarni BITTA so'rovda olamiz
         payments = Payment.objects.filter(
             student_id__in=active_student_ids, month=month_start, group=obj
-        ).values("student_id", "id", "is_paid")
+        ).values("student_id", "id", "is_paid", "amount")
 
-        # To'lovlarni dict ga aylantiramiz: {student_id: {id, is_paid}}
+        # To'lovlarni dict ga aylantiramiz: {student_id: {id, is_paid, amount}}
         payment_map = {p["student_id"]: p for p in payments}
 
         result = []
@@ -755,13 +755,15 @@ class GroupSerializer(serializers.ModelSerializer):
                 if finance_profile and finance_profile.balance >= 0:
                     is_paid_status = True
                 elif payment_info:
-                    if payment_info["amount"] == Decimal('0'):
+                    amt = payment_info.get("amount")
+                    if amt is not None and amt == Decimal('0'):
                         is_paid_status = True
                     else:
-                        is_paid_status = payment_info["is_paid"]
+                        is_paid_status = bool(payment_info.get("is_paid", False))
             except Exception:
                 if payment_info:
-                    is_paid_status = payment_info["amount"] == Decimal('0') or payment_info["is_paid"]
+                    amt = payment_info.get("amount")
+                    is_paid_status = (amt is not None and amt == Decimal('0')) or bool(payment_info.get("is_paid", False))
 
             result.append(
                 {
@@ -776,7 +778,7 @@ class GroupSerializer(serializers.ModelSerializer):
                     "telegram_id": student.telegram_id,
                     "parent_telegram_id": student.parent_telegram_id,
                     "current_payment_status": is_paid_status,
-                    "current_payment_id": payment_info["id"] if payment_info else None,
+                    "current_payment_id": payment_info.get("id") if payment_info else None,
                     "joined_at": joined_at_str,
                 }
             )

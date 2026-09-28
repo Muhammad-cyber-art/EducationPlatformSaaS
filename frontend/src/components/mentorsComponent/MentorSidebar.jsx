@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Building2, UserCircle, Sparkles, LogOut, ShieldAlert, Zap, Circle, Sun, Moon, DollarSign } from "lucide-react";
+import { LayoutDashboard, Building2, UserCircle, Sparkles, LogOut, ShieldAlert, Zap, Circle, Sun, Moon, DollarSign, CalendarDays, Activity } from "lucide-react";
 import { get_user_info } from "../Authorized/getRole";
 import api from "../../tokenUpdater/updater";
 
@@ -36,6 +36,8 @@ export default function MentorSidebar() {
 
     const menuItems = [
         { name: "Guruhlar", path: "/mentor", icon: <LayoutDashboard size={18} /> },
+        { name: "Dars Jadvali", path: "/mentor/timetable", icon: <CalendarDays size={18} /> },
+        { name: "Dars Faolligi", path: "/mentor/activity", icon: <Activity size={18} /> },
         ...(userMe?.permissions?.pay_slip !== false ? [{ name: "Moliya", path: "/mentor/finance", icon: <DollarSign size={18} /> }] : [])
     ];
 

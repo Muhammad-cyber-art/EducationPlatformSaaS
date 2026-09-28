@@ -238,44 +238,22 @@ def notify_mock_test(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Homework)
 def notify_new_homework_assigned(sender, instance, created, **kwargs):
-    """Guruh uchun yangi uy ishi yaratilganda yuboriladigan xabarnoma"""
-
-    # Faqat yangi vazifa berilgandagina yuboramiz (tahrirlanganda yubormaslik uchun)
+    """Guruh uchun yangi uy ishi yaratilganda yuboriladigan asinxron xabarnoma"""
     if not created:
         return
 
-    group = instance.group
+    # Agar services.py yoki boshqa joyda allaqachon biriktirilgan bo'lsa, takrorlanmasin
+    if getattr(instance, '_notification_handled', False):
+        return
 
-    # Arxivlangan guruhga xabar yubormaslik
+    group = instance.group
     if not is_valid_for_notification(None, group):
         return
 
-    # Faqat guruhda HOZIR AKTIV enrollment bo'lgan o'quvchilarni olish.
-    # Arxivlangan o'quvchilarga (is_archived=True) bormasligi kerak.
-    students = group.students.filter(
-        enrollments__group=group,
-        enrollments__is_active=True,
-        is_active=True,
-        is_archived=False,
-    ).distinct()
+    instance._notification_handled = True
+    from .utils import send_homework_notification_async
+    transaction.on_commit(lambda hid=instance.id: send_homework_notification_async(hid))
 
-    desc_part = f"\nQo'shimcha: {instance.description}" if instance.description else ""
-
-    text = (
-        f"<b>Yangi uy vazifasi berildi 🔔</b>\n\n"
-        f"Guruh: {group.name}\n"
-        f"Mavzu: {instance.title}{desc_part}\n\n"
-        f"Iltimos, farzandingiz ushbu vazifani vaqtida bajarishini nazorat qiling."
-    )
-
-    # Bir tarmoqda nechta foydalanuvchi bo'lmasin, hammalarining chat_id'sini set() ga yig'amiz
-    target_chat_ids = set()
-    for student in students:
-        chat_ids = get_student_telegram_ids(student)
-        target_chat_ids.update(chat_ids)
-
-    for cid in target_chat_ids:
-        transaction.on_commit(lambda c=cid: send_telegram_message_async(c, text))
 @receiver(post_save, sender=HomeworkSubmission)
 def notify_homework_submission(sender, instance, created, **kwargs):
     """Uy ishi baholanganda (yoki topshirganda) xabar yuborish"""

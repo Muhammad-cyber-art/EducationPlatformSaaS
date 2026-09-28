@@ -115,51 +115,63 @@ export default function GroupsListPage() {
   }, [groupsArr, activeTab, debouncedSearch]);
 
  return (
- <div className="p-3 sm:p-6 space-y-10">
- <GroupsHeader
- {...{ currentBranchName, isLoading, isFetching, searchTerm, setSearchQuery, canCreateGroup, navigate, currentBranchId, dispatch }}
- groupsCount={viewMode === "timetable" ? groupsArr.length : filteredData.length}
- />
-
-  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-    {viewMode === "grid" ? (
-      <GroupsTabs {...{ activeTab, setTab, dispatch }} />
-    ) : (
-      <div className="flex items-center gap-2 text-[var(--gold)]">
-        <Calendar size={18} />
-        <span className="text-[12px] font-black uppercase tracking-widest">
-          Haftalik Dars Jadvali
-        </span>
+  <div className="px-3 sm:px-6 pt-3 pb-6 space-y-3.5">
+    {/* Top Toolbar: Branch Info, Tabs, Mode Switcher, and Create Action */}
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pb-2.5 border-b border-[var(--border-glass)]">
+      <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-0.5">
+        <p className="text-xs text-[var(--text-secondary)] font-medium whitespace-nowrap shrink-0">
+          {currentBranchName || 'Asosiy Boshqarma'} • {viewMode === "timetable" ? groupsArr.length : filteredData.length} ta guruh
+        </p>
+        <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] opacity-30 shrink-0 hidden sm:inline-block"></span>
+        {viewMode === "grid" ? (
+          <GroupsTabs activeTab={activeTab} setTab={setTab} dispatch={dispatch} />
+        ) : (
+          <div className="flex items-center gap-1.5 text-[var(--gold)] h-9">
+            <Calendar size={15} />
+            <span className="text-xs font-bold uppercase tracking-wider">Haftalik Dars Jadvali</span>
+          </div>
+        )}
       </div>
-    )}
 
-    {/* Rejim tanlagich: Kartochkalar vs Dars Jadvali */}
-    <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--bg-panel)]/40 border border-[var(--border-glass)] self-start sm:self-auto shrink-0 shadow-sm">
-      <button
-        onClick={() => setViewMode("grid")}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
-          viewMode === "grid"
-            ? "bg-[var(--gold)] text-black shadow-sm"
-            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-        }`}
-      >
-        <LayoutGrid size={14} />
-        <span>Kartochkalar</span>
-      </button>
+      <div className="flex items-center gap-2 self-start lg:self-auto shrink-0">
+        {/* Rejim tanlagich: Kartochkalar vs Dars Jadvali */}
+        <div className="flex items-center h-9 p-0.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm">
+          <button
+            onClick={() => setViewMode("grid")}
+            className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === "grid"
+                ? "bg-[var(--gold)] text-black shadow-sm font-bold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            <LayoutGrid size={13} />
+            <span>Kartochkalar</span>
+          </button>
 
-      <button
-        onClick={() => setViewMode("timetable")}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
-          viewMode === "timetable"
-            ? "bg-[var(--gold)] text-black shadow-sm"
-            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-        }`}
-      >
-        <Calendar size={14} />
-        <span>Dars Jadvali</span>
-      </button>
+          <button
+            onClick={() => setViewMode("timetable")}
+            className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === "timetable"
+                ? "bg-[var(--gold)] text-black shadow-sm font-bold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            <Calendar size={13} />
+            <span>Dars Jadvali</span>
+          </button>
+        </div>
+
+        {canCreateGroup && (
+          <button
+            onClick={() => navigate(`addgroup?branch=${currentBranchId}`)}
+            className="lux-btn lux-btn-primary flex items-center gap-2 h-9 px-4 rounded-xl text-xs font-semibold shadow-sm shrink-0"
+          >
+            <Plus size={15} />
+            <span>Guruh yaratish</span>
+          </button>
+        )}
+      </div>
     </div>
-  </div>
 
  <div className="min-h-[500px]">
  {isLoading && !groupsArr.length ? (

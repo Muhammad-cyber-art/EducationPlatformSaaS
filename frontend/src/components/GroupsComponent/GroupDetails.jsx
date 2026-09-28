@@ -13,28 +13,20 @@ import { useAttendance } from "./GroupDetails/useAttendance";
 import GroupHeader from "./GroupDetails/GroupHeader";
 import GroupSidebar from "./GroupDetails/GroupSidebar";
 import GroupEditForm from "./GroupDetails/GroupEditForm";
-import ResourcesModal from "./GroupDetails/ResourcesModal";
 import AttendanceSection from "./GroupDetails/AttendanceSection";
 
 // Modals
-import HomeworkModal from "../homework/AddHomeworkModal";
-import AddMockTestModal from "../mockTests/AddMockTestModal";
 import AddMentorModal from "./assextramentor";
 import SendMessageModal from "../Common/SendMessageModal";
-import HomeworkStorageModal from "../homework/HomeworkStorageModal";
 import GroupTransferModal from "./GroupDetails/GroupTransferModal";
 
 const initialUIState = {
   error: "",
-  isHomeworkModalOpen: false,
-  isMockTestModalOpen: false,
   isAddMentorModalOpen: false,
   isMessageModalOpen: false,
-  isStorageOpen: false,
   isEditing: false,
   editData: {},
   showMenu: false,
-  isViewAllModalOpen: false,
   isGroupTransferModalOpen: false,
   activeAddMentor: null,
   selectedDate: new Date().toLocaleDateString('sv-SE'),
@@ -87,8 +79,7 @@ export default function GroupDetailPage() {
   });
 
   const {
-    isHomeworkModalOpen, isMockTestModalOpen, isAddMentorModalOpen, isViewAllModalOpen,
-    isStorageOpen, isEditing, editData, showMenu, selectedDate, studentSearch
+    isAddMentorModalOpen, isEditing, editData, showMenu, selectedDate, studentSearch
   } = uiState;
 
   // Data & Permissions
@@ -311,8 +302,6 @@ export default function GroupDetailPage() {
       {uiState.isMessageModalOpen && !isEditing && (
         <SendMessageModal isOpen={true} onClose={() => uiDispatch({ type: "SET_FIELD", field: "isMessageModalOpen", value: false })} groupId={group_id} />
       )}
-      {isHomeworkModalOpen && <HomeworkModal isOpen={true} onClose={() => uiDispatch({ type: "SET_FIELD", field: "isHomeworkModalOpen", value: false })} groupId={group_id} />}
-      {isMockTestModalOpen && <AddMockTestModal isOpen={true} onClose={() => uiDispatch({ type: "SET_FIELD", field: "isMockTestModalOpen", value: false })} groupId={group_id} />}
       {isAddMentorModalOpen && (
         <AddMentorModal 
           isOpen={true} 
@@ -322,7 +311,6 @@ export default function GroupDetailPage() {
           currentMentors={groupinfo.additional_mentors || []} 
         />
       )}
-      {isStorageOpen && <HomeworkStorageModal isOpen={true} onClose={() => uiDispatch({ type: "SET_FIELD", field: "isStorageOpen", value: false })} groupId={group_id} />}
       {uiState.isGroupTransferModalOpen && (
         <GroupTransferModal 
           isOpen={true} 
@@ -331,13 +319,6 @@ export default function GroupDetailPage() {
           onSuccess={handleGroupTransferSuccess}
         />
       )}
-
-      <ResourcesModal
-        isOpen={isViewAllModalOpen}
-        onClose={() => uiDispatch({ type: "SET_FIELD", field: "isViewAllModalOpen", value: false })}
-        {...{ homework, mockTests, navigate, uiDispatch }}
-        branchID={branchID.currentBranchId}
-      />
     </div>
   );
 }

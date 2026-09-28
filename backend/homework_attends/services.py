@@ -329,6 +329,10 @@ def create_homework_with_submissions(serializer, user, group):
             for student in students
         ]
         HomeworkSubmission.objects.bulk_create(submissions, ignore_conflicts=True)
+        
+        homework._notification_handled = True
+        from telegram_bot.utils import send_homework_notification_async
+        transaction.on_commit(lambda hid=homework.id: send_homework_notification_async(hid))
         return homework
 
 def archive_homework(instance, user):

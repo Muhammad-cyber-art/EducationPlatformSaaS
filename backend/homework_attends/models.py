@@ -3,12 +3,31 @@ from django.db import models
 from django.utils import timezone
 from groups.models import Group, Student
 
+from django.core.validators import FileExtensionValidator
+
 User = get_user_model()
+
+
+def tenant_homework_file_path(instance, filename):
+    """Uyga vazifa biriktirilgan fayllarini har bir tenant schemasi bo'yicha alohida saqlash."""
+    from tenants.context import get_current_tenant
+    tenant = get_current_tenant()
+    schema = tenant.schema_name if tenant else 'common'
+    return f"tenants/{schema}/homeworks/{filename}"
 
 
 class Homework(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    file = models.FileField(
+        upload_to=tenant_homework_file_path,
+        null=True,
+        blank=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['png', 'jpg', 'jpeg', 'pdf', 'doc', 'docx', 'xls', 'xlsx'])
+        ],
+        verbose_name="Topshiriq fayli"
+    )
     mentor = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, related_name="created_homeworks"
     )

@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, UserCircle, Building2, X, Building, Sparkles, CreditCard } from "lucide-react";
+import { LayoutDashboard, UserCircle, Building2, X, Building, Sparkles, CreditCard, CalendarDays } from "lucide-react";
 import { useMobileNav } from "./useMobileNav";
 
 const MentorBranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentBranchParam, currentPath, navigate }) => {
@@ -68,6 +68,7 @@ export default function MentorBottomNav() {
 
     const menuItems = [
         { name: "Guruhlar", path: "/mentor", icon: <LayoutDashboard size={20} /> },
+        { name: "Jadval", path: "/mentor/timetable", icon: <CalendarDays size={20} /> },
         { name: "Moliya", path: "/mentor/finance", icon: <CreditCard size={20} /> },
         { name: "Profil", path: "/mentor/profile", icon: <UserCircle size={20} /> },
     ];

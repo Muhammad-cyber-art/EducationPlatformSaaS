@@ -38,19 +38,40 @@ export const useHomeworkSubmission = () => {
  };
 
  const updateStatus = (submissionId, newStatus) => {
- api.patch(`/homework_attends/homeworks/${mission_id}/update_student_status/`, {
- submission_id: submissionId,
- status: newStatus
- })
- .then(res => {
- setHomeworkData(prev => ({
- ...prev,
- students_status: prev.students_status.map(s =>
- s.id === submissionId ? { ...s, status: newStatus } : s
- )
- }));
- })
- .catch(err => console.error(err));
+  let previousStatus = null;
+  setHomeworkData(prev => {
+   if (!prev || !prev.students_status) return prev;
+   const target = prev.students_status.find(s => s.id === submissionId);
+   if (target) {
+    previousStatus = target.status;
+   }
+   return {
+    ...prev,
+    students_status: prev.students_status.map(s =>
+     s.id === submissionId ? { ...s, status: newStatus } : s
+    )
+   };
+  });
+
+  api.patch(`/homework_attends/homeworks/${mission_id}/update_student_status/`, {
+   submission_id: submissionId,
+   status: newStatus
+  })
+  .catch(err => {
+   console.error("Holatni saqlashda xatolik:", err);
+   toast.error("Holatni saqlashda xatolik yuz berdi");
+   if (previousStatus !== null) {
+    setHomeworkData(prev => {
+     if (!prev || !prev.students_status) return prev;
+     return {
+      ...prev,
+      students_status: prev.students_status.map(s =>
+       s.id === submissionId ? { ...s, status: previousStatus } : s
+      )
+     };
+    });
+   }
+  });
  };
 
  useEffect(() => {

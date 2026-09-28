@@ -7,7 +7,7 @@ import api from "../../tokenUpdater/updater";
 import toast from "react-hot-toast";
 import { GlobalContext } from "../../GlobalContext";
 import { get_user_info } from "../Authorized/getRole";
-import { Bell, FileDown, AlertTriangle, CheckCircle, Volume2, History, Download } from "lucide-react";
+import { Bell, FileDown, AlertTriangle, CheckCircle, Volume2, History, Download, Search, X } from "lucide-react";
 import MobileBottomNav from "../Navigation/MobileBottomNav";
 import {
     fetchAdminMe,
@@ -16,6 +16,7 @@ import {
     setNotificationOpen,
     setDownloading
 } from "../../store/slices/adminSlice";
+import { setSearchQuery } from "../../store/slices/mentorSlice";
 
 // Premium Web Audio API synthesizer for the golden alarm sound (Zero-network chimes)
 const playPremiumChime = () => {
@@ -63,6 +64,27 @@ export default function AdminPanel() {
         isNotificationOpen,
         isAfterSix
     } = useSelector((state) => state.admin);
+
+    const searchQuery = useSelector((state) => state.mentor?.searchQuery || "");
+    const isSearchable = location.pathname.includes("groups") ||
+                         location.pathname.includes("mentors") ||
+                         location.pathname.includes("archive") ||
+                         location.pathname.includes("waiting") ||
+                         location.pathname.includes("all_students");
+
+    const getSearchPlaceholder = () => {
+        const path = location.pathname;
+        if (path.includes("groups")) return "Guruh yoki fan bo'yicha qidirish...";
+        if (path.includes("mentors")) return "O'qituvchilarni qidirish...";
+        if (path.includes("archive")) return "Arxivdan qidirish...";
+        if (path.includes("waiting")) return "Kutishlar zalidan qidirish...";
+        if (path.includes("all_students")) return "O'quvchilarni qidirish...";
+        return "Qidirish...";
+    };
+
+    useEffect(() => {
+        dispatch(setSearchQuery(""));
+    }, [location.pathname, dispatch]);
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [lastPlayedTime, setLastPlayedTime] = useState(0);
@@ -247,6 +269,7 @@ export default function AdminPanel() {
         const path = location.pathname;
         if (path === "/admin") return "Asosiy";
         if (path.includes("groups")) return "Guruhlar";
+        if (path.includes("timetable")) return "Dars Jadvali";
         if (path.includes("mentors")) return "O'qituvchilar";
         if (path.includes("all_students")) return "O'quvchilar ro'yxati";
         if (path.includes("archive")) return "Arxiv";
@@ -261,14 +284,35 @@ export default function AdminPanel() {
             <SideBar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             <div className="lux-content">
-                <header className="lux-header py-4 px-4 h-16 flex items-center justify-between border-b border-[var(--border-glass)] bg-[var(--bg-void)] sticky top-0 z-50" style={{ background: 'var(--bg-void)' }}>
-                    <div className="flex items-center gap-4 flex-1">
-                        <h2 className="m-0 text-base text-[var(--text-primary)] font-semibold tracking-tight">
+                <header className="lux-header px-6 h-14 flex items-center justify-between border-b border-[var(--border-glass)] bg-[var(--bg-void)] sticky top-0 z-50" style={{ background: 'var(--bg-void)' }}>
+                    <div className="flex items-center gap-4">
+                        <h2 className="m-0 text-sm md:text-base text-[var(--text-primary)] font-semibold tracking-tight">
                             {getPageTitle()}
                         </h2>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
+                        {isSearchable && (
+                            <div className="relative flex items-center">
+                                <Search className="absolute left-3 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => dispatch(setSearchQuery(e.target.value))}
+                                    placeholder={getSearchPlaceholder()}
+                                    className="h-9 pl-9 pr-8 w-44 sm:w-60 md:w-80 bg-[var(--bg-panel)] border border-[var(--border-glass)] focus:border-[var(--gold)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all shadow-inner"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => dispatch(setSearchQuery(""))}
+                                        className="absolute right-2.5 p-0.5 rounded-full hover:bg-[var(--gold-dim)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
                         {/* Theme Toggle */}
                         <div className="flex items-center">
                             <ThemeToggle custom />
@@ -418,10 +462,8 @@ export default function AdminPanel() {
 
                 <main className="lux-scroll animate-lux-fade" onClick={() => dispatch(setNotificationOpen(false))}>
                     <GlobalContext.Provider value={{ admin }}>
-                        <div className="w-full mx-auto px-0">
-                            <div className="py-2 sm:py-6">
-                                <Outlet />
-                            </div>
+                        <div className="w-full mx-auto">
+                            <Outlet />
                         </div>
                     </GlobalContext.Provider>
                 </main>
