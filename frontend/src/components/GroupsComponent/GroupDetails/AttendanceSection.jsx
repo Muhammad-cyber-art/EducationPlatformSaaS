@@ -431,6 +431,20 @@ const AttendanceSection = ({
         </div>
       )}
 
+      {!isLessonDay && isGroupLogicActive && (
+        <div className="mx-4 sm:mx-8 mt-2 mb-2 p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3 animate-in fade-in duration-300">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+            <Info size={16} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black text-blue-400 uppercase tracking-wider">Dars kuni emas ({selectedDate})</p>
+            <p className="text-[9px] text-blue-300/80 font-medium mt-0.5">
+              Ushbu sana guruh dars jadvaliga kirmaydi. Davomat tugmalari faqat dars kunlarida faol bo'ladi.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* SEARCH AND MONTH NAVIGATION PROTOCOL */}
       <div className="px-4 sm:px-6 py-2 border-b border-[var(--border-glass)]/10 bg-[var(--bg-void)]/30 shadow-inner flex flex-col md:flex-row items-center justify-between gap-4">
         

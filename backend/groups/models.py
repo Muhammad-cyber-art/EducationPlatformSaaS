@@ -20,11 +20,6 @@ class Group(models.Model):
         ("advanced", "Advanced"),
     ]
 
-    DAYS_TYPES = [
-        ("odd", "Toq kunlar"),
-        ("even", "Juft kunlar"),
-        ("everyday", "Har kuni"),
-    ]
     color = models.CharField(
         max_length=7, default="#ffffff", validators=[color_validator]
     )
@@ -60,15 +55,25 @@ class Group(models.Model):
     )
     start_date = models.DateField(null=True, blank=True)
 
-    # Eskisiga tegmadik
+    # Eski matn field (orqaga muvofiqliq uchun saqlanadi, deprecated)
     dars_kunlari = models.CharField(max_length=50, blank=True, null=True)
 
-    # YANGI FIELD: Qisqa va tanlovli (selection)
+    # DEPRECATED: Eski kategoriya field (orqaga muvofiqliq uchun, yangi yozuvlarda ishlatilmaydi)
     days = models.CharField(
         max_length=10,
-        choices=DAYS_TYPES,
-        default="odd",
-        verbose_name="Dars kunlari turi",
+        blank=True,
+        null=True,
+        verbose_name="Dars kunlari turi (deprecated)",
+    )
+
+    # YANGI FIELD: Hafta kunlarining indekslari ro'yxati
+    # [0=Du, 1=Se, 2=Chor, 3=Pay, 4=Ju, 5=Shan, 6=Yak]
+    # Masalan: [0, 2, 4] = Du, Chor, Ju
+    custom_days = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Hafta kunlari (custom)",
+        help_text="Hafta kunlarining Python weekday indekslari ro'yxati: 0=Dushanba, 1=Seshanba, 2=Chorshanba, 3=Payshanba, 4=Juma, 5=Shanba, 6=Yakshanba",
     )
 
     dars_vaqti = models.CharField(max_length=20, blank=True, null=True)
@@ -79,10 +84,38 @@ class Group(models.Model):
     subject = models.CharField(max_length=50, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def _get_effective_days(self):
+        """
+        Guruhning effektiv dars kunlari indekslari ro'yxatini qaytaradi.
+        Yangi custom_days ni ustuvor qo'yadi; eski days field'ini fallback sifatida ishlatadi.
+        """
+        from .utils import normalize_custom_days
+        # Yangi format: custom_days mavjud va bo'sh emas
+        if self.custom_days:
+            return normalize_custom_days(self.custom_days)
+        # Eski format: days field mavjud bo'lsa (odd/even/everyday)
+        if self.days:
+            return normalize_custom_days(self.days)
+        # Default: Du, Chor, Ju
+        return [0, 2, 4]
+
+    @property
+    def days_display(self):
+        """Dars kunlarini o'zbekcha qisqacha matn sifatida qaytaradi. Masalan: 'Du, Chor, Ju'"""
+        from .utils import get_days_display_uz
+        return get_days_display_uz(self._get_effective_days())
+
+    @property
+    def days_display_full(self):
+        """Dars kunlarini o'zbekcha to'liq matn sifatida qaytaradi. Masalan: 'Dushanba, Chorshanba, Juma'"""
+        from .utils import get_days_display_full_uz
+        return get_days_display_full_uz(self._get_effective_days())
+
     def get_lesson_dates(self, year, month):
         from .utils import get_lessons_in_month
 
-        dates = get_lessons_in_month(self.days, year, month)
+        effective_days = self._get_effective_days()
+        dates = get_lessons_in_month(effective_days, year, month)
         if self.start_date:
             dates = [d for d in dates if d >= self.start_date]
 
@@ -103,7 +136,7 @@ class Group(models.Model):
         )
         dates = [d for d in dates if d not in canceled_dates]
 
-        # Unikal va tartiblangan holatda qaytaramiz (set() orqali dublikatlarni olib tashlaymiz)
+        # Unikal va tartiblangan holatda qaytaramiz
         return sorted(list(set(dates)))
 
     def is_lesson_day(self, date_obj):
@@ -115,7 +148,7 @@ class Group(models.Model):
         # Agar maxsus dars kuni sifatida qo'shilgan bo'lsa
         if self.special_lesson_days.filter(date=date_obj).exists():
             return True
-        return is_scheduled_lesson_day(self.days, date_obj)
+        return is_scheduled_lesson_day(self._get_effective_days(), date_obj)
 
     def get_daily_price(self, year, month):
         from finance.utils import floor_amount
@@ -157,11 +190,9 @@ class Group(models.Model):
     def is_currently_active(self):
         """
         Tizim logikasi uchun: Guruh haqiqatdan ham darslarni boshlaganmi?
+        Faqat boshlanish sanasi yetib kelgan bo'lsa 'active' hisoblanadi.
         """
-        return (
-            self.computed_status in ["active", "activating_soon"]
-        )  # 'activating_soon' dars boshlanishidan oldin ham ba'zi logikalar ishlashi kerak bo'lishi mumkin, lekin user "sana kelmaguncha faollashmasligi kerak" dedi.
-        # Aslida user: "sana kelmaguncha faollashmasligi kerak" dedi. Shuning uchun faqat 'active' qaytaramiz.
+        return self.computed_status == "active"
 
     def is_logic_enabled(self):
         """
@@ -173,16 +204,17 @@ class Group(models.Model):
         return self.start_date <= timezone.localdate()
 
     class Meta:
+        ordering = ["-id"]
         indexes = [
             models.Index(fields=["branch", "is_faol"]),
             models.Index(fields=["mentor", "is_faol"]),
-            models.Index(fields=["start_date", "days"]),
+            models.Index(fields=["start_date"]),
             models.Index(fields=["name"]),
             models.Index(fields=["subject"]),
         ]
 
     def __str__(self):
-        return f"{self.name} | Mentor: {self.mentor} | Kun: {self.get_days_display()}"
+        return f"{self.name} | Mentor: {self.mentor} | Kun: {self.days_display}"
 
 
 def tenant_student_image_path(instance, filename):
@@ -329,6 +361,13 @@ class Student(models.Model):
 
         # Faqat o'tib bo'lgan va oydagi dars kunlarini olamiz
         passed_lessons = [d for d in lesson_dates if d <= today]
+
+        # O'quvchi guruhga qo'shilgan sanadan oldingi darslarni hisobga olmaslik (BUG FIX)
+        enrollment = self.enrollments.filter(group=target_group).first()
+        joined_date = enrollment.joined_at.date() if (enrollment and enrollment.joined_at) else (self.joined_at.date() if self.joined_at else None)
+        if joined_date:
+            passed_lessons = [d for d in passed_lessons if d >= joined_date]
+
         total_passed = len(passed_lessons)
 
         # Kelgan kunlar soni — faqat tasdiqlangan (marked_by mavjud) davomatlar

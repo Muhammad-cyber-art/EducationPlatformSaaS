@@ -177,23 +177,15 @@ def _safe_attendance_stats_for_branch(branch, today):
             .values_list("id", flat=True)
         )
 
-        # Keyin, kunlar turiga qarab darslari bor guruhlar (odd, even, everyday)
-        # va special dars kuni yo'qlar va bekor qilinmaganlar
-        groups_with_regular_lesson = []
-        if weekday in [0, 2, 4]:  # Du-Chor-Ju (odd)
-            groups_with_regular_lesson = (
-                Group.objects.filter(branch=branch, days__in=["odd", "everyday"])
-                .exclude(id__in=groups_with_special_lesson)
-                .exclude(canceled_lesson_days__date=today)
-                .values_list("id", flat=True)
-            )
-        elif weekday in [1, 3, 5]:  # Se-Pay-Shan (even)
-            groups_with_regular_lesson = (
-                Group.objects.filter(branch=branch, days__in=["even", "everyday"])
-                .exclude(id__in=groups_with_special_lesson)
-                .exclude(canceled_lesson_days__date=today)
-                .values_list("id", flat=True)
-            )
+        # Keyin, kunlar turiga qarab darslari bor guruhlar (odd, even, everyday, custom)
+        # Barcha guruhlarni olamiz va Python darajasida filterlash qilamiz
+        all_branch_groups = Group.objects.filter(
+            branch=branch, is_faol=True
+        ).exclude(canceled_lesson_days__date=today).exclude(id__in=groups_with_special_lesson)
+
+        groups_with_regular_lesson = [
+            g.id for g in all_branch_groups if g.is_lesson_day(today)
+        ]
 
         # Barcha bugun darslari bor guruhlar
         lesson_group_ids = list(groups_with_special_lesson) + list(
@@ -268,27 +260,21 @@ def _safe_attendance_stats_for_user(user, today):
             branch_filter = {}
 
         # Guruhlarni bugun darslari borlarini qidiramiz, bekor qilinganlarni chiqarib tashlaymiz
+        # Guruhlarni bugun darslari borlarini qidiramiz, bekor qilinganlarni chiqarib tashlaymiz
         groups_with_special_lesson = (
             Group.objects.filter(**branch_filter, special_lesson_days__date=today)
             .exclude(canceled_lesson_days__date=today)
             .values_list("id", flat=True)
         )
 
-        groups_with_regular_lesson = []
-        if weekday in [0, 2, 4]:  # Du-Chor-Ju (odd)
-            groups_with_regular_lesson = (
-                Group.objects.filter(**branch_filter, days__in=["odd", "everyday"])
-                .exclude(id__in=groups_with_special_lesson)
-                .exclude(canceled_lesson_days__date=today)
-                .values_list("id", flat=True)
-            )
-        elif weekday in [1, 3, 5]:  # Se-Pay-Shan (even)
-            groups_with_regular_lesson = (
-                Group.objects.filter(**branch_filter, days__in=["even", "everyday"])
-                .exclude(id__in=groups_with_special_lesson)
-                .exclude(canceled_lesson_days__date=today)
-                .values_list("id", flat=True)
-            )
+        # Barcha guruhlarni olb, Python darajasida is_lesson_day() bilan tekshiramiz
+        all_user_groups = Group.objects.filter(
+            **branch_filter, is_faol=True
+        ).exclude(canceled_lesson_days__date=today).exclude(id__in=groups_with_special_lesson)
+
+        groups_with_regular_lesson = [
+            g.id for g in all_user_groups if g.is_lesson_day(today)
+        ]
 
         lesson_group_ids = list(groups_with_special_lesson) + list(
             groups_with_regular_lesson
@@ -352,14 +338,15 @@ def generate_monthly_payments(month_date=None):
     created_count = 0
 
     # 1. STUDENT PAYMENTS
-    active_groups = [
-        g
-        for g in Group.objects.filter(is_faol=True).prefetch_related("students")
-        if g.is_logic_enabled()
-    ]
-    for group in active_groups:
+    from groups.utils import get_lessons_in_month
+
+    for group in Group.objects.filter(is_faol=True).prefetch_related("students"):
+        # Guruhning shu oyda darslari bormi tekshiramiz
+        month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
+        if not month_lessons:
+            continue
+
         for student in group.students.all():
-            # REFUND LOGIC: Boshlang'ich summa qilib to'liq narx belgilanadi.
             base_price = group.monthly_price
             if student.status in [
                 "low_income",
@@ -375,9 +362,6 @@ def generate_monthly_payments(month_date=None):
                 payment_amount = calculate_attendance_based_student_payment(
                     student, group, month_date
                 )
-                # TUZATILDI (BUG-STRING-FILTER): Discount student invoicesi uchun
-                # is_auto_discount=True belgilanadi. Bu StudentFinanceProfile.balance
-                # hisobida bu invoiceni qarzga kiritmaslik uchun ishlatiladi.
                 _, created = Payment.objects.get_or_create(
                     student=student,
                     group=group,
@@ -389,8 +373,15 @@ def generate_monthly_payments(month_date=None):
                     },
                 )
             else:
-                # negotiated, teacher_negotiated, low_income va regular: shartnoma summasi
-                payment_amount = Decimal(str(floor_amount(base_price)))
+                # Agar guruh oy o'rtasida boshlansa (prorated):
+                if group.start_date and group.start_date > month_date:
+                    full_sched = get_lessons_in_month(group._get_effective_days(), month_date.year, month_date.month)
+                    full_count = max(1, len(full_sched))
+                    daily = Decimal(str(base_price)) / Decimal(str(full_count))
+                    payment_amount = floor_amount(daily * Decimal(str(len(month_lessons))))
+                else:
+                    payment_amount = Decimal(str(floor_amount(base_price)))
+
                 _, created = Payment.objects.get_or_create(
                     student=student,
                     group=group,

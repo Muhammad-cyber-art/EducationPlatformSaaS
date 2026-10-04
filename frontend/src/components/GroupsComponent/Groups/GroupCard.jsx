@@ -119,7 +119,9 @@ const GroupCard = React.memo(({ group, readOnly, currentBranchId }) => {
                 <div className="p-1 rounded-lg bg-[var(--bg-panel)] border border-[var(--border-glass)] shrink-0">
                   <CalendarDays size={10} className="sm:w-3 sm:h-3 text-[var(--gold)]" />
                 </div>
-                <span className="text-[10px] font-bold text-[var(--text-secondary)] truncate">{group.days === 'even' ? "Juft" : group.days === 'everyday' ? 'Har kun' : 'Toq'}</span>
+                <span className="text-[10px] font-bold text-[var(--text-secondary)] truncate" title={group.days_display_full || group.days_display || ""}>
+                  {group.days_display || group.dars_kunlari || (group.days === 'even' ? "Juft" : group.days === 'everyday' ? 'Har kun' : 'Toq')}
+                </span>
               </div>
             </div>
 

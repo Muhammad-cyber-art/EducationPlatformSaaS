@@ -16,12 +16,13 @@ import {
 import { get_user_info } from "../../Authorized/getRole";
 
 const WEEKDAYS = [
-  { id: "mon", key: 1, name: "Dushanba", short: "Du", dayType: "odd" },
-  { id: "tue", key: 2, name: "Seshanba", short: "Se", dayType: "even" },
-  { id: "wed", key: 3, name: "Chorshanba", short: "Ch", dayType: "odd" },
-  { id: "thu", key: 4, name: "Payshanba", short: "Pa", dayType: "even" },
-  { id: "fri", key: 5, name: "Juma", short: "Ju", dayType: "odd" },
-  { id: "sat", key: 6, name: "Shanba", short: "Sh", dayType: "even" },
+  { id: "mon", key: 1, weekday: 0, name: "Dushanba", short: "Du" },
+  { id: "tue", key: 2, weekday: 1, name: "Seshanba", short: "Se" },
+  { id: "wed", key: 3, weekday: 2, name: "Chorshanba", short: "Ch" },
+  { id: "thu", key: 4, weekday: 3, name: "Payshanba", short: "Pa" },
+  { id: "fri", key: 5, weekday: 4, name: "Juma", short: "Ju" },
+  { id: "sat", key: 6, weekday: 5, name: "Shanba", short: "Sh" },
+  { id: "sun", key: 7, weekday: 6, name: "Yakshanba", short: "Ya" },
 ];
 
 export default function GroupsTimetable({ groups = [], currentBranchId, readOnly }) {
@@ -57,6 +58,7 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
       thu: [],
       fri: [],
       sat: [],
+      sun: [],
     };
 
     groups.forEach((group) => {
@@ -75,29 +77,25 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
         }
       }
 
-      const days = group.days || "odd";
-
-      if (days === "odd") {
-        map.mon.push(group);
-        map.wed.push(group);
-        map.fri.push(group);
-      } else if (days === "even") {
-        map.tue.push(group);
-        map.thu.push(group);
-        map.sat.push(group);
-      } else if (days === "everyday") {
-        map.mon.push(group);
-        map.tue.push(group);
-        map.wed.push(group);
-        map.thu.push(group);
-        map.fri.push(group);
-        map.sat.push(group);
+      // Guruhning custom_days yoki legacy days qiymatiga qarab kunlarini aniqlaymiz:
+      let effectiveWeekdays = [];
+      if (Array.isArray(group.custom_days) && group.custom_days.length > 0) {
+        effectiveWeekdays = group.custom_days.map(Number);
+      } else if (group.days === "even") {
+        effectiveWeekdays = [1, 3, 5];
+      } else if (group.days === "everyday") {
+        effectiveWeekdays = [0, 1, 2, 3, 4, 5];
       } else {
-        // Default: toq kunlar deb qaraladi
-        map.mon.push(group);
-        map.wed.push(group);
-        map.fri.push(group);
+        effectiveWeekdays = [0, 2, 4];
       }
+
+      if (effectiveWeekdays.includes(0)) map.mon.push(group);
+      if (effectiveWeekdays.includes(1)) map.tue.push(group);
+      if (effectiveWeekdays.includes(2)) map.wed.push(group);
+      if (effectiveWeekdays.includes(3)) map.thu.push(group);
+      if (effectiveWeekdays.includes(4)) map.fri.push(group);
+      if (effectiveWeekdays.includes(5)) map.sat.push(group);
+      if (effectiveWeekdays.includes(6)) map.sun.push(group);
     });
 
     // Har bir kundagi guruhlarni vaqt bo'yicha saralash
@@ -120,20 +118,20 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
 
   // Statistika
   const stats = useMemo(() => {
-    let oddCount = 0;
-    let evenCount = 0;
-    let everydayCount = 0;
+    let weekdayCount = 0;
+    let weekendCount = 0;
     let totalStudents = 0;
 
     groups.forEach((g) => {
-      if (g.days === "odd") oddCount++;
-      else if (g.days === "even") evenCount++;
-      else if (g.days === "everyday") everydayCount++;
-      else oddCount++;
+      const cDays = Array.isArray(g.custom_days) && g.custom_days.length > 0 
+        ? g.custom_days.map(Number)
+        : (g.days === 'even' ? [1, 3, 5] : [0, 2, 4]);
+      if (cDays.includes(5) || cDays.includes(6)) weekendCount++;
+      if (cDays.some(d => d < 5)) weekdayCount++;
       totalStudents += Number(g.students_count || 0);
     });
 
-    return { oddCount, evenCount, everydayCount, totalStudents };
+    return { totalGroups: groups.length, weekdayCount, weekendCount, totalStudents };
   }, [groups]);
 
   return (
@@ -154,20 +152,20 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
 
           <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
             <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 block mb-1">
-              Toq kunlar (Du-Ch-Ju)
+              Hafta ichi (Du-Ju)
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-black text-blue-400">{stats.oddCount}</span>
+              <span className="text-xl font-black text-blue-400">{stats.weekdayCount}</span>
               <span className="text-[10px] text-[var(--text-secondary)]">ta guruh</span>
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20">
             <span className="text-[9px] font-black uppercase tracking-widest text-purple-400 block mb-1">
-              Juft kunlar (Se-Pa-Sh)
+              Dam olish (Shan-Yak)
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-black text-purple-400">{stats.evenCount}</span>
+              <span className="text-xl font-black text-purple-400">{stats.weekendCount}</span>
               <span className="text-[10px] text-[var(--text-secondary)]">ta guruh</span>
             </div>
           </div>
@@ -257,7 +255,7 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
       </div>
 
       {/* 2. DARS JADVALI SETKASI (TIMETABLE GRID) */}
-      <div className={`grid gap-4 ${displayedDays.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6"}`}>
+      <div className={`grid gap-4 ${displayedDays.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-7"}`}>
         {displayedDays.map((day) => {
           const isToday = day.key === todayKey;
           const dayGroups = timetableByDay[day.id] || [];

@@ -21,6 +21,8 @@ import { useCurrentBranch } from "../Authorized/useBranchId";
 import GoBackButton from "../sendback";
 import AmountInput from "../Common/AmountInput";
 import { safeArray } from "../../utils/safeArray";
+import WeekdaySelector from "./WeekdaySelector";
+import { formatDaysDisplay } from "../../utils/scheduleUtils";
 
 const AddGroup = () => {
   const navigate = useNavigate();
@@ -29,6 +31,8 @@ const AddGroup = () => {
   const { currentBranchId } = useCurrentBranch();
   const { branchId } = useOutletContext();
   const [loading, setLoading] = useState(false);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
 
   const { data: userData = {} } = useQuery({
     queryKey: ['user-me'],
@@ -53,8 +57,9 @@ const AddGroup = () => {
     subject: "",
     mentor_id: null,
     start_date: "",
-    dars_kunlari: "",
+    dars_kunlari: "Du, Chor, Ju",
     days: 'odd',
+    custom_days: [0, 2, 4],
     dars_vaqti: "",
     monthly_price: "",
     description: "",
@@ -89,13 +94,22 @@ const AddGroup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.custom_days || formData.custom_days.length === 0) {
+      toast.error("Kamida 1 ta hafta kunini tanlang!");
+      return;
+    }
+
     setLoading(true);
     try {
-      await api.post("/groups/groups/", formData);
+      const payload = {
+        ...formData,
+        dars_kunlari: formatDaysDisplay(formData.custom_days, false),
+      };
+      await api.post("/groups/groups/", payload);
       toast.success("Yangi guruh muvaffaqiyatli qo'shildi");
       navigate(-1);
     } catch (error) {
-      toast.error("Guruh qo'shishda xatolik yuz berdi.");
+      toast.error(error.response?.data?.detail || "Guruh qo'shishda xatolik yuz berdi.");
       setLoading(false);
     }
   };
@@ -212,41 +226,39 @@ const AddGroup = () => {
             </div>
           </div>
 
-          {/* Section 2: Scheduling & Pricing */}
-          <div className="lux-card !p-5 md:!p-8 !rounded-2xl border-l-4 border-l-purple-500/30">
+          {/* Section 2: Scheduling & Pricing with Custom Weekday Selector */}
+          <div className="lux-card !p-5 md:!p-8 !rounded-2xl border-l-4 border-l-cyan-500/50">
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-purple-500/10 rounded-xl text-purple-500">
+              <div className="p-2 bg-cyan-500/10 rounded-xl text-cyan-400">
                 <Clock size={16} />
               </div>
               <h3 className="text-[11px] font-black text-[var(--text-primary)] capitalize tracking-[0.2em]">Taqvim va To'lov</h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-1.5 w-full">
-                <label className="text-[9px] font-bold text-[var(--text-muted)] capitalize tracking-widest ml-1">Hafta Kunlari</label>
-                <select
-                  name="days"
-                  onChange={handleChange}
-                  className="lux-input !bg-[var(--bg-void)] w-full"
-                  defaultValue="odd"
-                >
-                  <option value="odd" className="bg-[var(--bg-panel)]">Toq kunlar</option>
-                  <option value="even" className="bg-[var(--bg-panel)]">Juft kunlar</option>
-                  <option value="everyday" className="bg-[var(--bg-panel)]">Har kuni</option>
-                </select>
-              </div>
+            {/* Weekday Selector Component */}
+            <WeekdaySelector
+              value={formData.custom_days}
+              onChange={(newDays) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  custom_days: newDays,
+                  dars_kunlari: formatDaysDisplay(newDays, false),
+                }));
+              }}
+              startTime={startTime}
+              endTime={endTime}
+              onTimeChange={({ startTime: st, endTime: et, timeString }) => {
+                setStartTime(st);
+                setEndTime(et);
+                setFormData((prev) => ({
+                  ...prev,
+                  dars_vaqti: timeString,
+                }));
+              }}
+              monthlyPrice={formData.monthly_price}
+            />
 
-              <div className="space-y-1.5 w-full">
-                <label className="text-[9px] font-bold text-[var(--text-muted)] capitalize tracking-widest ml-1">Mashg'ulot Vaqti</label>
-                <input
-                  onChange={handleChange}
-                  name="dars_vaqti"
-                  type="text"
-                  placeholder="14:00 - 16:00"
-                  className="lux-input !bg-[var(--bg-void)] w-full"
-                />
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6 pt-6 border-t border-[var(--border-glass)]">
               <div className="space-y-1.5 w-full">
                 <label className="text-[9px] font-bold text-[var(--text-muted)] capitalize tracking-widest ml-1">Oylik To'lov Summasi</label>
                 <div className="w-full">
@@ -262,12 +274,13 @@ const AddGroup = () => {
               </div>
 
               <div className="space-y-1.5 w-full">
-                <label className="text-[9px] font-bold text-[var(--text-muted)] capitalize tracking-widest ml-1">Dars Kunlari (Ismlar)</label>
+                <label className="text-[9px] font-bold text-[var(--text-muted)] capitalize tracking-widest ml-1">Mashg'ulot Vaqti (matn)</label>
                 <input
                   onChange={handleChange}
-                  name="dars_kunlari"
+                  name="dars_vaqti"
+                  value={formData.dars_vaqti}
                   type="text"
-                  placeholder="Du-Cho-Ju"
+                  placeholder="08:00 - 10:00"
                   className="lux-input !bg-[var(--bg-void)] w-full"
                 />
               </div>

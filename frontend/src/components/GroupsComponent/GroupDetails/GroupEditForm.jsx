@@ -1,6 +1,8 @@
 import React from "react";
 import { AlignLeft, DollarSign, Calendar, UserCheck, ChevronRight } from "lucide-react";
 import AmountInput from "../../Common/AmountInput";
+import WeekdaySelector from "../WeekdaySelector";
+import { formatDaysDisplay, normalizeCustomDays } from "../../../utils/scheduleUtils";
 
 const GroupEditForm = ({
   editData,
@@ -8,6 +10,11 @@ const GroupEditForm = ({
   uiDispatch,
   handleUpdate
 }) => {
+  const customDays = normalizeCustomDays(editData.custom_days, editData.days);
+  const timeParts = (editData.dars_vaqti || "").split("-").map((t) => t.trim());
+  const startTime = timeParts[0] || "";
+  const endTime = timeParts[1] || "";
+
   return (
     <div className="w-full space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col items-center gap-2 mb-4">
@@ -113,22 +120,32 @@ const GroupEditForm = ({
                   <ChevronRight size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] rotate-90" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-[var(--text-muted)] capitalize tracking-widest ml-1">Kunlar turi</label>
-                  <div className="relative">
-                    <select
-                      className="lux-input !bg-[var(--bg-void)]/50 !py-4 !px-5 w-full appearance-none"
-                      value={editData.days || ""}
-                      onChange={(e) => uiDispatch({ type: "UPDATE_EDIT_DATA", payload: { days: e.target.value } })}
-                    >
-                      <option value="even">Juft kunlar</option>
-                      <option value="odd">Toq kunlar</option>
-                      <option value="everyday">Har kuni</option>
-                    </select>
-                    <ChevronRight size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] rotate-90 pointer-events-none" />
-                  </div>
-                </div>
+              {/* Weekday Selector Component */}
+              <div className="pt-2">
+                <WeekdaySelector
+                  value={customDays}
+                  onChange={(newDays) => {
+                    uiDispatch({
+                      type: "UPDATE_EDIT_DATA",
+                      payload: {
+                        custom_days: newDays,
+                        dars_kunlari: formatDaysDisplay(newDays, false),
+                      },
+                    });
+                  }}
+                  startTime={startTime}
+                  endTime={endTime}
+                  onTimeChange={({ timeString }) => {
+                    uiDispatch({
+                      type: "UPDATE_EDIT_DATA",
+                      payload: { dars_vaqti: timeString },
+                    });
+                  }}
+                  monthlyPrice={editData.monthly_price}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-[var(--text-muted)] capitalize tracking-widest ml-1">Boshlanish sanasi</label>
                   <input
@@ -136,17 +153,6 @@ const GroupEditForm = ({
                     className="lux-input !bg-[var(--bg-void)]/50 !py-4 !px-5 w-full"
                     value={editData.start_date || ""}
                     onChange={(e) => uiDispatch({ type: "UPDATE_EDIT_DATA", payload: { start_date: e.target.value } })}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-[var(--text-muted)] capitalize tracking-widest ml-1">Dars kunlari (matn)</label>
-                  <input
-                    className="lux-input !bg-[var(--bg-void)]/50 !py-4 !px-5 w-full"
-                    value={editData.dars_kunlari || ""}
-                    onChange={(e) => uiDispatch({ type: "UPDATE_EDIT_DATA", payload: { dars_kunlari: e.target.value } })}
-                    placeholder="Du-Chor-Jum"
                   />
                 </div>
                 <div className="space-y-2">

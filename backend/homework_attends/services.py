@@ -39,8 +39,12 @@ def get_or_create_attendance_records(group, requested_date, view_only=False):
     Args:
         group: Guruh obyekti
         requested_date: So'ralgan sana
-        view_only: Agar True bo'lsa, yangi yozuvlar yaratilmaydi (o'tgan oylar uchun)
+        view_only: Agar True bo'lsa, yangi yozuvlar yaratilmaydi (o'tgan oylar yoki dars bo'lmagan kunlar uchun)
     """
+    # Dars kuni bo'lmasa, yangi davomat yozuvlari avtomatik yaratilmaydi (faqat mavjud yozuvlar ko'rsatiladi)
+    if not group.is_lesson_day(requested_date):
+        view_only = True
+
     # 1. Shu kunda guruhda faol bo'lgan studentlarni aniqlash
     # (GroupEnrollment orqali aniqroq filter qilamiz)
     from groups.models import GroupEnrollment
@@ -215,22 +219,33 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
 
     # Xabarnomalarni yuborishni fonda bajaramiz (API tez qaytishi uchun)
     import threading
+    from django.db import connection
 
-    def background_notifications(ids):
+    schema_name = getattr(connection, 'schema_name', None)
+
+    def background_notifications(ids, active_schema=None):
         try:
             # 1. Celery orqali urinib ko'ramiz
             from telegram_bot.tasks import send_attendance_notifications_task
-            send_attendance_notifications_task.delay(ids)
+            send_attendance_notifications_task.delay(ids, schema_name=active_schema)
         except Exception:
             # 2. Agar Celery bo'lmasa, oddiy thread + loop
             try:
-                from telegram_bot.signals import send_attendance_notification
-                atts = Attendance.objects.filter(id__in=ids)
-                for a in atts:
-                    try:
-                        send_attendance_notification(a, async_send=False)
-                    except Exception:
-                        pass
+                def _send():
+                    from telegram_bot.signals import send_attendance_notification
+                    atts = Attendance.objects.filter(id__in=ids)
+                    for a in atts:
+                        try:
+                            send_attendance_notification(a, async_send=False)
+                        except Exception:
+                            pass
+
+                if active_schema:
+                    from tenants.utils import tenant_schema_context
+                    with tenant_schema_context(active_schema):
+                        _send()
+                else:
+                    _send()
             except Exception:
                 pass
 
@@ -238,7 +253,7 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
         from django.utils import timezone
         today = timezone.localdate()
         if requested_date == today:
-            threading.Thread(target=background_notifications, args=(updated_ids,)).start()
+            threading.Thread(target=background_notifications, args=(updated_ids, schema_name)).start()
 
     # Faqat guruhda faol studentlarning davomatini qaytaramiz
     return (
@@ -480,21 +495,32 @@ def edit_past_attendance(attendance_id, admin_user, new_status, reason=''):
         
     # 6. Asinxron xabarnomalar — FAQAT bugungi sana uchun (BUG Notification FIX)
     import threading
-    def background_notifications(att_id):
+    from django.db import connection
+    schema_name = getattr(connection, 'schema_name', None)
+
+    def background_notifications(att_id, active_schema=None):
         try:
             from telegram_bot.tasks import send_attendance_notifications_task
-            send_attendance_notifications_task.delay([att_id])
+            send_attendance_notifications_task.delay([att_id], schema_name=active_schema)
         except Exception:
             try:
-                from telegram_bot.signals import send_attendance_notification
-                att = Attendance.objects.get(id=att_id)
-                send_attendance_notification(att, async_send=False)
+                def _send():
+                    from telegram_bot.signals import send_attendance_notification
+                    att = Attendance.objects.get(id=att_id)
+                    send_attendance_notification(att, async_send=False)
+
+                if active_schema:
+                    from tenants.utils import tenant_schema_context
+                    with tenant_schema_context(active_schema):
+                        _send()
+                else:
+                    _send()
             except Exception:
                 pass
     
     today = timezone.localdate()
     if attendance.date == today:
-        threading.Thread(target=background_notifications, args=(attendance.id,)).start()
+        threading.Thread(target=background_notifications, args=(attendance.id, schema_name)).start()
     
     return attendance
 

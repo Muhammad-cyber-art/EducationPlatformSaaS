@@ -100,6 +100,7 @@ export default function GroupDetailPage() {
       };
       await api.put(`/groups/groups/${group_id}/`, payload);
       queryClient.invalidateQueries(['group-detail', group_id]);
+      queryClient.invalidateQueries(['group-lesson-dates', group_id]);
       uiDispatch({ type: "SET_FIELD", field: "isEditing", value: false });
       toast.success("Muvaffaqiyatli saqlandi.");
     } catch (err) { toast.error("Xatolik yuz berdi."); }
@@ -251,7 +252,9 @@ export default function GroupDetailPage() {
     return pastDates.sort((a, b) => b.localeCompare(a)).slice(0, 3);
   }, [lessonDates, todayStr_actual, isCurrentMonth]);
 
-  const canEditAttendance = permissions.canTakeAttendance && isGroupLogicActive && (
+  const isLessonDay = Array.isArray(lessonDates) && lessonDates.includes(selectedDate);
+
+  const canEditAttendance = isLessonDay && permissions.canTakeAttendance && isGroupLogicActive && (
     selectedDate === todayStr_actual ||
     (currentHour < 4 && selectedDate === yesterdayStr) ||
     (isAdmin && last3EditableDates.includes(selectedDate))

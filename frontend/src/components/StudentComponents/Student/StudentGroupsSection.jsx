@@ -40,13 +40,9 @@ const StudentGroupsSection = ({
                                     <p className="text-[7px] sm:text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest leading-none mb-1">Guruh</p>
                                     <h3 className="text-sm sm:text-base font-black text-[var(--text-primary)] capitalize tracking-tight truncate">{group.name}</h3>
                                     <div className="flex items-center gap-2 mt-1.5">
-                                        {group.days && (
-                                            <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${
-                                                group.days === 'even' ? 'text-[var(--gold)] bg-[var(--gold)]/10 border-[var(--gold)]/20' : 
-                                                group.days === 'everyday' ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 
-                                                'text-blue-400 bg-blue-400/10 border-blue-400/20'
-                                            }`}>
-                                                {group.days === 'even' ? 'Juft' : group.days === 'everyday' ? 'Har kuni' : 'Toq'}
+                                        {(group.days_display || group.dars_kunlari || group.days) && (
+                                            <span className="text-[8px] font-black px-2 py-0.5 rounded-full border text-[var(--gold)] bg-[var(--gold)]/10 border-[var(--gold)]/20" title={group.days_display_full || ""}>
+                                                {group.days_display || group.dars_kunlari || (group.days === 'even' ? 'Juft' : group.days === 'everyday' ? 'Har kuni' : 'Toq')}
                                             </span>
                                         )}
                                         <span className="text-[8px] font-bold text-[var(--text-muted)] flex items-center gap-1">

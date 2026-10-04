@@ -1,50 +1,56 @@
-import { Route } from"react-router-dom";
+import { lazy } from "react";
+import { Route } from "react-router-dom";
 
-// Components
-import SuperAdminLayout from"../components/SuperAdmin/SuperAdminLayout";
-import SuperAdminDashboard from"../components/SuperAdmin/SuperAdminPage";
-import AdminList from"../components/SuperAdmin/AdminsList";
-import SuperAdminProfile from"../components/SuperAdmin/SuperAdminProfile";
-import BranchLayout from"../components/SuperAdmin/branches/BrnchLayout";
-import BranchPattern from"../components/SuperAdmin/branches/BranchPattern";
-import BranchCreate from"../components/SuperAdmin/branches/AddBranch";
-import AdminLayout from"../components/adminComponents/AdminListLayout";
-import AdminRegisterView from"../components/RegisterUser/RegisterAdmin";
-import ArchivePage from"../components/adminComponents/ArchivePage";
-import MentorsLayout from"../components/mentorsComponent/MentorsLayout";
-import MentorsPage from"../components/mentorsComponent/MentorsPage";
-import MentorProfilePage from"../components/mentorsComponent/MentorProfile";
-import MentorRegister from"../components/RegisterUser/RegisterMentor";
-import GroupsLayout from"../components/GroupsComponent/GroupLayout";
-import GroupsListPage from"../components/GroupsComponent/GroupsPage";
-import AddGroup from"../components/GroupsComponent/AddGroup";
-import GroupDetailLayout from"../components/GroupsComponent/GroupDetailLayout";
-import GroupDetailPage from"../components/GroupsComponent/GroupDetails";
-import GroupAssignmentsPage from "../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage";
-import StudentAdd from"../components/StudentComponents/AddStudent";
-import StudentLayout from"../components/StudentComponents/StudentLayout";
-import GroupsStudent from"../components/GroupsComponent/GrupsStudent";
-import StudentProfilePage from"../components/StudentComponents/Student";
-import HomeworkSubmission from"../components/homework/HomeworkSubmsission";
-import MockTestDetails from"../components/mockTests/MockTestDetails";
-import GlobalStudentLayout from"../components/StudentComponents/GlobalStudentLayout";
-import GlobalStudentComponent from"../components/StudentComponents/GlobalStudents";
-import GlobalSpecialStudents from "../components/StudentComponents/GlobalSpecialStudents/GlobalSpecialStudents";
-import WaitingHall from"../components/StudentComponents/WaitingHall";
-import AdminProfile from"../components/adminComponents/adminProfile";
+// Lazy Loaded Components
+const SuperAdminLayout = lazy(() => import("../components/SuperAdmin/SuperAdminLayout"));
+const SuperAdminDashboard = lazy(() => import("../components/SuperAdmin/SuperAdminPage"));
+const AdminList = lazy(() => import("../components/SuperAdmin/AdminsList"));
+const SuperAdminProfile = lazy(() => import("../components/SuperAdmin/SuperAdminProfile"));
+const BranchLayout = lazy(() => import("../components/SuperAdmin/branches/BrnchLayout"));
+const BranchPattern = lazy(() => import("../components/SuperAdmin/branches/BranchPattern"));
+const BranchCreate = lazy(() => import("../components/SuperAdmin/branches/AddBranch"));
+const AdminLayout = lazy(() => import("../components/adminComponents/AdminListLayout"));
+const AdminRegisterView = lazy(() => import("../components/RegisterUser/RegisterAdmin"));
+const ArchivePage = lazy(() => import("../components/adminComponents/ArchivePage"));
+const MentorsLayout = lazy(() => import("../components/mentorsComponent/MentorsLayout"));
+const MentorsPage = lazy(() => import("../components/mentorsComponent/MentorsPage"));
+const MentorProfilePage = lazy(() => import("../components/mentorsComponent/MentorProfile"));
+const MentorRegister = lazy(() => import("../components/RegisterUser/RegisterMentor"));
+const GroupsLayout = lazy(() => import("../components/GroupsComponent/GroupLayout"));
+const GroupsListPage = lazy(() => import("../components/GroupsComponent/GroupsPage"));
+const AddGroup = lazy(() => import("../components/GroupsComponent/AddGroup"));
+const GroupDetailLayout = lazy(() => import("../components/GroupsComponent/GroupDetailLayout"));
+const GroupDetailPage = lazy(() => import("../components/GroupsComponent/GroupDetails"));
+const GroupAssignmentsPage = lazy(() =>
+  import("../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage")
+);
+const StudentAdd = lazy(() => import("../components/StudentComponents/AddStudent"));
+const StudentLayout = lazy(() => import("../components/StudentComponents/StudentLayout"));
+const GroupsStudent = lazy(() => import("../components/GroupsComponent/GrupsStudent"));
+const StudentProfilePage = lazy(() => import("../components/StudentComponents/Student"));
+const HomeworkSubmission = lazy(() => import("../components/homework/HomeworkSubmsission"));
+const MockTestDetails = lazy(() => import("../components/mockTests/MockTestDetails"));
+const GlobalStudentLayout = lazy(() => import("../components/StudentComponents/GlobalStudentLayout"));
+const GlobalStudentComponent = lazy(() => import("../components/StudentComponents/GlobalStudents"));
+const GlobalSpecialStudents = lazy(() =>
+  import("../components/StudentComponents/GlobalSpecialStudents/GlobalSpecialStudents")
+);
+const WaitingHall = lazy(() => import("../components/StudentComponents/WaitingHall"));
+const AdminProfile = lazy(() => import("../components/adminComponents/adminProfile"));
 
-// Finance Components
-import AllPaymentsLayout from"../components/SuperAdmin/Finance/AllPaymentsLayout";
-import AllPayments from"../components/SuperAdmin/Finance/AllPayments";
-import PaymentHistory from"../components/SuperAdmin/Finance/PaymentsStory";
-import StaffPaymentsLayout from"../components/SuperAdmin/Finance/StaffPaymentsLayout";
-import StaffPayments from"../components/SuperAdmin/Finance/StaffPayments";
-import StaffPaymentDetails from"../components/SuperAdmin/Finance/StaffPaymentDetails";
-import BranchFinance from"../components/SuperAdmin/Finance/BranchDetails";
-import UtilityPayments from "../components/SuperAdmin/Finance/UtilityPayments";
-import Kassa from "../components/SuperAdmin/Finance/Kassa/index.jsx";
-
-import SpecialStudentsDashboard from"../components/SuperAdmin/Finance/SpecialStudents/SpecialStudentsDashboard";
+// Finance Components (Lazy)
+const AllPaymentsLayout = lazy(() => import("../components/SuperAdmin/Finance/AllPaymentsLayout"));
+const AllPayments = lazy(() => import("../components/SuperAdmin/Finance/AllPayments"));
+const PaymentHistory = lazy(() => import("../components/SuperAdmin/Finance/PaymentsStory"));
+const StaffPaymentsLayout = lazy(() => import("../components/SuperAdmin/Finance/StaffPaymentsLayout"));
+const StaffPayments = lazy(() => import("../components/SuperAdmin/Finance/StaffPayments"));
+const StaffPaymentDetails = lazy(() => import("../components/SuperAdmin/Finance/StaffPaymentDetails"));
+const BranchFinance = lazy(() => import("../components/SuperAdmin/Finance/BranchDetails"));
+const UtilityPayments = lazy(() => import("../components/SuperAdmin/Finance/UtilityPayments"));
+const Kassa = lazy(() => import("../components/SuperAdmin/Finance/Kassa/index.jsx"));
+const SpecialStudentsDashboard = lazy(() =>
+  import("../components/SuperAdmin/Finance/SpecialStudents/SpecialStudentsDashboard")
+);
 
 export const SuperAdminRoutes = (
  <Route path="/super_admin" element={<SuperAdminLayout />}>

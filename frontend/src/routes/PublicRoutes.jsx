@@ -1,9 +1,13 @@
+import { lazy } from "react";
 import { Route } from "react-router-dom";
-import Login from "../components/Authorized/login";
-import GroupDetailPage from "../components/GroupsComponent/GroupDetails";
-import StudentProfilePage from "../components/StudentComponents/Student";
-import StudentPayments from "../components/homework/StudentPayments";
-import { LandingPage } from "../components/Common/LandingPage";
+
+const Login = lazy(() => import("../components/Authorized/login"));
+const GroupDetailPage = lazy(() => import("../components/GroupsComponent/GroupDetails"));
+const StudentProfilePage = lazy(() => import("../components/StudentComponents/Student"));
+const StudentPayments = lazy(() => import("../components/homework/StudentPayments"));
+const LandingPage = lazy(() =>
+  import("../components/Common/LandingPage").then((m) => ({ default: m.LandingPage }))
+);
 
 export const PublicRoutes = (
   <>
@@ -17,3 +21,4 @@ export const PublicRoutes = (
     <Route path="/studentpayments" element={<StudentPayments />} />
   </>
 );
+

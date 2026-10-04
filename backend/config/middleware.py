@@ -65,7 +65,8 @@ class RequestLoggingMiddleware(MiddlewareMixin):
 class RateLimitMiddleware(MiddlewareMixin):
     """
     Taqsimlangan (distributed) Rate Limiting (DDoS va Brute-force himoyasi).
-    Redis kesh mexanizmi orqali ishlaydi (Workerlar orasida xavfsiz, thread-safe va xotira sizmaydi).
+    Fixed-window atomik Redis hisoblagichi orqali ishlaydi (Workerlar orasida xavfsiz,
+    thread-safe va har bir so'rovda timeout uzayib ketmaydi).
     """
     RATE_LIMIT = 15  # 1 daqiqada ruxsat etilgan maksimal urinishlar soni
     BLOCK_WINDOW = 60  # daqiqalik oyna (sekundlarda)
@@ -77,9 +78,20 @@ class RateLimitMiddleware(MiddlewareMixin):
 
             try:
                 from django.core.cache import cache
-                count = cache.get(cache_key, 0)
-                if count >= self.RATE_LIMIT:
-                    logger.warning(f"Rate limit exceeded for IP: {ip} on {request.path}")
+                # Atomik ravishda birinchi so'rovda kalit yaratiladi va timeout belgilanadi.
+                # Keyingi so'rovlarda timeout o'zgarmaydi (rolling window xatosi bartaraf etildi).
+                is_new_window = cache.add(cache_key, 1, timeout=self.BLOCK_WINDOW)
+                if not is_new_window:
+                    try:
+                        current_count = cache.incr(cache_key)
+                    except (ValueError, Exception):
+                        cache.set(cache_key, 1, timeout=self.BLOCK_WINDOW)
+                        current_count = 1
+                else:
+                    current_count = 1
+
+                if current_count > self.RATE_LIMIT:
+                    logger.warning(f"Rate limit exceeded for IP: {ip} on {request.path} (count: {current_count})")
                     return JsonResponse(
                         {
                             'error': "Juda ko'p so'rov yuborildi. Iltimos, 1 daqiqa kuting.",
@@ -87,10 +99,10 @@ class RateLimitMiddleware(MiddlewareMixin):
                         },
                         status=429
                     )
-                cache.set(cache_key, count + 1, timeout=self.BLOCK_WINDOW)
             except Exception as e:
                 logger.debug(f"RateLimit cache fallback/warning: {e}")
                 return None
 
         return None
+
 

@@ -79,15 +79,11 @@ const GroupSidebar = ({
                         <p className="text-[7px] font-bold text-[var(--text-muted)] capitalize tracking-widest opacity-50">Vaqt</p>
                         <p className="text-xs font-bold text-[var(--text-primary)]">{groupinfo.dars_vaqti || "---"}</p>
                     </div>
-                    <div className="flex justify-between items-center">
-                        <p className="text-[7px] font-bold text-[var(--text-muted)] capitalize tracking-widest opacity-50">Kunlar</p>
-                        <p className="text-xs font-bold">
-                            {groupinfo.days === 'even' ? (
-                                <span className="text-[var(--gold)]">Juft</span>
-                            ) : groupinfo.days === 'everyday' ? (
-                                <span className="text-emerald-500">Har kuni</span>
-                            ) : (
-                                <span className="text-blue-400">Toq</span>
+                    <div className="flex justify-between items-center gap-2">
+                        <p className="text-[7px] font-bold text-[var(--text-muted)] capitalize tracking-widest opacity-50 shrink-0">Kunlar</p>
+                        <p className="text-xs font-bold text-[var(--gold)] text-right truncate" title={groupinfo.days_display_full || groupinfo.days_display || ""}>
+                            {groupinfo.days_display_full || groupinfo.days_display || groupinfo.dars_kunlari || (
+                                groupinfo.days === 'even' ? 'Juft kunlar' : groupinfo.days === 'everyday' ? 'Har kuni' : 'Toq kunlar'
                             )}
                         </p>
                     </div>

@@ -24,23 +24,29 @@ def send_telegram_message_task(self, chat_id, text, bot_token=None):
         return False
 
 @shared_task
-def send_attendance_notifications_task(attendance_ids, bot_token=None):
+def send_attendance_notifications_task(attendance_ids, bot_token=None, schema_name=None):
     """
     Davomat xabarnomalarini fonda (Celery orqali) navbat bilan yuborish.
+    Multi-tenant qo'llab-quvvatlaydi (schema_name parametri orqali).
     """
     from homework_attends.models import Attendance
     from .signals import send_attendance_notification
     
-    attendances = Attendance.objects.filter(id__in=attendance_ids).select_related('student', 'group')
-    
-    for att in attendances:
-        try:
-            # async_send=False qilamiz, chunki o'zi fon taskida ketayapti, 
-            # har bir xabar uchun alohida thread shartmas, aksincha ularni navbat bilan yuboramiz.
-            send_attendance_notification(att, async_send=False, bot_token=bot_token)
-            time.sleep(0.05) # Telegram bot limitini buzmaslik uchun
-        except Exception as e:
-            logger.error(f"Error in send_attendance_notifications_task for att {att.id}: {e}")
+    def _execute():
+        attendances = Attendance.objects.filter(id__in=attendance_ids).select_related('student', 'group')
+        for att in attendances:
+            try:
+                send_attendance_notification(att, async_send=False, bot_token=bot_token)
+                time.sleep(0.05) # Telegram bot limitini buzmaslik uchun
+            except Exception as e:
+                logger.error(f"Error in send_attendance_notifications_task for att {att.id}: {e}")
+
+    if schema_name:
+        from tenants.utils import tenant_schema_context
+        with tenant_schema_context(schema_name):
+            _execute()
+    else:
+        _execute()
 
 @shared_task
 def send_broadcast_message_task(chat_ids, message, bot_token=None):

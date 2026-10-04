@@ -177,26 +177,44 @@ class Command(BaseCommand):
             return
 
         # 3. Bir nechta o'quv markaz botlari bo'lsa: ularni parallel polling qilamiz
-        self.stdout.write(self.style.SUCCESS(f">>> {len(active_tenants)} ta o'quv markaz botlari parallel ishga tushirilmoqda:"))
-        apps = []
+        self.stdout.write(self.style.SUCCESS(f">>> {len(active_tenants)} ta o'quv markaz botlari tayyorlanmoqda:"))
+        app_pairs = []
         for t in active_tenants:
             self.stdout.write(f"  • {t.name} (schema: {t.schema_name})")
-            apps.append(build_bot_application(t.telegram_bot_token, schema_name=t.schema_name, tenant_name=t.name))
+            try:
+                bot_app = build_bot_application(t.telegram_bot_token, schema_name=t.schema_name, tenant_name=t.name)
+                app_pairs.append((bot_app, t))
+            except Exception as build_err:
+                logger.error(f"'{t.name}' uchun bot ilovasini qurishda xatolik: {build_err}")
         
         import asyncio
         async def run_all():
-            for app in apps:
-                await app.initialize()
-                await app.start()
-                await app.updater.start_polling(drop_pending_updates=True)
-            self.stdout.write(self.style.SUCCESS(">>> Barcha botlar muvaffaqiyatli ishga tushdi va xabarlarni tinglamoqda..."))
+            running_apps = []
+            for app, tenant_item in app_pairs:
+                try:
+                    await app.initialize()
+                    await app.start()
+                    await app.updater.start_polling(drop_pending_updates=True)
+                    running_apps.append((app, tenant_item))
+                    logger.info(f"Bot muvaffaqiyatli ishga tushdi: {tenant_item.name} ({tenant_item.schema_name})")
+                except Exception as bot_err:
+                    logger.error(
+                        f"XATO: '{tenant_item.name}' ({tenant_item.schema_name}) botini ishga tushirishda xatolik yuz berdi: "
+                        f"{bot_err}. Ushbu markaz boti o'tkazib yuborildi, boshqa botlar ishlashda davom etadi."
+                    )
+
+            if not running_apps:
+                logger.error("Hech bir bot muvaffaqiyatli ishga tushmadi!")
+                return
+
+            self.stdout.write(self.style.SUCCESS(f">>> {len(running_apps)} ta bot muvaffaqiyatli ishga tushdi va xabarlarni tinglamoqda..."))
             stop_event = asyncio.Event()
             try:
                 await stop_event.wait()
             except (asyncio.CancelledError, KeyboardInterrupt):
                 pass
             finally:
-                for app in apps:
+                for app, tenant_item in running_apps:
                     try:
                         if app.updater and app.updater.running:
                             await app.updater.stop()
@@ -204,7 +222,7 @@ class Command(BaseCommand):
                             await app.stop()
                         await app.shutdown()
                     except Exception as err:
-                        logger.error(f"Bot to'xtatishda xatolik: {err}")
+                        logger.error(f"Bot to'xtatishda xatolik ({tenant_item.name}): {err}")
 
         try:
             asyncio.run(run_all())

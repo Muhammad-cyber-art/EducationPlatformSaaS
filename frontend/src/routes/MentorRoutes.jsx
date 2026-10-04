@@ -1,18 +1,21 @@
-import { Route } from"react-router-dom";
+import { lazy } from "react";
+import { Route } from "react-router-dom";
 
-// Components
-import MentorProfileLayout from"../components/mentorsComponent/MentorProfLayout";
-import MentorProfilePage from"../components/mentorsComponent/MentorProfile";
-import MentorFinance from"../components/mentorsComponent/MentorFinance";
-import GroupDetailLayout from"../components/GroupsComponent/GroupDetailLayout";
-import GroupDetailPage from"../components/GroupsComponent/GroupDetails";
-import StudentAdd from"../components/StudentComponents/AddStudent";
-import StudentProfilePage from"../components/StudentComponents/Student";
-import HomeworkSubmission from"../components/homework/HomeworkSubmsission";
-import MockTestDetails from"../components/mockTests/MockTestDetails";
-import TimetablePage from"../components/GroupsComponent/TimetablePage";
-import MentorActivityPage from"../components/mentorsComponent/MentorActivityPage";
-import GroupAssignmentsPage from "../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage";
+// Lazy Loaded Components
+const MentorProfileLayout = lazy(() => import("../components/mentorsComponent/MentorProfLayout"));
+const MentorProfilePage = lazy(() => import("../components/mentorsComponent/MentorProfile"));
+const MentorFinance = lazy(() => import("../components/mentorsComponent/MentorFinance"));
+const GroupDetailLayout = lazy(() => import("../components/GroupsComponent/GroupDetailLayout"));
+const GroupDetailPage = lazy(() => import("../components/GroupsComponent/GroupDetails"));
+const StudentAdd = lazy(() => import("../components/StudentComponents/AddStudent"));
+const StudentProfilePage = lazy(() => import("../components/StudentComponents/Student"));
+const HomeworkSubmission = lazy(() => import("../components/homework/HomeworkSubmsission"));
+const MockTestDetails = lazy(() => import("../components/mockTests/MockTestDetails"));
+const TimetablePage = lazy(() => import("../components/GroupsComponent/TimetablePage"));
+const MentorActivityPage = lazy(() => import("../components/mentorsComponent/MentorActivityPage"));
+const GroupAssignmentsPage = lazy(() =>
+  import("../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage")
+);
 
 export const MentorRoutes = (
  <Route path="/mentor" element={<MentorProfileLayout />}>

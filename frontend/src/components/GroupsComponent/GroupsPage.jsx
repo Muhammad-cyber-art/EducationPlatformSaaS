@@ -89,11 +89,22 @@ export default function GroupsListPage() {
     const search = debouncedSearch?.toLowerCase().trim();
     
     return groupsArr.filter((group) => {
-      // 1. Kunlar bo'yicha qat'iy filter
+      // 1. Kunlar bo'yicha filter
       if (activeTab !== "all") {
-        // If group has no days, treat as "odd" (default)
-        const groupDays = group.days || "odd";
-        if (groupDays !== activeTab) return false;
+        const customDays = Array.isArray(group.custom_days) && group.custom_days.length > 0
+          ? group.custom_days.map(Number)
+          : (group.days === "even" ? [1, 3, 5] : group.days === "everyday" ? [0, 1, 2, 3, 4, 5] : [0, 2, 4]);
+
+        if (activeTab === "odd") {
+          const isOdd = group.days === "odd" || (customDays.includes(0) && customDays.includes(2) && customDays.includes(4));
+          if (!isOdd) return false;
+        } else if (activeTab === "even") {
+          const isEven = group.days === "even" || (customDays.includes(1) && customDays.includes(3) && customDays.includes(5));
+          if (!isEven) return false;
+        } else if (activeTab === "everyday") {
+          const isEveryday = group.days === "everyday" || customDays.length >= 5;
+          if (!isEveryday) return false;
+        }
       }
 
       // 2. Qidiruv bo'yicha qo'shimcha (kuchaytirilgan) filter

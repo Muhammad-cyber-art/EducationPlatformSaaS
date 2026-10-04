@@ -14,10 +14,12 @@ export default function EachGroup({ data }) {
 
   // Kunlarni chiroyli formatlash uchun yordamchi
   const getDayLabel = () => {
+    if (data?.days_display) return data.days_display;
     if (data?.dars_kunlari) return data.dars_kunlari;
-    if (data?.days === 'odd') return 'Toq';
-    if (data?.days === 'even') return 'Juft';
-    return 'Har kuni';
+    if (data?.days === 'odd') return 'Toq kunlar';
+    if (data?.days === 'even') return 'Juft kunlar';
+    if (data?.days === 'everyday') return 'Har kuni';
+    return 'Dars kunlari';
   };
 
   return (

@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { Route, Outlet } from 'react-router-dom';
-import CEOLayout             from '../components/CEO/CEOLayout';
-import CEODashboard          from '../components/CEO/CEODashboard';
-import CEOTenants            from '../components/CEO/CEOTenants';
-import CEOTenantDetail       from '../components/CEO/CEOTenantDetail';
-import CEOLogin              from '../components/CEO/CEOLogin';
-import CEOSubdomainForbidden from '../components/CEO/CEOSubdomainForbidden';
 import { isTenantSubdomain } from '../utils/subdomain';
+import CEOSubdomainForbidden from '../components/CEO/CEOSubdomainForbidden';
+
+const CEOLayout = lazy(() => import('../components/CEO/CEOLayout'));
+const CEODashboard = lazy(() => import('../components/CEO/CEODashboard'));
+const CEOTenants = lazy(() => import('../components/CEO/CEOTenants'));
+const CEOTenantDetail = lazy(() => import('../components/CEO/CEOTenantDetail'));
+const CEOLogin = lazy(() => import('../components/CEO/CEOLogin'));
 
 /**
  * CEORouteGuard — Subdomen xavfsizlik himoyasi.

@@ -90,12 +90,21 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             instance.is_present = is_present
             instance.marked_by = request.user
             instance.save()
+
+            # Moliya va maoshni qayta hisoblash
+            try:
+                from finance.services import update_attendance_based_payments
+                update_attendance_based_payments(instance.student, instance.group, instance.date)
+            except Exception as e:
+                logger.error("Failed to update payments on attendance update: %s", e)
+
             serializer = self.get_serializer(instance)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         # 2. Create new record
-        if not (student_id and date_str):
-             return Response({"detail": "Student ID va kun (date) majburiy"}, status=status.HTTP_400_BAD_REQUEST)
+        group_id = request.data.get('group_id')
+        if not (student_id and date_str and group_id):
+             return Response({"detail": "Student ID, group_id va kun (date) majburiy"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             requested_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -130,6 +139,13 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             attendance.is_present = is_present
             attendance.marked_by = request.user
             attendance.save()
+
+        # Moliya va maoshni qayta hisoblash
+        try:
+            from finance.services import update_attendance_based_payments
+            update_attendance_based_payments(student, group, requested_date)
+        except Exception as e:
+            logger.error("Failed to update payments on attendance create: %s", e)
 
         serializer = self.get_serializer(attendance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

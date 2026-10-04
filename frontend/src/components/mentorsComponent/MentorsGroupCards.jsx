@@ -115,8 +115,8 @@ export default function MentorsGroupCards({ mentorsGroups, navig, horizontal = f
                         {/* Footer: Days */}
                         <div className="w-full bg-[var(--gold)]/5 border border-[var(--gold)]/10 rounded-xl p-3 flex items-center gap-3">
                             <Calendar size={14} className="text-[var(--gold)] shrink-0" />
-                            <span className="text-[11px] font-black text-[var(--text-primary)] tracking-wide truncate">
-                                {card.days || card.dars_kunlari || "Belgilanmagan"}
+                            <span className="text-[11px] font-black text-[var(--text-primary)] tracking-wide truncate" title={card.days_display_full || ""}>
+                                {card.days_display_full || card.days_display || card.dars_kunlari || (card.days === 'even' ? 'Juft kunlar' : card.days === 'everyday' ? 'Har kuni' : card.days === 'odd' ? 'Toq kunlar' : 'Belgilanmagan')}
                             </span>
                         </div>
                     </div>

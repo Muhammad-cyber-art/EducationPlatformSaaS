@@ -70,6 +70,8 @@ class GroupSimpleSerializer(serializers.ModelSerializer):
     absent_count = serializers.SerializerMethodField()
     mentor = MentorListSerializer(read_only=True)
     computed_status = serializers.CharField(read_only=True)
+    days_display = serializers.CharField(read_only=True)
+    days_display_full = serializers.CharField(read_only=True)
 
     class Meta:
         model = Group
@@ -84,6 +86,9 @@ class GroupSimpleSerializer(serializers.ModelSerializer):
             "mentor",
             "monthly_price",
             "days",
+            "custom_days",
+            "days_display",
+            "days_display_full",
             "dars_kunlari",
             "dars_vaqti",
             "students_count",
@@ -451,6 +456,8 @@ class GroupShortSerializer(serializers.ModelSerializer):
     # Bu serializer guruhning faqat kerakli qismlarini qaytaradi
     branch_name = serializers.ReadOnlyField(source="branch.name")
     today_attendance_confirmed = serializers.SerializerMethodField()
+    days_display = serializers.CharField(read_only=True)
+    days_display_full = serializers.CharField(read_only=True)
 
     class Meta:
         model = Group  # Sizning guruh modelingiz nomi
@@ -460,6 +467,9 @@ class GroupShortSerializer(serializers.ModelSerializer):
             "group_type",
             "subject",
             "days",
+            "custom_days",
+            "days_display",
+            "days_display_full",
             "dars_kunlari",
             "dars_vaqti",
             "students_count",
@@ -555,6 +565,8 @@ class AdminNestedSerializer(serializers.ModelSerializer):
 class GroupNestedSerializer(serializers.ModelSerializer):
     mentor = MentorNestedSerializer(read_only=True)
     admin = AdminNestedSerializer(read_only=True)
+    days_display = serializers.CharField(read_only=True)
+    days_display_full = serializers.CharField(read_only=True)
 
     class Meta:
         model = Group
@@ -565,6 +577,9 @@ class GroupNestedSerializer(serializers.ModelSerializer):
             "subject",
             "monthly_price",
             "days",
+            "custom_days",
+            "days_display",
+            "days_display_full",
             "mentor",
             "admin",
             "is_faol",
@@ -662,6 +677,8 @@ class GroupSerializer(serializers.ModelSerializer):
     computed_status = serializers.CharField(read_only=True)
     special_lesson_dates = serializers.SerializerMethodField()
     canceled_lesson_dates = serializers.SerializerMethodField()
+    days_display = serializers.CharField(read_only=True)
+    days_display_full = serializers.CharField(read_only=True)
 
     class Meta:
         model = Group
@@ -673,6 +690,9 @@ class GroupSerializer(serializers.ModelSerializer):
             "branch",
             "branch_id",
             "days",
+            "custom_days",
+            "days_display",
+            "days_display_full",
             "dars_kunlari",
             "dars_vaqti",
             "subject",
@@ -823,7 +843,7 @@ class GroupSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         request = self.context.get("request")
-        user = request.user
+        user = getattr(request, "user", None) if request else None
         from authenticatsiya.models import BranchAccess
 
         # Mentor va Branch ob'ektlarini aniqlaymiz (PUT/POST uchun)
@@ -834,7 +854,7 @@ class GroupSerializer(serializers.ModelSerializer):
             self.instance.branch if self.instance else None
         )
 
-        if user.role == "admin":
+        if user and user.role == "admin":
             # Admin boshqara oladigan branchlar
             admin_allowed_ids = [user.branch_id] + list(
                 BranchAccess.objects.filter(user=user).values_list(
@@ -863,6 +883,22 @@ class GroupSerializer(serializers.ModelSerializer):
                             "mentor_id": f"Mentor {mentor.first_name} ushbu filialga ({requested_branch.name}) biriktirilmagan."
                         }
                     )
+
+        # c) custom_days validatsiyasi va backward-compatibility
+        custom_days = attrs.get("custom_days")
+        if custom_days is not None:
+            if not isinstance(custom_days, list):
+                raise serializers.ValidationError({"custom_days": "Hafta kunlari ro'yxat (massiv) bo'lishi kerak."})
+            clean_days = [int(d) for d in custom_days if isinstance(d, (int, str)) and str(d).isdigit() and int(d) in range(7)]
+            if not clean_days:
+                raise serializers.ValidationError({"custom_days": "Kamida bitta hafta kuni tanlanishi kerak."})
+            attrs["custom_days"] = sorted(list(set(clean_days)))
+        elif "days" in attrs and attrs["days"]:
+            from .utils import normalize_custom_days
+            attrs["custom_days"] = normalize_custom_days(attrs["days"])
+        elif not self.instance:
+            attrs["custom_days"] = [0, 2, 4]
+
         return attrs
 
 

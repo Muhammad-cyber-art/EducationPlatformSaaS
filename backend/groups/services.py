@@ -26,18 +26,34 @@ def enroll_student_to_group(group, student_id, create_payment=True):
                 student.save()
             
             if create_payment:
-                from finance.utils import floor_amount
+                from finance.utils import floor_amount, calculate_attendance_based_student_payment
                 today = timezone.now().date()
                 month_start = today.replace(day=1)
-                # User talabi: Advanced guruhda negotiated statusi o'tmaydi
-                if group.group_type == 'advanced' and student.status == 'negotiated':
-                    base_price = group.monthly_price
-                elif student.status in ['low_income', 'negotiated']:
-                    base_price = student.custom_fee if student.custom_fee is not None else Decimal('0')
-                else:
-                    base_price = group.monthly_price
                 
-                final_amount = floor_amount(base_price)
+                is_discount = (student.status == 'discount')
+                if is_discount:
+                    # Imtiyozli student: davomatga asoslangan
+                    final_amount = calculate_attendance_based_student_payment(student, group, month_start)
+                    is_auto_discount = True
+                else:
+                    # User talabi: Advanced guruhda negotiated statusi o'tmaydi
+                    if group.group_type == 'advanced' and student.status == 'negotiated':
+                        base_price = group.monthly_price
+                    elif student.status in ['low_income', 'negotiated']:
+                        base_price = student.custom_fee if student.custom_fee is not None else Decimal('0')
+                    else:
+                        base_price = group.monthly_price
+                    
+                    # Agar oy o'rtasida qo'shilsa (prorated):
+                    lesson_dates = group.get_lesson_dates(month_start.year, month_start.month)
+                    if lesson_dates and today > month_start:
+                        remaining_lessons = [d for d in lesson_dates if d >= today]
+                        total_lessons = len(lesson_dates)
+                        daily_price = Decimal(str(base_price)) / Decimal(str(max(1, total_lessons)))
+                        final_amount = floor_amount(daily_price * Decimal(str(len(remaining_lessons))))
+                    else:
+                        final_amount = floor_amount(base_price)
+                    is_auto_discount = False
 
                 p_obj, p_created = Payment.objects.get_or_create(
                     student=student,
@@ -45,11 +61,13 @@ def enroll_student_to_group(group, student_id, create_payment=True):
                     month=month_start,
                     defaults={
                         'amount': final_amount,
-                        'is_paid': False
+                        'is_paid': False,
+                        'is_auto_discount': is_auto_discount
                     }
                 )
                 if not p_created and not p_obj.is_paid:
                     p_obj.amount = final_amount
+                    p_obj.is_auto_discount = is_auto_discount
                     p_obj.save()
         else:
             # Agar enrollment avvaldan bor bo'lsa, u is_active=False bo'lishi mumkin
@@ -234,10 +252,12 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
 
         # Update New Payment
         existing_new = Payment.objects.filter(student=student, group=new_group, month=current_month_start).first()
+        is_discount = (student.status == 'discount')
         
         if existing_new:
             existing_new.amount = new_amount
             existing_new.paid_amount += excess_paid
+            existing_new.is_auto_discount = is_discount
             if existing_new.paid_amount >= new_amount and new_amount > 0:
                 existing_new.is_paid = True
                 existing_new.is_partial = False
@@ -251,7 +271,8 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
         else:
             p_obj = Payment(
                 student=student, group=new_group, month=current_month_start,
-                amount=new_amount, paid_amount=excess_paid
+                amount=new_amount, paid_amount=excess_paid,
+                is_auto_discount=is_discount
             )
             if p_obj.paid_amount >= new_amount and new_amount > 0:
                 p_obj.is_paid = True
@@ -451,6 +472,10 @@ def cancel_lesson_day(group, date, request_user, reason=""):
             canceled.canceled_by = request_user
             canceled.save()
         
+        # Bekor qilingan kundagi bo'sh (tasdiqlanmagan) davomatlarni tozalash
+        from homework_attends.models import Attendance
+        Attendance.objects.filter(group=group, date=date, marked_by__isnull=True).delete()
+
         # Mentor oyligini qayta hisoblash
         if group.mentor and hasattr(group.mentor, 'staff_profile'):
             try:
@@ -481,6 +506,14 @@ def cancel_lesson_day(group, date, request_user, reason=""):
                     emp_payment.save()
             except Exception as e:
                 logger.exception("Mentor oyligini yangilashda xatolik")
+
+        # Imtiyozli o'quvchilarning to'lovlarini sinxronlashtirish
+        try:
+            from finance.services import update_attendance_based_payments
+            for st in group.students.filter(status='discount', is_active=True):
+                update_attendance_based_payments(st, group, date)
+        except Exception as e:
+            logger.warning("Student payments update error on cancel_lesson_day: %s", e)
         
         return canceled, created
 

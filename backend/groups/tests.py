@@ -23,7 +23,7 @@ class GroupModelTests(TestCase):
             admin=self.admin,
             monthly_price=100000
         )
-        self.assertEqual(str(group), f"Math 101 | Mentor: mentor1 | Kun: Toq kunlar") # default days='odd'
+        self.assertEqual(str(group), f"Math 101 | Mentor: mentor1 | Kun: Du, Chor, Ju") # default custom_days=[0, 2, 4]
 
     def test_student_auto_branch(self):
         group = Group.objects.create(name="Biology", branch=self.branch, monthly_price=50000)

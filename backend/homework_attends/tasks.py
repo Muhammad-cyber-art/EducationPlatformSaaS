@@ -14,7 +14,11 @@ def _create_attendance_for_current_schema():
     count = 0
 
     for group in groups:
-        if not group.is_logic_enabled():
+        if not group.is_faol:
+            continue
+        if group.start_date and group.start_date > tomorrow:
+            continue
+        if not group.is_lesson_day(tomorrow):
             continue
 
         active_student_ids = GroupEnrollment.objects.filter(

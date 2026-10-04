@@ -1,33 +1,38 @@
-import { Route } from"react-router-dom";
+import { lazy } from "react";
+import { Route } from "react-router-dom";
 
-// Components
-import AdminPanel from"../components/adminComponents/adminpanel";
-import AdminPageFirst from"../components/adminComponents/adPage";
-import MentorsLayout from"../components/mentorsComponent/MentorsLayout";
-import MentorsPage from"../components/mentorsComponent/MentorsPage";
-import MentorProfilePage from"../components/mentorsComponent/MentorProfile";
-import MentorRegister from"../components/RegisterUser/RegisterMentor";
-import GroupsLayout from"../components/GroupsComponent/GroupLayout";
-import GroupsListPage from"../components/GroupsComponent/GroupsPage";
-import AddGroup from"../components/GroupsComponent/AddGroup";
-import GroupDetailLayout from"../components/GroupsComponent/GroupDetailLayout";
-import GroupDetailPage from"../components/GroupsComponent/GroupDetails";
-import StudentAdd from"../components/StudentComponents/AddStudent";
-import StudentLayout from"../components/StudentComponents/StudentLayout";
-import GroupsStudent from"../components/GroupsComponent/GrupsStudent";
-import StudentProfilePage from"../components/StudentComponents/Student";
-import HomeworkSubmission from"../components/homework/HomeworkSubmsission";
-import MockTestDetails from"../components/mockTests/MockTestDetails";
-import GlobalStudentLayout from"../components/StudentComponents/GlobalStudentLayout";
-import GlobalStudentComponent from"../components/StudentComponents/GlobalStudents";
-import GlobalSpecialStudents from "../components/StudentComponents/GlobalSpecialStudents/GlobalSpecialStudents";
-import WaitingHall from"../components/StudentComponents/WaitingHall";
-import MentorFinance from"../components/mentorsComponent/MentorFinance";
-import AdminProfile from"../components/adminComponents/adminProfile";
-import ArchivePage from"../components/adminComponents/ArchivePage";
-import AdminExpenses from"../components/adminComponents/Expenses/AdminExpenses";
-import TimetablePage from"../components/GroupsComponent/TimetablePage";
-import GroupAssignmentsPage from "../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage";
+// Lazy Loaded Components
+const AdminPanel = lazy(() => import("../components/adminComponents/adminpanel"));
+const AdminPageFirst = lazy(() => import("../components/adminComponents/adPage"));
+const MentorsLayout = lazy(() => import("../components/mentorsComponent/MentorsLayout"));
+const MentorsPage = lazy(() => import("../components/mentorsComponent/MentorsPage"));
+const MentorProfilePage = lazy(() => import("../components/mentorsComponent/MentorProfile"));
+const MentorRegister = lazy(() => import("../components/RegisterUser/RegisterMentor"));
+const GroupsLayout = lazy(() => import("../components/GroupsComponent/GroupLayout"));
+const GroupsListPage = lazy(() => import("../components/GroupsComponent/GroupsPage"));
+const AddGroup = lazy(() => import("../components/GroupsComponent/AddGroup"));
+const GroupDetailLayout = lazy(() => import("../components/GroupsComponent/GroupDetailLayout"));
+const GroupDetailPage = lazy(() => import("../components/GroupsComponent/GroupDetails"));
+const StudentAdd = lazy(() => import("../components/StudentComponents/AddStudent"));
+const StudentLayout = lazy(() => import("../components/StudentComponents/StudentLayout"));
+const GroupsStudent = lazy(() => import("../components/GroupsComponent/GrupsStudent"));
+const StudentProfilePage = lazy(() => import("../components/StudentComponents/Student"));
+const HomeworkSubmission = lazy(() => import("../components/homework/HomeworkSubmsission"));
+const MockTestDetails = lazy(() => import("../components/mockTests/MockTestDetails"));
+const GlobalStudentLayout = lazy(() => import("../components/StudentComponents/GlobalStudentLayout"));
+const GlobalStudentComponent = lazy(() => import("../components/StudentComponents/GlobalStudents"));
+const GlobalSpecialStudents = lazy(() =>
+  import("../components/StudentComponents/GlobalSpecialStudents/GlobalSpecialStudents")
+);
+const WaitingHall = lazy(() => import("../components/StudentComponents/WaitingHall"));
+const MentorFinance = lazy(() => import("../components/mentorsComponent/MentorFinance"));
+const AdminProfile = lazy(() => import("../components/adminComponents/adminProfile"));
+const ArchivePage = lazy(() => import("../components/adminComponents/ArchivePage"));
+const AdminExpenses = lazy(() => import("../components/adminComponents/Expenses/AdminExpenses"));
+const TimetablePage = lazy(() => import("../components/GroupsComponent/TimetablePage"));
+const GroupAssignmentsPage = lazy(() =>
+  import("../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage")
+);
 
 
 export const AdminRoutes = (

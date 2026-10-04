@@ -189,22 +189,13 @@ export default function GroupsStudent({
 
   const handleToggle = async (attendanceId, currentStatus, studentId, studentName) => {
     if (!groupId) return;
-
-    // Senior toggle logic:
-    let nextStatus;
-    if (isLessonDay) {
-      // Dars kunlari faqat 2 holat: Keldi (true) <-> Kelmagan (false)
-      nextStatus = currentStatus === false ? true : false;
-    } else {
-      // Dam olish kunlari 3 holat: ? (undefined) -> Keldi (true) -> Kelmagan (false) -> ?
-      if (currentStatus === undefined) {
-        nextStatus = true;
-      } else if (currentStatus === true) {
-        nextStatus = false;
-      } else {
-        nextStatus = undefined;
-      }
+    if (!isLessonDay) {
+      toast.error("Bu sana guruh jadvalida dars kuni emas!");
+      return;
     }
+
+    // Dars kunlarida davomat holati: Keldi (true) <-> Kelmadi (false)
+    const nextStatus = currentStatus === false ? true : false;
 
     if (isConfirmMode) {
       onLocalAttendanceChange(studentId, nextStatus);
@@ -352,7 +343,7 @@ export default function GroupsStudent({
                 </div>
               </td>
               <td className="px-4 py-3 text-center">
-                {canEdit ? (
+                {canEdit && isLessonDay ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
                     className={`h-9 px-6 rounded-xl text-[9px] font-black capitalize tracking-[0.2em] flex items-center gap-2 transition-all shadow-md active:scale-90 ${isPresent === true
@@ -366,13 +357,13 @@ export default function GroupsStudent({
                     <span>{isPresent === true ? 'Keldi' : isPresent === false ? "Yo'q" : '?'}</span>
                   </button>
                 ) : (
-                  <div className="flex justify-center">
+                  <div className="flex justify-center" title={!isLessonDay ? "Bu kun guruh jadvalida dars kuni emas" : undefined}>
                     {isPresent === true ? (
                       <Check size={16} className="text-emerald-500" />
                     ) : isPresent === false ? (
                       <XIcon size={16} className="text-red-500" />
                     ) : (
-                      <span className="text-[14px] font-bold text-[var(--text-muted)]">?</span>
+                      <span className="text-[12px] font-bold text-[var(--text-muted)] opacity-30 select-none" title="Dars yo'q">-</span>
                     )}
                   </div>
                 )}
@@ -434,7 +425,7 @@ export default function GroupsStudent({
                   </div>
                 </div>
 
-                {canEdit ? (
+                {canEdit && isLessonDay ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
                     className={`h-9 px-5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 text-[9px] font-black capitalize tracking-widest ${isPresent === true
@@ -448,13 +439,13 @@ export default function GroupsStudent({
                     <span>{isPresent === true ? 'Keldi' : isPresent === false ? "Yo'q" : '?'}</span>
                   </button>
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" title={!isLessonDay ? "Bu kun guruh jadvalida dars kuni emas" : undefined}>
                     {isPresent === true ? (
                       <Check size={16} className="text-emerald-500" />
                     ) : isPresent === false ? (
                       <XIcon size={16} className="text-red-500" />
                     ) : (
-                      <span className="text-[14px] font-bold text-[var(--text-muted)]">?</span>
+                      <span className="text-[12px] font-bold text-[var(--text-muted)] opacity-30 select-none" title="Dars yo'q">-</span>
                     )}
                   </div>
                 )}
