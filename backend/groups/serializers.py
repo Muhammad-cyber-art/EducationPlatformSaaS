@@ -677,6 +677,7 @@ class GroupSerializer(serializers.ModelSerializer):
     computed_status = serializers.CharField(read_only=True)
     special_lesson_dates = serializers.SerializerMethodField()
     canceled_lesson_dates = serializers.SerializerMethodField()
+    last_3_lesson_dates = serializers.SerializerMethodField()
     days_display = serializers.CharField(read_only=True)
     days_display_full = serializers.CharField(read_only=True)
 
@@ -710,12 +711,22 @@ class GroupSerializer(serializers.ModelSerializer):
             "today_attendance_confirmed",
             "special_lesson_dates",
             "canceled_lesson_dates",
+            "last_3_lesson_dates",
         )
         read_only_fields = ("created_at", "students_count")
 
     def get_students_count(self, obj) -> int:
         # Faqat is_active=True bo'lgan o'quvchilarni sanaymiz
         return obj.enrollments.filter(is_active=True).count()
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_last_3_lesson_dates(self, obj) -> list:
+        try:
+            from homework_attends.services import get_last_3_lesson_dates
+            dates = get_last_3_lesson_dates(obj)
+            return [d.strftime('%Y-%m-%d') for d in dates]
+        except Exception:
+            return []
 
     @extend_schema_field(serializers.ListField(child=serializers.DateField()))
     def get_special_lesson_dates(self, obj):

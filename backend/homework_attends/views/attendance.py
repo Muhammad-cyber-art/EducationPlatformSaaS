@@ -55,10 +55,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
            requested_date = timezone.localdate()
 
        group = get_object_or_404(Group, id=group_id)
-       # O'tgan oylar uchun: faqat mavjud yozuvlarni ko'rsatish (yangi yaratmaslik)
        today = timezone.localdate()
+       last_3_dates = get_last_3_lesson_dates(group)
        is_past_month = requested_date.year < today.year or (requested_date.year == today.year and requested_date.month < today.month)
-       return get_or_create_attendance_records(group, requested_date, view_only=is_past_month)
+       view_only = is_past_month and (requested_date not in last_3_dates)
+       return get_or_create_attendance_records(group, requested_date, view_only=view_only)
 
     @action(detail=False, methods=['get'])
     def weekly_report(self, request):
@@ -77,6 +78,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         # 1. Update existing record
         if attendance_id is not None:
             instance = get_object_or_404(Attendance, id=attendance_id)
+            if request.user.is_authenticated and not self._user_can_access_group(request.user, instance.group):
+                return Response({"detail": "Sizda ushbu guruh davomatini tahrirlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+
             today = timezone.localdate()
             if instance.date != today:
                 last_3_dates = get_last_3_lesson_dates(instance.group)
@@ -112,6 +116,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Sana formati noto'g'ri (YYYY-MM-DD)"}, status=status.HTTP_400_BAD_REQUEST)
 
         group = get_object_or_404(Group, id=group_id)
+        if request.user.is_authenticated and not self._user_can_access_group(request.user, group):
+            return Response({"detail": "Sizda ushbu guruh davomatini tahrirlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
         
         # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars
         today = timezone.localdate()
@@ -165,6 +171,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Sana formati noto'g'ri (YYYY-MM-DD)"}, status=status.HTTP_400_BAD_REQUEST)
 
         group = get_object_or_404(Group, id=group_id)
+        if request.user.is_authenticated and not self._user_can_access_group(request.user, group):
+            return Response({"detail": "Sizda ushbu guruh davomatini tasdiqlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
         
         # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars
         today = timezone.localdate()
@@ -184,6 +192,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
     def _user_can_access_group(self, user, group):
         """Foydalanuvchi guruhga kirish huquqini tekshirish"""
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
         if user.role == 'super_admin':
             return True
         if user.role == 'admin':
@@ -386,10 +396,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
-        # Admin huquqini tekshirish
-        if request.user.role not in ['admin', 'super_admin']:
+        # Ruxsat tekshirish: Admin, super_admin yoki ushbu guruhning mentori
+        is_admin = request.user.role in ['admin', 'super_admin']
+        is_group_mentor = request.user.role == 'mentor' and self._user_can_access_group(request.user, attendance.group)
+        if not (is_admin or is_group_mentor):
             return Response(
-                {"detail": "Faqat administratorlar o'tgan davomatni tahrirlay oladi."},
+                {"detail": "Sizda ushbu guruh davomatini tahrirlash huquqi yo'q."},
                 status=status.HTTP_403_FORBIDDEN
             )
             
@@ -397,7 +409,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import ValidationError
             updated_attendance = edit_past_attendance(
                 attendance_id=attendance.id,
-                admin_user=request.user,
+                user=request.user,
                 new_status=serializer.validated_data['new_status'],
                 reason=serializer.validated_data['reason']
             )

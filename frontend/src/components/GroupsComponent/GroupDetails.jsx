@@ -244,20 +244,24 @@ export default function GroupDetailPage() {
 
   const isAdmin = userData?.role === 'super_admin' || userData?.role === 'admin';
 
-  // BUG #4 FIX: Admin uchun ham "oxirgi 3 ta dars" cheklovi qo'llanadi.
-  // lessonDates dan bugungi sanagacha bo'lgan o'tgan darslarni olib, tartibga solamiz.
+  // Oxirgi 3 ta dars: backenddan kelgan aniq sanalar (oy chegaralaridan qat'i nazar) yoki joriy oydagi fallback
   const last3EditableDates = useMemo(() => {
-    if (!lessonDates || !isCurrentMonth) return [];
+    if (Array.isArray(groupinfo?.last_3_lesson_dates) && groupinfo.last_3_lesson_dates.length > 0) {
+      return groupinfo.last_3_lesson_dates;
+    }
+    if (!lessonDates) return [];
     const pastDates = lessonDates.filter(d => d <= todayStr_actual);
     return pastDates.sort((a, b) => b.localeCompare(a)).slice(0, 3);
-  }, [lessonDates, todayStr_actual, isCurrentMonth]);
+  }, [groupinfo?.last_3_lesson_dates, lessonDates, todayStr_actual]);
 
-  const isLessonDay = Array.isArray(lessonDates) && lessonDates.includes(selectedDate);
+  const isLessonDay = (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) ||
+    last3EditableDates.includes(selectedDate);
 
+  // Mentorlar va Adminlar uchun oxirgi 3 ta o'tilgan dars yoki bugungi dars davomatini tahrirlash huquqi
   const canEditAttendance = isLessonDay && permissions.canTakeAttendance && isGroupLogicActive && (
     selectedDate === todayStr_actual ||
     (currentHour < 4 && selectedDate === yesterdayStr) ||
-    (isAdmin && last3EditableDates.includes(selectedDate))
+    last3EditableDates.includes(selectedDate)
   );
 
 

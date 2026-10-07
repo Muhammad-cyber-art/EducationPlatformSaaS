@@ -13,13 +13,13 @@ def get_last_3_lesson_dates(group):
     davomat yozuvlariga emas. Oy boshi muammosi uchun max 3 oy orqaga qaraydi.
     """
     today = timezone.localdate()
-    all_past_dates = []
+    all_past_dates = set()
     
     year, month = today.year, today.month
     for _ in range(3):  # MAX 3 oy orqaga qaraymiz (yetarli)
         dates = group.get_lesson_dates(year, month)
-        past = sorted([d for d in dates if d <= today], reverse=True)
-        all_past_dates = past + all_past_dates  # eski sanalar boshiga qo'shiladi
+        past = [d for d in dates if d <= today]
+        all_past_dates.update(past)
         
         if len(all_past_dates) >= 3:
             break
@@ -31,7 +31,7 @@ def get_last_3_lesson_dates(group):
             month -= 1
     
     # Eng yangi 3 tasini qaytaramiz
-    return sorted(all_past_dates, reverse=True)[:3]
+    return sorted(list(all_past_dates), reverse=True)[:3]
 
 def get_or_create_attendance_records(group, requested_date, view_only=False):
     """Davomat yozuvlarini olish yoki yaratish (istalgan kun uchun)
@@ -449,7 +449,7 @@ def archive_mock_test(instance, user):
         }
     )
 
-def edit_past_attendance(attendance_id, admin_user, new_status, reason=''):
+def edit_past_attendance(attendance_id, user, new_status, reason=''):
     from django.db import transaction
     from rest_framework.exceptions import ValidationError
     from .models import AttendanceEditLog
@@ -474,7 +474,7 @@ def edit_past_attendance(attendance_id, admin_user, new_status, reason=''):
         # 3. Tarixni yozish (Audit) — reason ixtiyoriy, bo'sh bo'lishi mumkin (BUG #3 FIX)
         AttendanceEditLog.objects.create(
             attendance=attendance,
-            changed_by=admin_user,
+            changed_by=user,
             old_status=attendance.is_present,
             new_status=new_status,
             reason=reason or ''
@@ -482,7 +482,7 @@ def edit_past_attendance(attendance_id, admin_user, new_status, reason=''):
         
         # 4. Asosiy o'zgarishni yozish
         attendance.is_present = new_status
-        attendance.marked_by = admin_user
+        attendance.marked_by = user
         attendance.save()
         
         # 5. Moliya recalculation — tranzaksiya yopilgach, post-commit da bajariladi
