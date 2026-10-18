@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { UserPlus, Send, MoreVertical, Edit3, UserRoundPlus, Activity, Target, Trash2, Check, ArrowRightLeft, FolderKanban } from "lucide-react";
 import GoBackButton from "../../sendback";
+import SyncStatusBadge from "../../SyncStatusBadge";
 
 const GroupHeader = ({
   isEditing,
@@ -153,6 +154,7 @@ const GroupHeader = ({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          <SyncStatusBadge />
           {!isEditing && (
             <>
               {/* Desktop buttons */}

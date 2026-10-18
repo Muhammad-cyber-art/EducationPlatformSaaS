@@ -1,3 +1,5 @@
+from django.db import models
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -451,22 +453,90 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         # Ruxsatlarni tekshirish (Access Control)
         user = request.user
         if user.role == 'admin':
-            allowed_branches = [user.branch_id] if user.branch_id else []
+            allowed_branches = set()
+            if user.branch_id:
+                allowed_branches.add(user.branch_id)
             if hasattr(user, 'branch_accesses'):
-                allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
-            student_branch = student.branch_id or (student.group.branch_id if student.group else None)
-            if not student_branch:
-                first_active_enrollment = student.enrollments.filter(is_active=True).select_related('group').first()
-                if first_active_enrollment and first_active_enrollment.group:
-                    student_branch = first_active_enrollment.group.branch_id
+                allowed_branches.update(user.branch_accesses.values_list('branch_id', flat=True))
 
-            if student_branch and student_branch not in allowed_branches:
+            # Studentning barcha aloqador filiallarini to'playmiz:
+            student_branches = set()
+            if student.branch_id:
+                student_branches.add(student.branch_id)
+            if student.group_id and student.group and student.group.branch_id:
+                student_branches.add(student.group.branch_id)
+
+            active_enrollment_branches = set(
+                student.enrollments.filter(is_active=True, group__branch__isnull=False)
+                .values_list('group__branch_id', flat=True)
+            )
+            student_branches.update(active_enrollment_branches)
+
+            if not student_branches:
+                any_branches = set(
+                    student.enrollments.filter(group__branch__isnull=False)
+                    .values_list('group__branch_id', flat=True)
+                )
+                student_branches.update(any_branches)
+
+            # Agar student birorta filialga aloqador bo'lsa va admin ushbu filiallarning
+            # birortasiga ham ruxsatga ega bo'lmasa, kirishni taqiqlaymiz
+            if student_branches and not allowed_branches.intersection(student_branches):
                 return Response({"detail": "Sizda ushbu o'quvchi ma'lumotlarini ko'rish huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+
+            # Self-healing: agar student.group yoki student.branch nofaol/eskirgan bo'lsa
+            if hasattr(student, 'sync_active_group_and_branch'):
+                try:
+                    student.sync_active_group_and_branch()
+                except Exception:
+                    pass
+
         elif user.role == 'mentor':
-            mentor_groups = Group.objects.filter(mentor=user)
-            student_groups = GroupEnrollment.objects.filter(student=student, is_active=True).values_list('group_id', flat=True)
-            if not mentor_groups.filter(id__in=student_groups).exists() and (not student.group_id or student.group_id not in mentor_groups.values_list('id', flat=True)):
-                return Response({"detail": "Sizda ushbu o'quvchi ma'lumotlarini ko'rish huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+            # 1. Mentorga 'students' moduli bo'yicha maxsus ruxsat berilgan bo'lsa (staff_permissions)
+            try:
+                perms = user.staff_permissions.permissions or {}
+                has_students_perm = bool(perms.get('students', False))
+            except Exception:
+                has_students_perm = False
+
+            if has_students_perm:
+                allowed_branches = set()
+                if user.branch_id:
+                    allowed_branches.add(user.branch_id)
+                if hasattr(user, 'branch_accesses'):
+                    allowed_branches.update(user.branch_accesses.values_list('branch_id', flat=True))
+
+                student_branches = set()
+                if student.branch_id:
+                    student_branches.add(student.branch_id)
+                student_branches.update(
+                    student.enrollments.filter(is_active=True, group__branch__isnull=False)
+                    .values_list('group__branch_id', flat=True)
+                )
+                if student_branches and not allowed_branches.intersection(student_branches):
+                    return Response({"detail": "Sizda ushbu o'quvchi ma'lumotlarini ko'rish huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+            else:
+                # Asosiy mentor yoki qo'shimcha (additional) mentor bo'lgan guruhlar
+                mentor_group_ids = set(
+                    Group.objects.filter(
+                        models.Q(mentor=user) | models.Q(additional_mentors__mentor=user)
+                    ).values_list('id', flat=True)
+                )
+
+                student_group_ids = set(
+                    student.enrollments.filter(is_active=True).values_list('group_id', flat=True)
+                )
+                if student.group_id:
+                    student_group_ids.add(student.group_id)
+
+                if not mentor_group_ids.intersection(student_group_ids):
+                    return Response({"detail": "Sizda ushbu o'quvchi ma'lumotlarini ko'rish huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
+
+            if hasattr(student, 'sync_active_group_and_branch'):
+                try:
+                    student.sync_active_group_and_branch()
+                except Exception:
+                    pass
 
         today = timezone.localdate()
         try:
@@ -488,33 +558,31 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 req_group_id = None
 
         try:
-            # O'quvchining barcha guruhlarini olish (faol va o'tgan)
-            all_enrollments = list(GroupEnrollment.objects.filter(
-                student=student
+            # O'quvchining faqat FAOL guruhlarini olish (eski guruhlar dars kunlariga aralashmasligi shart)
+            active_enrollments = list(GroupEnrollment.objects.filter(
+                student=student,
+                is_active=True
             ).select_related('group'))
 
-            all_available_groups = [e.group for e in all_enrollments if e.group]
-            if not all_available_groups and student.group:
-                all_available_groups = [student.group]
+            available_groups = [e.group for e in active_enrollments if e.group]
+            if not available_groups and student.group:
+                available_groups = [student.group]
 
             if req_group_id:
-                enrollments = [e for e in all_enrollments if e.group_id == req_group_id]
-            else:
-                enrollments = all_enrollments
-
-            active_groups = [e.group for e in enrollments if e.group]
-            if not active_groups and student.group:
-                if not req_group_id or student.group.id == req_group_id:
+                active_groups = [g for g in available_groups if g.id == req_group_id]
+                if not active_groups and student.group and student.group.id == req_group_id:
                     active_groups = [student.group]
+            else:
+                active_groups = available_groups
 
             # Join date xaritasi
             join_dates = {}
-            for e in enrollments:
+            for e in active_enrollments:
                 join_dates[e.group_id] = e.joined_at.date() if e.joined_at else (student.joined_at.date() if student.joined_at else None)
             if student.group_id and student.group_id not in join_dates:
                 join_dates[student.group_id] = student.joined_at.date() if student.joined_at else None
 
-            # Oydagi barcha guruhlarning rejalashtirilgan dars kunlarini olish
+            # Oydagi barcha faol guruhlarning rejalashtirilgan dars kunlarini olish
             group_lessons_map = {}
             for g in active_groups:
                 try:
@@ -531,7 +599,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     'join_date': join_dates.get(g.id)
                 }
 
-            # Oydagi mavjud davomat yozuvlarini olish (select_related('group') N+1 query larni oldini oladi)
+            # Oydagi mavjud davomat yozuvlarini olish (faqat faol guruhlar yoki so'ralgan guruh bo'yicha)
+            active_gids = [g.id for g in active_groups]
             attendance_qs = Attendance.objects.filter(
                 student=student,
                 date__year=year,
@@ -539,13 +608,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             ).select_related('group')
             if req_group_id:
                 attendance_qs = attendance_qs.filter(group_id=req_group_id)
-
-            # Tarixiy yozuvlarda mavjud boshqa guruhlarni ham guruhlar ro'yxatiga qo'shish
-            known_group_ids = {g.id for g in active_groups}
-            for att in attendance_qs:
-                if att.group and att.group.id not in known_group_ids:
-                    active_groups.append(att.group)
-                    known_group_ids.add(att.group.id)
+            else:
+                if active_gids:
+                    attendance_qs = attendance_qs.filter(group_id__in=active_gids)
 
             att_by_date = {}
             for att in attendance_qs:
@@ -628,9 +693,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                             status_str = "absent"
                             absent_count += 1
                             total_passed += 1
-                        lesson_groups_names = [r.group_name or (r.group.name if r.group else "Guruh") for r in records_today]
                     else:
                         status_str = "unconfirmed"
+                        lesson_groups_names = [r.group_name or (r.group.name if r.group else "Guruh") for r in records_today]
 
                 days_data.append({
                     "date": curr_date_str,
@@ -653,7 +718,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 "student_name": student.full_name,
                 "year": year,
                 "month": month,
-                "groups": [{"id": g.id, "name": g.name} for g in all_available_groups],
+                "groups": [{"id": g.id, "name": g.name} for g in available_groups],
                 "stats": {
                     "total_scheduled": total_scheduled,
                     "total_passed": total_passed,

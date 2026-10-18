@@ -259,3 +259,12 @@ class FinanceAbsentStudentsEndpointTests(APITestCase):
         returned_ids = {item["id"] for item in results}
         self.assertIn(self.s2.id, returned_ids)
         self.assertNotIn(self.s1.id, returned_ids)
+
+    def test_student_history_endpoint(self):
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('student-payment-student-history', kwargs={'student_id': self.s1.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['student']['id'], self.s1.id)
+        self.assertIn('monthly_payments', response.data)
+        self.assertIn('ledger_transactions', response.data)

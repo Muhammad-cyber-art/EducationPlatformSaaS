@@ -14,6 +14,8 @@
     "@tanstack/react-query": "^5.90.17",
     "autoprefixer": "^10.4.20",
     "axios": "^1.13.2",
+    "dexie": "^4.4.6",
+    "dexie-react-hooks": "^4.4.0",
     "framer-motion": "^12.23.25",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^0.556.0",
@@ -37,6 +39,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-pwa": "^2.0.0"
   }
 }

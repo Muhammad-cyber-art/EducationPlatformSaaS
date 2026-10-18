@@ -123,6 +123,8 @@ class IsStudentGroupOwnerOrSuperAdmin(permissions.BasePermission):
             # 2. Student qatnashayotgan guruhlardan birortasi Admin/Ruxsatli Mentor filialidami?
             if obj.groups.filter(branch_id__in=allowed_branches).exists():
                 return True
+            if obj.enrollments.filter(is_active=True, group__branch_id__in=allowed_branches).exists():
+                return True
 
         # Mentor o'zining ruxsati bo'lmagan holda, faqat o'z guruhidagi o'quvchilarni tahrirlay oladi
         if user.role == 'mentor':
@@ -139,7 +141,17 @@ class IsStudentGroupOwnerOrSuperAdmin(permissions.BasePermission):
             if in_m2m_groups:
                 return True
 
-            # 2) Legacy FK (student.group) bo'yicha ham tekshiramiz
+            # 2) Faol enrollmentlar orqali tekshirish
+            in_active_enrollments = obj.enrollments.filter(
+                is_active=True
+            ).filter(
+                models.Q(group__mentor=user) |
+                models.Q(group__additional_mentors__mentor=user)
+            ).exists()
+            if in_active_enrollments:
+                return True
+
+            # 3) Legacy FK (student.group) bo'yicha ham tekshiramiz
             legacy_group = getattr(obj, 'group', None)
             if not legacy_group:
                 return False

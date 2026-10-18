@@ -26,7 +26,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["student"]);
+      queryClient.invalidateQueries({ queryKey: ["student"] });
       dispatch({ type: "SET_EDITING", payload: false });
       toast.success("Profil tahrirlandi.");
     },
@@ -76,10 +76,12 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
         },
       );
     },
-    onSuccess: (res) => {
-      queryClient.invalidateQueries(["payments-all"]);
-      queryClient.invalidateQueries(["student"]);
-      queryClient.invalidateQueries(["student-history", student_id]); // ← tarix yangilansin
+    onSuccess: async (res) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["payments-all"] }),
+        queryClient.invalidateQueries({ queryKey: ["student"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-history", student_id] }),
+      ]);
       dispatch({ type: "TOGGLE_CONFIRM_PAYMENT", payload: false });
       toast.success(res?.data?.message || "To'lov tasdiqlandi.");
     },
@@ -99,9 +101,11 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
         month,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["payments-all"]);
-      queryClient.invalidateQueries(["student-history", student_id]);
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["payments-all"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-history", student_id] }),
+      ]);
       dispatch({ type: "TOGGLE_EDIT_PAYMENT", payload: false });
       toast.success("To'lov tahrirlandi.");
     },
@@ -114,16 +118,18 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
         ...data,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["payments-all"]);
-      queryClient.invalidateQueries(["student-history", student_id]);
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["payments-all"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-history", student_id] }),
+      ]);
       dispatch({ type: "TOGGLE_CUSTOM_PAYMENT", payload: false });
       toast.success("To'lov qabul qilindi.");
     },
     onError: (err) => {
       toast.error(
-        err.response?.data?.error ||
-          err.response?.data?.detail ||
+        err?.response?.data?.error ||
+          err?.response?.data?.detail ||
           "To'lovni qabul qilishda xatolik yuz berdi",
       );
     },
@@ -135,7 +141,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
         student_id,
       }),
     onSuccess: (res) => {
-      queryClient.invalidateQueries(["student"]);
+      queryClient.invalidateQueries({ queryKey: ["student"] });
       toast.success(res.data.status || "O'quvchi guruhdan chiqarildi.");
       if (
         res.data.status?.includes("oxirgi guruh") ||
@@ -160,10 +166,12 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
       await api.post(`groups/students/${student_id}/merge/`, {
         duplicate_id: duplicateId,
       }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries(["student"]);
-      queryClient.invalidateQueries(["payments-all"]);
-      queryClient.invalidateQueries(["student-history", student_id]);
+    onSuccess: async (res) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["student"] }),
+        queryClient.invalidateQueries({ queryKey: ["payments-all"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-history", student_id] }),
+      ]);
       dispatch({ type: "TOGGLE_MERGE_MODAL", payload: false });
       toast.success(res.data.message || "Muvaffaqiyatli birlashtirildi.");
     },
@@ -177,7 +185,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
   const disconnectBotMutation = useMutation({
     mutationFn: async () => await api.post(`groups/students/${student_id}/disconnect-bot/`),
     onSuccess: (res) => {
-      queryClient.invalidateQueries(["student"]);
+      queryClient.invalidateQueries({ queryKey: ["student"] });
       toast.success(res.data.message || "Botdan muvaffaqiyatli uzildi.");
     },
     onError: (err) => {
@@ -189,19 +197,34 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
 
   const generatePaymentMutation = useMutation({
     mutationFn: async (groupId) => {
-      const response = await api.post("/finance/generate-student-payment/", {
-        student_id,
-        group_id: groupId,
-      });
+      const payload = { student_id };
+      if (groupId) payload.group_id = groupId;
+      const response = await api.post("/finance/generate-student-payment/", payload);
       return response.data;
     },
-    onSuccess: () => {
-      toast.success("Oylik to'lov yaratildi");
-      queryClient.invalidateQueries(["payments-all"]);
-      queryClient.invalidateQueries(["student-history", student_id]);
+    onSuccess: async (data) => {
+      toast.success(data?.message || "Joriy oy to'lov ma'lumoti muvaffaqiyatli yaratildi");
+      
+      // 1. Agar backend yangilangan payments ro'yxatini qaytargan bo'lsa, keshni darhol yangilaymiz (0-kechikish)
+      if (Array.isArray(data?.payments)) {
+        queryClient.setQueryData(["payments-all", student_id], data.payments);
+      }
+
+      // 2. React Query v5 formati orqali keshni bekor qilib, to'liq qayta yuklaymiz
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["payments-all"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["student"] }),
+      ]);
+
+      // 3. Faol querylarni darhol refetch qilish
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["payments-all", student_id] }),
+        queryClient.refetchQueries({ queryKey: ["student-history", student_id] }),
+      ]);
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || "Xatolik yuz berdi");
+      toast.error(err.response?.data?.error || err.response?.data?.detail || "To'lov ma'lumotini yaratishda xatolik yuz berdi");
     },
   });
 

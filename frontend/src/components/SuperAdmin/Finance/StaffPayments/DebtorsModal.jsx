@@ -195,9 +195,9 @@ const StudentRow = memo(({ student, isPaid, formatCurrency }) => {
 });
 
 const DebtorsModal = ({ group, onClose, formatCurrency }) => {
-  if (!group) return null;
-
   const [activeTab, setActiveTab] = useState("debtors");
+
+  if (!group) return null;
 
   const unpaidStudents = group.unpaid_students || [];
   const paidStudents = group.paid_students || [];

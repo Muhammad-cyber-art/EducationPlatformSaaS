@@ -1,33 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { X, GraduationCap, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { safeArray } from "../../../../utils/safeArray";
 
 const JoinGroupModal = ({ isOpen, onClose, student, currentBranchId, api, onSuccess }) => {
-  const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [fetchingGroups, setFetchingGroups] = useState(false);
   const [createPayment, setCreatePayment] = useState(true);
 
-  // Guruhlarni yuklab olish
-  useEffect(() => {
-    const branchToUse = currentBranchId || student?.branch_id || student?.branch?.id;
-    if (isOpen) {
-      setFetchingGroups(true);
+  const branchToUse = currentBranchId || student?.branch_id || student?.branch?.id;
+
+  // Guruhlarni yuklab olish React Query orqali
+  const { data: groups = [], isLoading: fetchingGroups } = useQuery({
+    queryKey: ['join-groups', branchToUse, student?.id],
+    queryFn: async () => {
       const url = branchToUse ? `/groups/nested_groups/?branch_id=${branchToUse}&page_size=500` : `/groups/nested_groups/?page_size=500`;
-      api.get(url)
-        .then(res => {
-          const allGroups = safeArray(res.data?.results || res.data);
-          const studentGroupIds = safeArray(student?.groups).map(g => g.id);
-          // Faqat student hozir a'zo bo'lgan guruhlarni chiqaramiz
-          const filteredGroups = allGroups.filter(g => !studentGroupIds.includes(g.id));
-          setGroups(filteredGroups);
-        })
-        .catch(err => console.error("Guruhlarni yuklashda xato:", err))
-        .finally(() => setFetchingGroups(false));
-    }
-  }, [isOpen, currentBranchId, student, api]);
+      const res = await api.get(url);
+      const allGroups = safeArray(res.data?.results || res.data);
+      const studentGroupIds = safeArray(student?.groups).map((g) => g.id);
+      return allGroups.filter((g) => !studentGroupIds.includes(g.id));
+    },
+    enabled: Boolean(isOpen),
+  });
 
   const handleJoin = async () => {
     if (!selectedGroupId) return;

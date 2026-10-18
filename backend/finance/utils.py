@@ -836,11 +836,25 @@ def calculate_transfer_salary_adjustment(
         if total_units == 0:
             continue
 
-        # To'lov endi yangi guruhda saqlangan
-        p = full_payment_map.get((student.id, to_group.id))
-        paid_amount = Decimal(str(p.paid_amount or 0)) if p else Decimal("0")
-        is_fully_paid = p.is_paid if p else False
-        payment_amount = Decimal(str(p.amount or 0)) if p else Decimal("0")
+        # To'lov ma'lumotlarini har ikkala guruh (from_group va to_group) dan olamiz
+        p_to = full_payment_map.get((student.id, to_group.id))
+        p_from = full_payment_map.get((student.id, from_group.id))
+        if not p_from:
+            p_from = Payment.objects.filter(
+                student=student,
+                group=from_group,
+                month__year=month_date.year,
+                month__month=month_date.month,
+            ).first()
+
+        to_paid_amount = Decimal(str(p_to.paid_amount or 0)) if p_to else Decimal("0")
+        to_payment_amount = Decimal(str(p_to.amount or 0)) if p_to else Decimal("0")
+        is_to_fully_paid = p_to.is_paid if p_to else False
+
+        from_paid_amount = Decimal(str(p_from.paid_amount or 0)) if p_from else Decimal("0")
+        from_payment_amount = Decimal(str(p_from.amount or 0)) if p_from else Decimal("0")
+        is_from_fully_paid = p_from.is_paid if p_from else False
+
         custom_fee = (
             Decimal(str(student.custom_fee))
             if student.custom_fee is not None
@@ -849,26 +863,20 @@ def calculate_transfer_salary_adjustment(
 
         # ═══════════════════════════════════════════════════════════════════
         # A) O'quvchi MENTOR GURUHIDAN KETDI (transfer OUT)
-        #    Oddiy hisob: payment yangi guruhda → mentor 0 olgan
-        #    Tuzatish: transfer sanasigacha bo'lgan to'g'ri ulushni QO'SHAMIZ
+        #    Eski guruh mentori transfer sanasigacha dars o'tgan.
+        #    Tuzatish: o'tilgan darslar uchun haqli ulushni QO'SHAMIZ
         # ═══════════════════════════════════════════════════════════════════
         if from_group.id in mentor_group_ids_set and from_before:
             is_pct, pct, is_cnt, per_st = _commission(from_group.id)
-            if not is_pct and not is_cnt:
-                pass  # fixed — above checked
-            else:
+            if is_pct or is_cnt:
                 pre_count = len(from_before)
                 total_from = max(len(from_dates), 1)
-                total_to = max(len(to_dates), 1)
-                # negotiated uchun: barcha birliqlar yig'indisi (from_before + to_after)
-                # — ikkala mentor ulushi yig'indig'i 100% bo'lishi uchun
-                total_units_from = max(total_units, 1)
 
                 if student.status == "discount":
-                    # Davomat yangi guruh nomida saqlangan, lekin sanalar eski guruh kunlari.
-                    # fee_base: GroupTransfer snapshot yoki custom_fee yoki from_group narxi
+                    # Imtiyozli (discount) o'quvchi: eski guruhdagi qatnashgan darslar soni bo'yicha
                     present_before = Attendance.objects.filter(
                         student=student,
+                        group=from_group,
                         date__in=from_before,
                         is_present=True,
                         marked_by__isnull=False,
@@ -879,97 +887,81 @@ def calculate_transfer_salary_adjustment(
                         fee_base = Decimal(str(transfer.old_group_fee))
                     else:
                         fee_base = Decimal(str(from_group.monthly_price))
-                    # Kunlik narx: to'lov guruhining jami dars kunlariga bo'linadi
-                    daily = fee_base / Decimal(str(total_to))
+
+                    daily = fee_base / Decimal(str(total_from))
                     earned = daily * Decimal(str(present_before))
                     if is_pct:
                         net_adjustment += earned * pct
                     elif is_cnt:
-                        net_adjustment += (per_st / Decimal(str(total_to))) * Decimal(str(present_before))
-
-                else:
-                    # regular / low_income / negotiated → dars kunlari proportsiyasi
-                    proportion = Decimal(str(pre_count)) / Decimal(str(total_units))
-                    if is_pct:
-                        if commission_basis == "paid":
-                            if paid_amount > 0 or is_fully_paid:
-                                actual = payment_amount if is_fully_paid else paid_amount
-                                net_adjustment += actual * proportion * pct
-                        else:
-                            if custom_fee > 0:
-                                fee_base = custom_fee
-                            elif transfer.old_group_fee > 0:
-                                fee_base = Decimal(str(transfer.old_group_fee))
-                            else:
-                                fee_base = Decimal(str(from_group.monthly_price))
-                            net_adjustment += fee_base * proportion * pct
-                    elif is_cnt:
-                        if commission_basis == "paid":
-                            if paid_amount > 0 or is_fully_paid:
-                                net_adjustment += per_st * proportion
-                        else:
-                            net_adjustment += per_st * proportion
-
-        # ═══════════════════════════════════════════════════════════════════
-        # B) O'quvchi MENTOR GURUHIGA KELDI (transfer IN)
-        #    Oddiy hisob: barcha davomat yangi guruhda → mentor TO'LIQ olgan
-        #    Tuzatish: transfer sanasigacha bo'lgan ortiqcha ulushni AYIRAMIZ
-        # ═══════════════════════════════════════════════════════════════════
-        if to_group.id in mentor_group_ids_set:
-            is_pct, pct, is_cnt, per_st = _commission(to_group.id)
-            if not is_pct and not is_cnt:
-                pass
-            else:
-                total_to = max(len(to_dates), 1)
-                # negotiated uchun: Case A bilan bir xil denominator (total_units)
-                total_units_to = max(total_units, 1)
-
-                if student.status == "discount":
-                    # Yangi guruh nomida saqlangan lekin transfer sanasidan OLDINGI davomat
-                    present_before_new = Attendance.objects.filter(
-                        student=student,
-                        group=to_group,
-                        date__lt=t_date,
-                        is_present=True,
-                        marked_by__isnull=False,
-                    ).count()
-                    if present_before_new > 0:
-                        if custom_fee > 0:
-                            fee_base = custom_fee
-                        elif transfer.new_group_fee > 0:
-                            fee_base = Decimal(str(transfer.new_group_fee))
-                        else:
-                            fee_base = Decimal(str(to_group.monthly_price))
-                        daily = fee_base / Decimal(str(total_to))
-                        over = daily * Decimal(str(present_before_new))
-                        if is_pct:
-                            net_adjustment -= over * pct
-                        elif is_cnt:
-                            net_adjustment -= (per_st / Decimal(str(total_to))) * Decimal(str(present_before_new))
+                        net_adjustment += (per_st / Decimal(str(total_from))) * Decimal(str(present_before))
 
                 else:
                     # regular / low_income / negotiated
-                    # Ortiqcha proportsiya = eski guruh dars kunlari / jami dars birliklari
-                    pre_count_units = len(from_before)
-                    over_proportion = Decimal(str(pre_count_units)) / Decimal(str(total_units))
-                    if is_pct:
-                        if commission_basis == "paid":
-                            if paid_amount > 0 or is_fully_paid:
-                                actual = payment_amount if is_fully_paid else paid_amount
-                                net_adjustment -= actual * over_proportion * pct
-                        else:
-                            if custom_fee > 0:
-                                fee_base = custom_fee
-                            elif transfer.new_group_fee > 0:
-                                fee_base = Decimal(str(transfer.new_group_fee))
+                    # Agar p_from mavjud bo'lsa va u prorated bo'lsa:
+                    proportion = Decimal(str(pre_count)) / Decimal(str(total_units))
+                    
+                    if p_from and from_payment_amount > 0 and from_payment_amount < from_group.monthly_price:
+                        # p_from allaqachon transfer_student_to_group tomonidan prorated qilingan!
+                        # Qayta proportsiya qo'llanmaydi (Double Proration bug'i bartaraf etildi).
+                        actual_from = from_payment_amount if (commission_basis == "expected" or is_from_fully_paid) else from_paid_amount
+                        if is_pct:
+                            net_adjustment += actual_from * pct
+                        elif is_cnt:
+                            net_adjustment += per_st * (Decimal(str(pre_count)) / Decimal(str(total_from)))
+                    else:
+                        # p_from yo'q yoki to'lov yangi guruhda saqlangan bo'lsa:
+                        if is_pct:
+                            if commission_basis == "paid":
+                                source_paid = to_paid_amount if (to_paid_amount > 0 or is_to_fully_paid) else from_paid_amount
+                                actual = to_payment_amount if is_to_fully_paid else source_paid
+                                net_adjustment += actual * proportion * pct
                             else:
-                                fee_base = Decimal(str(to_group.monthly_price))
-                            net_adjustment -= fee_base * over_proportion * pct
-                    elif is_cnt:
-                        if commission_basis == "paid":
-                            if paid_amount > 0 or is_fully_paid:
-                                net_adjustment -= per_st * over_proportion
-                        else:
+                                if custom_fee > 0:
+                                    fee_base = custom_fee
+                                elif transfer.old_group_fee > 0:
+                                    fee_base = Decimal(str(transfer.old_group_fee))
+                                else:
+                                    fee_base = Decimal(str(from_group.monthly_price))
+                                net_adjustment += fee_base * proportion * pct
+                        elif is_cnt:
+                            net_adjustment += per_st * (Decimal(str(pre_count)) / Decimal(str(total_from)))
+
+        # ═══════════════════════════════════════════════════════════════════
+        # B) O'quvchi MENTOR GURUHIGA KELDI (transfer IN)
+        #    Agar yangi guruhdagi to'lov allaqachon prorated bo'lsa (new_amount),
+        #    calculate_group_revenue_and_mentor_share allaqachon to'g'ri ulush bergan.
+        #    Faqatgina to'lov TO'LIQ oy uchun olingan bo'lsagina ortiqcha qism ayiriladi.
+        # ═══════════════════════════════════════════════════════════════════
+        if to_group.id in mentor_group_ids_set:
+            is_pct, pct, is_cnt, per_st = _commission(to_group.id)
+            if is_pct or is_cnt:
+                total_to = max(len(to_dates), 1)
+
+                if student.status == "discount":
+                    # Yangi guruhdagi discount hisobi faqat yangi guruhdagi davomatga asoslangan,
+                    # shuning uchun ortiqcha ayirish talab qilinmaydi.
+                    pass
+                else:
+                    # Agar p_to to'liq oy narxiga teng bo'lsa (ya'ni prorated qilinmagan bo'lsa),
+                    # transferdan oldingi qism mentor oyligidan chegiriladi.
+                    is_full_month_in_new = (p_to and to_payment_amount >= to_group.monthly_price)
+                    if is_full_month_in_new:
+                        pre_count_units = len(from_before)
+                        over_proportion = Decimal(str(pre_count_units)) / Decimal(str(total_units))
+                        if is_pct:
+                            if commission_basis == "paid":
+                                if to_paid_amount > 0 or is_to_fully_paid:
+                                    actual = to_payment_amount if is_to_fully_paid else to_paid_amount
+                                    net_adjustment -= actual * over_proportion * pct
+                            else:
+                                if custom_fee > 0:
+                                    fee_base = custom_fee
+                                elif transfer.new_group_fee > 0:
+                                    fee_base = Decimal(str(transfer.new_group_fee))
+                                else:
+                                    fee_base = Decimal(str(to_group.monthly_price))
+                                net_adjustment -= fee_base * over_proportion * pct
+                        elif is_cnt:
                             net_adjustment -= per_st * over_proportion
 
     return floor_amount(net_adjustment)

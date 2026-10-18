@@ -72,8 +72,6 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
         }
     }, [inView, loadMore]);
 
-    let lastDateBadge = null;
-
     return (
         <table className="w-full text-left border-collapse">
             <thead>
@@ -93,13 +91,13 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                     <tr><td colSpan="6" className="p-16 text-center text-[var(--text-muted)] font-black uppercase tracking-widest">Hozircha hech qanday tushum topilmadi</td></tr>
                 ) : (
                     <>
-                        {payments.map((p) => {
+                        {payments.map((p, idx) => {
                             const methodMeta = getMethodMeta(p.payment_details?.payment_method, p.payment_details?.payment_method_display);
                             const isCancelled = p.status === 'cancelled';
                             const isDeleted = p.student_name?.includes("O'chirilgan");
                             const dateBadge = formatDateBadge(p.created_at || p.date);
-                            const showBadge = dateBadge !== lastDateBadge;
-                            if (showBadge) lastDateBadge = dateBadge;
+                            const prevDateBadge = idx > 0 ? formatDateBadge(payments[idx - 1].created_at || payments[idx - 1].date) : null;
+                            const showBadge = idx === 0 || dateBadge !== prevDateBadge;
 
                             return (
                                 <React.Fragment key={p.id}>
@@ -206,8 +204,6 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
         }
     }, [inView, loadMore]);
 
-    let lastDateBadge = null;
-
     return (
         <table className="w-full text-left border-collapse">
             <thead>
@@ -227,10 +223,10 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                     <tr><td colSpan="6" className="p-16 text-center text-[var(--text-muted)] font-black uppercase tracking-widest">Hozircha hech qanday chiqim topilmadi</td></tr>
                 ) : (
                     <>
-                        {withdrawals.map((w) => {
+                        {withdrawals.map((w, idx) => {
                             const dateBadge = formatDateBadge(w.created_at || w.date);
-                            const showBadge = dateBadge !== lastDateBadge;
-                            if (showBadge) lastDateBadge = dateBadge;
+                            const prevDateBadge = idx > 0 ? formatDateBadge(withdrawals[idx - 1].created_at || withdrawals[idx - 1].date) : null;
+                            const showBadge = idx === 0 || dateBadge !== prevDateBadge;
 
                             return (
                                 <React.Fragment key={w.id}>
@@ -387,8 +383,6 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
         }
     };
 
-    let lastMobileDateBadge = null;
-
     return (
         <div className="relative">
             {/* Desktop Table View */}
@@ -426,10 +420,10 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                     <div className="p-20 text-center text-[var(--text-muted)] font-black uppercase tracking-widest">Hech qanday ma'lumot topilmadi</div>
                 ) : (
                     <>
-                        {data.map((item) => {
+                        {data.map((item, idx) => {
                             const dateBadge = formatDateBadge(item.created_at || item.date);
-                            const showBadge = dateBadge !== lastMobileDateBadge;
-                            if (showBadge) lastMobileDateBadge = dateBadge;
+                            const prevDateBadge = idx > 0 ? formatDateBadge(data[idx - 1].created_at || data[idx - 1].date) : null;
+                            const showBadge = idx === 0 || dateBadge !== prevDateBadge;
 
                             return (
                                 <React.Fragment key={item.id}>

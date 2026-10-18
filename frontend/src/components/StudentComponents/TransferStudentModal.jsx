@@ -1,31 +1,25 @@
-import React, { useState, useEffect } from'react';
-import toast from'react-hot-toast';
-import { X, ArrowRightLeft, CheckCircle2, AlertCircle, Loader2 } from'lucide-react';
-import { safeArray } from'../../utils/safeArray';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { X, ArrowRightLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { safeArray } from '../../utils/safeArray';
 
 const TransferStudentModal = ({ isOpen, onClose, student, fromGroup, currentBranchId, api, onSuccess }) => {
- const [groups, setGroups] = useState([]);
- const [selectedGroupId, setSelectedGroupId] = useState('');
- const [loading, setLoading] = useState(false);
- const [fetchingGroups, setFetchingGroups] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [loading, setLoading] = useState(false);
 
- // Guruhlarni yuklab olish
- useEffect(() => {
- if (isOpen && currentBranchId) {
- setFetchingGroups(true);
- api.get(`/groups/groups/?branch_id=${currentBranchId}&page_size=200`)
- .then(res => {
- // O'quvchining hozirgi guruhini ro'yxatdan chiqarib tashlaymiz
- const groupsArray = safeArray(res.data);
- const availableGroups = groupsArray.filter(
- g => g.id !== (fromGroup?.id || student?.group?.id)
- );
- setGroups(availableGroups);
- })
- .catch(err => console.error("Guruhlarni yuklashda xato:", err))
- .finally(() => setFetchingGroups(false));
- }
- }, [isOpen, currentBranchId, student, api]);
+  // Guruhlarni yuklab olish React Query orqali (cascading setState xatosi bartaraf etildi)
+  const { data: groups = [], isLoading: fetchingGroups } = useQuery({
+    queryKey: ['transfer-groups', currentBranchId, student?.id],
+    queryFn: async () => {
+      const res = await api.get(`/groups/groups/?branch_id=${currentBranchId}&page_size=200`);
+      const groupsArray = safeArray(res.data);
+      return groupsArray.filter(
+        g => g.id !== (fromGroup?.id || student?.group?.id)
+      );
+    },
+    enabled: Boolean(isOpen && currentBranchId),
+  });
 
  const handleTransfer = async () => {
  if (!selectedGroupId) return;

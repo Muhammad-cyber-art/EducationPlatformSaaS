@@ -53,3 +53,43 @@ export function getPaymentStatus(payment) {
         shadowColor: '#ef444415',
     };
 }
+
+/**
+ * Berilgan to'lov yoki sana joriy oyga tegishli ekanligini
+ * brauzerning vaqt mintaqasi (timezone offset) dan qat'i nazar
+ * 100% ishonchli aniqlash.
+ * 
+ * Django DateField qiymati "YYYY-MM-DD" (masalan "2026-10-01") formatida keladi.
+ * JS new Date("2026-10-01") esa UTC midnight sifatida o'qilib, manfiy timezonelarda
+ * (masalan GMT-3, GMT-5) oldingi oyning oxirgi kuniga aylanib qoladi.
+ * Shu sababli string regex orqali solishtirish barcha timezonelarda xatosiz ishlaydi.
+ */
+export function isCurrentMonthPayment(paymentOrDateStr) {
+    if (!paymentOrDateStr) return false;
+    
+    const monthVal = typeof paymentOrDateStr === 'object' 
+        ? (paymentOrDateStr.month || paymentOrDateStr.date) 
+        : paymentOrDateStr;
+
+    if (!monthVal) return false;
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1 - 12
+
+    if (typeof monthVal === 'string') {
+        const match = monthVal.match(/^(\d{4})-(\d{2})/);
+        if (match) {
+            const y = parseInt(match[1], 10);
+            const m = parseInt(match[2], 10);
+            return y === currentYear && m === currentMonth;
+        }
+    }
+
+    if (monthVal instanceof Date) {
+        return monthVal.getFullYear() === currentYear && (monthVal.getMonth() + 1) === currentMonth;
+    }
+
+    return false;
+}
+

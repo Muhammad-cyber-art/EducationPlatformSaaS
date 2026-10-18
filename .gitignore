@@ -23,6 +23,8 @@ venv/
 logs/
 db.sqlite3
 db.sqlite3-journal
+*.dump
+*.sql
 
 # Media & Static
 /media

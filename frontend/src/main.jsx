@@ -9,7 +9,24 @@ import ErrorBoundary from'./components/Common/ErrorBoundary.jsx';
 import { Provider } from'react-redux';
 import { store } from'./store';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 daqiqa
+      gcTime: 1000 * 60 * 60 * 24, // 24 soat xotirada keshni saqlash
+      retry: (failureCount) => {
+        // Tarmoq uzilgan bo'lsa (offline) keraksiz qayta so'rov yuborib serverni qidirmaslik
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+        return failureCount < 2;
+      },
+      refetchOnWindowFocus: false, // Oflayn holatda tabga qaytganda xato otmasligi uchun
+      networkMode: 'offlineFirst', // TanStack Query v5: Oflayn paytda so'rovni to'xtatmaydi, keshdan beradi
+    },
+    mutations: {
+      networkMode: 'offlineFirst',
+    },
+  },
+});
 
 createRoot(document.getElementById('root')).render(
  <ErrorBoundary>

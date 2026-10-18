@@ -42,20 +42,22 @@ function uiReducer(state, action) {
       return { ...state, isEditing: true, editData: action.payload, showMenu: false };
     case "UPDATE_EDIT_DATA":
       return { ...state, editData: { ...state.editData, ...action.payload } };
-    case "TOGGLE_MARK":
+    case "TOGGLE_MARK": {
       const newMarked = { ...state.markedStudents };
       if (newMarked[action.payload]) delete newMarked[action.payload];
       else newMarked[action.payload] = true;
       localStorage.setItem('marked_students', JSON.stringify(newMarked));
       return { ...state, markedStudents: newMarked };
+    }
     case "CLEAR_MARKS":
       localStorage.removeItem('marked_students');
       return { ...state, markedStudents: {} };
-    case "SELECT_ALL_MARKS":
+    case "SELECT_ALL_MARKS": {
       const allMarked = {};
       action.payload.forEach(s => { allMarked[s.id] = true; });
       localStorage.setItem('marked_students', JSON.stringify(allMarked));
       return { ...state, markedStudents: allMarked };
+    }
     default:
       return state;
   }
@@ -182,7 +184,7 @@ export default function GroupDetailPage() {
       }
       return prev - 1;
     });
-  }, []);
+  }, [setSelectedMonth, setSelectedYear]);
 
   const handleNextMonth = useCallback(() => {
     const now = new Date();
@@ -196,13 +198,13 @@ export default function GroupDetailPage() {
       if (prev === 12) setSelectedYear(nextYear);
       return nextMonth;
     });
-  }, [selectedYear]);
+  }, [selectedYear, setSelectedMonth, setSelectedYear]);
 
   const handleGoToCurrentMonth = useCallback(() => {
     const now = new Date();
     setSelectedMonth(now.getMonth() + 1);
     setSelectedYear(now.getFullYear());
-  }, []);
+  }, [setSelectedMonth, setSelectedYear]);
 
   const availableDates = useMemo(() => {
     if (!lessonDates) return [todayStr];

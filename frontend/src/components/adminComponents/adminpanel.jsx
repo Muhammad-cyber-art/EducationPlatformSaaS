@@ -9,6 +9,7 @@ import { GlobalContext } from "../../GlobalContext";
 import { get_user_info } from "../Authorized/getRole";
 import { Bell, FileDown, AlertTriangle, CheckCircle, Volume2, History, Download, Search, X } from "lucide-react";
 import MobileBottomNav from "../Navigation/MobileBottomNav";
+import SyncStatusBadge from "../SyncStatusBadge";
 import {
     fetchAdminMe,
     setAfterSix,
@@ -313,6 +314,11 @@ export default function AdminPanel() {
                             </div>
                         )}
 
+                        {/* Offline-First Sinxronizatsiya holati */}
+                        <div className="hidden sm:flex items-center">
+                            <SyncStatusBadge />
+                        </div>
+
                         {/* Theme Toggle */}
                         <div className="flex items-center">
                             <ThemeToggle custom />
@@ -467,7 +473,6 @@ export default function AdminPanel() {
                         </div>
                     </GlobalContext.Provider>
                 </main>
-
                 <MobileBottomNav />
             </div>
         </div>

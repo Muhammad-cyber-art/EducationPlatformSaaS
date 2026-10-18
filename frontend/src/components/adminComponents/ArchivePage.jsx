@@ -45,9 +45,10 @@ export default function ArchivePage() {
 
   const [markedItems, setMarkedItems] = useState({});
 
-  useEffect(() => {
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
     setMarkedItems({});
-  }, [activeTab]);
+  };
 
   const onToggleMark = (id) => {
     setMarkedItems(prev => {
@@ -159,7 +160,7 @@ export default function ArchivePage() {
 
       <ArchiveHeader />
 
-      <ArchiveTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
+      <ArchiveTabs tabs={tabs} activeTab={activeTab} setActiveTab={handleTabChange} />
 
       <ArchiveTable
         type={activeTab}

@@ -16,6 +16,7 @@ export default function StudentFinanceSection({
   dispatch,
   historyLoading = false,
   paymentLoading = false,
+  generatePaymentMutation,
 }) {
   const [activeTab, setActiveTab] = useState("history"); // 'wallet' or 'history'
 
@@ -71,6 +72,8 @@ export default function StudentFinanceSection({
             studentStatus={studentStatus}
             dispatch={dispatch}
             isLoading={historyLoading}
+            generatePaymentMutation={generatePaymentMutation}
+            studentData={studentData}
           />
         )}
       </div>

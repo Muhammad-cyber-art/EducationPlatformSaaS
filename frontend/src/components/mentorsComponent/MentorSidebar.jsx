@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, Building2, UserCircle, Sparkles, LogOut, ShieldAlert, Zap, Circle, Sun, Moon, DollarSign, CalendarDays, Activity } from "lucide-react";
 import { get_user_info } from "../Authorized/getRole";
 import api from "../../tokenUpdater/updater";
+import SyncStatusBadge from "../SyncStatusBadge";
 
 
 export default function MentorSidebar() {
@@ -133,7 +134,10 @@ export default function MentorSidebar() {
             </div>
 
             {/* PROFILE SECTION */}
-            <div className="mt-auto pt-6 border-t border-[var(--border-glass)]">
+            <div className="mt-auto pt-6 border-t border-[var(--border-glass)] flex flex-col gap-3">
+                <div className="px-1">
+                    <SyncStatusBadge />
+                </div>
                 <div
                     onClick={() => navigate(getLinkWithBranch("/mentor/profile"))}
                     className={`flex items-center gap-4 px-4 py-4 mb-6 group cursor-pointer border rounded-2xl transition-all shadow-inner ${location.pathname === "/mentor/profile" ? 'bg-[var(--gold-dim)] border-[var(--gold)]/30' : 'bg-[var(--bg-void)]/40 border-[var(--border-glass)] hover:bg-[var(--gold-dim)] hover:border-[var(--gold)]/20'}`}

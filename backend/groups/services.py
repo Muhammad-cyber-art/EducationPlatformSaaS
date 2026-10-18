@@ -94,9 +94,10 @@ def unenroll_student_from_group(group, student_id, request_user):
         raise ValueError("Ushbu o'quvchi bu guruhda emas")
 
     with transaction.atomic():
-        # Enrollmentni delete emas, faqat is_active=False qilamiz (tarix saqlanadi)
+        # Enrollmentni delete emas, faqat is_active=False va left_at belgilaymiz (tarix saqlanadi)
         enrollment.is_active = False
-        enrollment.save()
+        enrollment.left_at = timezone.now()
+        enrollment.save(update_fields=['is_active', 'left_at'])
 
         # BUG FIX: O'quvchi guruhdan chiqarilganda, shu guruhga tegishli
         # uy vazifa va mock-test yozuvlarini tozalaymiz.
@@ -135,24 +136,21 @@ def unenroll_student_from_group(group, student_id, request_user):
                 full_name=student.full_name,
                 phone=student.phone,
                 branch=group.branch,
-                notes=f"{group.name} guruhidan chiqarildi | Tizimda boshqa guruhlarda faol",
+                notes=f"[Faol o'quvchi] {group.name} guruhidan chiqarildi | Tizimda boshqa guruhlarda faol",
                 telegram_id=student.telegram_id,
                 parent_telegram_id=student.parent_telegram_id
             )
             
             # BUG #1 FIX: Faqat is_active=True bo'lgan enrollment olinadi.
-            # Avval is_active filtrisiz edi — hozirgina is_active=False qilingan
-            # enrollment qaytarib olinardi va student.group noto'g'ri bo'lib qolardi.
             next_enrollment = GroupEnrollment.objects.filter(student=student, is_active=True).first()
             if next_enrollment:
                 student.group = next_enrollment.group
-                # Branchni ham qolgan guruhga moslaymiz
                 student.branch = next_enrollment.group.branch
                 student.save()
                 
             from finance.services import sync_mentor_salary
             sync_mentor_salary(group)
-                
+            
             return "active_elsewhere"
 
 def transfer_student_to_group(student, new_group_id, request_user, reason, from_group_id=None):
@@ -181,9 +179,6 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
                 return gr.monthly_price
             if st.status in ['low_income', 'negotiated']:
                 return st.custom_fee if st.custom_fee is not None else Decimal('0')
-            # BUG FIX: 'discount' o'quvchilar uchun to'lov davomatga qarab hisoblanadi,
-            # bu yerda esa snapshot narxi sifatida guruh narxini olamiz.
-            # Asl hisob transfer tugagach qayta amalga oshiriladi (pastda).
             if st.status == 'discount':
                 return gr.monthly_price
             return gr.monthly_price
@@ -191,15 +186,31 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
         old_group_fee = floor_amount(get_effective_fee(student, old_group))
         new_group_fee = floor_amount(get_effective_fee(student, new_group))
 
-        # 1. Enrollmentlar bilan ishlash
-        old_enrollment = GroupEnrollment.objects.filter(student=student, group=old_group).first()
-        if old_enrollment:
-            old_enrollment.is_active = False
-            old_enrollment.save()
+        # 1. Davomat (Attendance) ni butkul yangi guruhga o'tkazish
+        # User talabi: O'quvchi boshqa guruhga transfer bo'lishi bilan dars kunlari va davomat
+        # butkul yangi guruhga o'tishi kerak. Eski guruhdan qoladigan yagona narsa - TO'LOV!
+        from homework_attends.models import Attendance
+        old_attendances = Attendance.objects.filter(student=student, group=old_group)
+        for old_att in old_attendances:
+            existing_new = Attendance.objects.filter(student=student, group=new_group, date=old_att.date).first()
+            if existing_new:
+                if (old_att.is_present and not existing_new.is_present) or (old_att.marked_by and not existing_new.marked_by):
+                    existing_new.is_present = old_att.is_present
+                    existing_new.marked_by = old_att.marked_by
+                    existing_new.save()
+                old_att.delete()
+            else:
+                old_att.group = new_group
+                old_att.save(update_fields=['group'])
+
+        # Eski enrollment butunlay o'chiriladi (eski guruhdan asar ham qolmaydi)
+        GroupEnrollment.objects.filter(student=student, group=old_group).delete()
+            
         new_enrollment, _ = GroupEnrollment.objects.get_or_create(student=student, group=new_group)
-        if not new_enrollment.is_active:
+        if not new_enrollment.is_active or new_enrollment.left_at is not None:
             new_enrollment.is_active = True
-            new_enrollment.save()
+            new_enrollment.left_at = None
+            new_enrollment.save(update_fields=['is_active', 'left_at'])
 
         # 2. To'lovni hisoblash (Prorated)
         old_lesson_dates = old_group.get_lesson_dates(current_month_start.year, current_month_start.month)
@@ -285,9 +296,75 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
                 p_obj.is_partial = False
             p_obj.save()
 
-        # 3. Davomat, Uy vazifalari va Tranzaksiyalar o'z guruhida qoladi (Tarix saqlanishi uchun)
-        
-        # 6. Transfer log
+        # Filiallararo to'lov o'tkazmasi (Inter-branch ledger clearing)
+        if old_group.branch_id != new_group.branch_id and excess_paid > 0:
+            import uuid
+            from finance.models import FinanceTransaction
+            FinanceTransaction.objects.create(
+                related_id=f"TRF-OUT-{student.id}-{uuid.uuid4().hex[:8]}",
+                transaction_type='expense',
+                category='other',
+                status='completed',
+                record_type='reversal',
+                amount=excess_paid,
+                date=today,
+                marked_by=request_user,
+                branch=old_group.branch,
+                student=student,
+                group=old_group,
+                student_name=student.full_name,
+                group_name=old_group.name,
+                payment_method='other',
+                title=f"Filiallararo transfer chiqim: {student.full_name}",
+                description=f"{old_group.name} dan {new_group.name} ({new_group.branch.name}) ga o'quvchi to'lov qoldig'i transferi",
+                is_verified=True,
+                verified_by=request_user,
+                verified_at=timezone.now()
+            )
+            FinanceTransaction.objects.create(
+                related_id=f"TRF-IN-{student.id}-{uuid.uuid4().hex[:8]}",
+                transaction_type='income',
+                category='student_fee',
+                status='completed',
+                record_type='payment',
+                amount=excess_paid,
+                date=today,
+                marked_by=request_user,
+                branch=new_group.branch,
+                student=student,
+                group=new_group,
+                student_name=student.full_name,
+                group_name=new_group.name,
+                payment_method='other',
+                title=f"Filiallararo transfer kirim: {student.full_name}",
+                description=f"{old_group.branch.name} filialidan {new_group.name} guruhiga qabul qilingan to'lov",
+                is_verified=True,
+                verified_by=request_user,
+                verified_at=timezone.now()
+            )
+
+        # 3. Uy vazifalari va Mock testlar tozalash va tayyorlash
+        from homework_attends.models import HomeworkSubmission, MockTestResult, Homework
+        HomeworkSubmission.objects.filter(
+            student=student,
+            homework__group=old_group,
+            status=HomeworkSubmission.NOT_SUBMITTED
+        ).delete()
+        MockTestResult.objects.filter(
+            student=student,
+            test__group=old_group,
+            score=''
+        ).delete()
+
+        # Yangi guruhdagi oxirgi vazifalarga submission ochish
+        for hw in Homework.objects.filter(group=new_group).order_by('-created_at')[:5]:
+            HomeworkSubmission.objects.get_or_create(
+                homework=hw,
+                student=student,
+                defaults={'status': HomeworkSubmission.NOT_SUBMITTED}
+            )
+
+        # 4. Transfer log
         GroupTransfer.objects.create(
             student=student,
             from_group=old_group,
@@ -299,11 +376,14 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
             new_group_fee=new_group_fee
         )
 
-        # 7. Student model yangilash (agar student.group shu eski guruh bo'lsa yoki umuman bo'lmasa)
-        if student.group == old_group or not student.group:
+        # 5. Student model yangilash
+        is_current_group_inactive = not GroupEnrollment.objects.filter(
+            student=student, group=student.group, is_active=True
+        ).exists() if student.group else True
+
+        if student.group == old_group or not student.group or is_current_group_inactive:
             student.group = new_group
             
-            # Agar o'quvchining eski filialida boshqa faol guruhlari qolmagan bo'lsagina profil filiali o'zgaradi
             has_other_groups_in_old_branch = GroupEnrollment.objects.filter(
                 student=student,
                 group__branch=old_group.branch,
@@ -322,44 +402,101 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
     return True
 
 def merge_student_profiles(master, duplicate_id):
-    """Ikki o'quvchi profilini birlashtirish"""
+    """Ikki o'quvchi profilini birlashtirish (dublikatsiz va IntegrityError xatolarisiz)"""
     duplicate = get_object_or_404(Student, id=duplicate_id)
     
     with transaction.atomic():
+        from homework_attends.models import Attendance, HomeworkSubmission, MockTestResult
+        from finance.models import Payment, FinanceTransaction
+        from groups.models import GroupTransfer, GroupEnrollment
+        from telegram_bot.models import BotProfile
+
         # 1. Enrollments
         for enrollment in duplicate.enrollments.all():
-            GroupEnrollment.objects.get_or_create(student=master, group=enrollment.group)
+            m_enr, created = GroupEnrollment.objects.get_or_create(
+                student=master,
+                group=enrollment.group,
+                defaults={"is_active": enrollment.is_active, "left_at": enrollment.left_at}
+            )
+            if enrollment.is_active and not m_enr.is_active:
+                m_enr.is_active = True
+                m_enr.left_at = None
+                m_enr.save(update_fields=['is_active', 'left_at'])
         
-        # 2. Attendance
-        Attendance.objects.filter(student=duplicate).update(student=master)
-        # Handle unique conflicts for same date/lesson
-        attendances = Attendance.objects.filter(student=duplicate)
-        for attr in attendances:
-            try:
-                attr.student = master
-                attr.save()
-            except IntegrityError:
+        # 2. Attendance (handle unique constraint: student, group, date)
+        for attr in Attendance.objects.filter(student=duplicate):
+            conflict = Attendance.objects.filter(student=master, group=attr.group, date=attr.date).exists()
+            if conflict:
                 attr.delete()
+            else:
+                attr.student = master
+                attr.save(update_fields=['student'])
 
-        # 3. Homework & Results
-        HomeworkSubmission.objects.filter(student=duplicate).update(student=master)
-        MockTestResult.objects.filter(student=duplicate).update(student=master)
+        # 3. Homework Submissions (handle unique_together = ('homework', 'student'))
+        for sub in HomeworkSubmission.objects.filter(student=duplicate):
+            existing_sub = HomeworkSubmission.objects.filter(homework=sub.homework, student=master).first()
+            if existing_sub:
+                if sub.status in ['full', 'half'] and existing_sub.status == 'not_submitted':
+                    existing_sub.status = sub.status
+                    existing_sub.submitted_at = sub.submitted_at
+                    existing_sub.save(update_fields=['status', 'submitted_at'])
+                sub.delete()
+            else:
+                sub.student = master
+                sub.save(update_fields=['student'])
 
-        # 4. Finance
-        Payment.objects.filter(student=duplicate).update(student=master)
+        # Mock Test Results (handle unique_together = ('test', 'student'))
+        for mtr in MockTestResult.objects.filter(student=duplicate):
+            existing_mtr = MockTestResult.objects.filter(test=mtr.test, student=master).first()
+            if existing_mtr:
+                if mtr.score and not existing_mtr.score:
+                    existing_mtr.score = mtr.score
+                    existing_mtr.save(update_fields=['score'])
+                mtr.delete()
+            else:
+                mtr.student = master
+                mtr.save(update_fields=['student'])
+
+        # 4. Finance Payments (Birlashtirish - duplicate invoice bo'lmasligi uchun)
+        for p in Payment.objects.filter(student=duplicate):
+            existing_p = Payment.objects.filter(student=master, group=p.group, month=p.month).first()
+            if existing_p:
+                existing_p.paid_amount += p.paid_amount
+                if existing_p.paid_amount >= existing_p.amount and existing_p.amount > 0:
+                    existing_p.is_paid = True
+                    existing_p.is_partial = False
+                elif existing_p.paid_amount > 0:
+                    existing_p.is_partial = True
+                existing_p.save()
+                p.delete()
+            else:
+                p.student = master
+                p.save(update_fields=['student'])
+
+        # Finance Transactions
         FinanceTransaction.objects.filter(student=duplicate).update(student=master)
 
         # 5. History
         GroupTransfer.objects.filter(student=duplicate).update(student=master)
 
-        # 6. Metadata merge
+        # 6. BotProfile
+        dup_bot = BotProfile.objects.filter(student=duplicate).first()
+        master_bot = BotProfile.objects.filter(student=master).first()
+        if dup_bot:
+            if not master_bot:
+                dup_bot.student = master
+                dup_bot.save(update_fields=['student'])
+            else:
+                dup_bot.delete()
+
+        # 7. Metadata merge
         if not master.telegram_id: master.telegram_id = duplicate.telegram_id
         if not master.parent_telegram_id: master.parent_telegram_id = duplicate.parent_telegram_id
         
         master.notes = f"{master.notes or ''}\n[MERGED FROM {duplicate.id}]: {duplicate.notes or ''}".strip()
         master.save()
 
-        # 7. Delete duplicate
+        # 8. Delete duplicate
         duplicate.delete()
         
     return master
@@ -432,7 +569,6 @@ def assign_waiting_student_to_group(waiting_student, group_id, request_user):
                 student.group = group
                 student.branch = group.branch
                 student.save()
-                archived.delete()
             else:
                 # 3. Mutlaqo yangi o'quvchi
                 student = Student.objects.create(
@@ -445,8 +581,15 @@ def assign_waiting_student_to_group(waiting_student, group_id, request_user):
                     parent_telegram_id=waiting_student.parent_telegram_id
                 )
         
-        # Many-to-Many link
-        GroupEnrollment.objects.get_or_create(student=student, group=group)
+        # Many-to-Many link: faollashtirish va left_at ni tozalash
+        enrollment, created = GroupEnrollment.objects.get_or_create(
+            student=student, group=group, defaults={"is_active": True, "left_at": None}
+        )
+        if not created and (not enrollment.is_active or enrollment.left_at is not None):
+            enrollment.is_active = True
+            enrollment.left_at = None
+            enrollment.save(update_fields=['is_active', 'left_at'])
+
         waiting_student.delete()
         
     return student
@@ -510,7 +653,7 @@ def cancel_lesson_day(group, date, request_user, reason=""):
         # Imtiyozli o'quvchilarning to'lovlarini sinxronlashtirish
         try:
             from finance.services import update_attendance_based_payments
-            for st in group.students.filter(status='discount', is_active=True):
+            for st in group.students.filter(enrollments__group=group, enrollments__is_active=True, status='discount', is_active=True).distinct():
                 update_attendance_based_payments(st, group, date)
         except Exception as e:
             logger.warning("Student payments update error on cancel_lesson_day: %s", e)

@@ -89,12 +89,15 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
   const groups = attendancePayload?.groups || [];
   const days = attendancePayload?.days || [];
 
-  // O'quvchi a'zo bo'lgan barcha guruhlar ro'yxati (props + api payload birlashmasi)
+  // O'quvchi a'zo bo'lgan faol guruhlar ro'yxati (API eng ishonchli manba)
   const allGroupsList = useMemo(() => {
-    const fromProps = Array.isArray(studentGroups) ? studentGroups : [];
     const fromPayload = Array.isArray(groups) ? groups : [];
+    if (fromPayload.length > 0) {
+      return fromPayload.map((g) => ({ id: g.id, name: g.name }));
+    }
+    const fromProps = Array.isArray(studentGroups) ? studentGroups : [];
     const map = new Map();
-    [...fromProps, ...fromPayload].forEach((g) => {
+    fromProps.forEach((g) => {
       if (g && g.id) {
         map.set(String(g.id), { id: g.id, name: g.name });
       }

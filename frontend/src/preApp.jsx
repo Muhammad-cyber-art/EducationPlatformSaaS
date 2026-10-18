@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./ThemeContext";
 import PrivateRoute from "./components/Safety/ProtectedRoute";
 import PageLoader from "./components/Common/PageLoader";
+import InstallPwaBanner from "./components/InstallPwaBanner";
 
 // Modularized Routes
 import { PublicRoutes } from "./routes/PublicRoutes";
@@ -47,6 +48,7 @@ export default function PreApp() {
               </Route>
             </Routes>
           </Suspense>
+          <InstallPwaBanner />
         </BrowserRouter>
       </div>
     </ThemeProvider>

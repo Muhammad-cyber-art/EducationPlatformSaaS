@@ -13,7 +13,8 @@ import {
   GraduationCap,
   Filter,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  PlusCircle,
 } from "lucide-react";
 import { getPaymentStatus } from "./paymentStatus";
 
@@ -29,6 +30,8 @@ const StudentHistorySection = ({
   handleDeleteHistory,
   studentStatus,
   isLoading = false,
+  generatePaymentMutation,
+  studentData,
 }) => {
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all"); // 'all' | 'debt' | 'partial' | 'paid'
@@ -111,7 +114,7 @@ const StudentHistorySection = ({
           </div>
 
           {/* Tezkor qarzdorlik ogohlantirishi */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {counts.debt > 0 && (
               <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase tracking-wider">
                 <AlertCircle size={12} /> {counts.debt} ta qarzdorlik

@@ -66,12 +66,6 @@ const AddGroup = () => {
     is_faol: true,
   });
 
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      branch_id: currentBranchId || branchId,
-    }));
-  }, [currentBranchId, branchId]);
 
   useEffect(() => {
     const activeId = currentBranchId || branchId;
@@ -103,6 +97,7 @@ const AddGroup = () => {
     try {
       const payload = {
         ...formData,
+        branch_id: currentBranchId || branchId,
         dars_kunlari: formatDaysDisplay(formData.custom_days, false),
       };
       await api.post("/groups/groups/", payload);

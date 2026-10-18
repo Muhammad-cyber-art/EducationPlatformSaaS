@@ -158,6 +158,7 @@ export default function GroupsStudent({
     // Guruh ma'lumotlarini yangilash
     queryClient.invalidateQueries({ queryKey: ['group-detail', String(groupId)] });
     queryClient.invalidateQueries({ queryKey: ['group-detail', Number(groupId)] });
+    queryClient.invalidateQueries({ queryKey: ['attendance'] });
     if (onAttendanceChange) onAttendanceChange();
   };
 
@@ -275,6 +276,28 @@ export default function GroupsStudent({
           );
         };
 
+        const renderPaymentBadge = (compact = false) => {
+          const isPaid = Boolean(item.current_payment_status);
+          return (
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-lg font-black capitalize border shrink-0 transition-all ${
+                compact ? "px-2 py-0.5 text-[8px] tracking-wide" : "px-3 py-1 text-[8px] tracking-widest"
+              } ${
+                isPaid
+                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/25"
+                  : "bg-red-500/10 text-red-500 border-red-500/25 shadow-[0_0_8px_rgba(239,68,68,0.15)]"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isPaid ? "bg-emerald-500" : "bg-red-500 animate-pulse"
+                }`}
+              />
+              <span>{isPaid ? "To'langan" : "Qarzdor"}</span>
+            </div>
+          );
+        };
+
         if (mode === 'table') {
           return (
             <tr
@@ -318,10 +341,7 @@ export default function GroupsStudent({
                 </div>
               </td>
               <td className="px-4 py-3 text-center">
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[8px] font-black capitalize tracking-widest border
-                ${item.current_payment_status ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"}`}>
-                  {item.current_payment_status ? "To'langan" : "Qarzdor"}
-                </div>
+                {renderPaymentBadge(false)}
               </td>
               <td className="px-4 py-3 text-center">
                 {renderStatusBadge()}
@@ -407,9 +427,16 @@ export default function GroupsStudent({
                   onClick={() => navigate(`students/${item.id}?branch=${currentBranchId}`)}
                   className="flex-1 min-w-0 cursor-pointer"
                 >
-                  <h4 className="text-[13px] font-black text-[var(--text-primary)] capitalize tracking-tight leading-tight mb-1">{item.full_name}</h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] text-[var(--text-muted)] font-black capitalize tracking-wider font-mono opacity-60">{item.phone?.slice(-9) || "---"}</span>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 className="text-[13px] font-black text-[var(--text-primary)] capitalize tracking-tight leading-tight">
+                      {item.full_name}
+                    </h4>
+                    {renderPaymentBadge(true)}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[9px] text-[var(--text-muted)] font-black capitalize tracking-wider font-mono opacity-60">
+                      {item.phone?.slice(-9) || "---"}
+                    </span>
                     {renderStatusBadge()}
                   </div>
                 </div>

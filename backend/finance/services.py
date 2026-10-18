@@ -340,13 +340,34 @@ def generate_monthly_payments(month_date=None):
     # 1. STUDENT PAYMENTS
     from groups.utils import get_lessons_in_month
 
-    for group in Group.objects.filter(is_faol=True).prefetch_related("students"):
+    import calendar
+    from datetime import date
+    for group in Group.objects.filter(is_faol=True):
         # Guruhning shu oyda darslari bormi tekshiramiz
         month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
         if not month_lessons:
             continue
 
-        for student in group.students.all():
+        _, last_day = calendar.monthrange(month_date.year, month_date.month)
+        month_end = date(month_date.year, month_date.month, last_day)
+
+        # Shu oyda faol bo'lgan yoki shu oy davomida ko'chirilgan/chiqqan studentlar
+        from groups.models import GroupEnrollment
+        active_enr_ids = GroupEnrollment.objects.filter(
+            group=group,
+            joined_at__date__lte=month_end,
+            student__is_active=True,
+            student__is_archived=False
+        ).filter(
+            Q(is_active=True) | Q(left_at__date__gte=month_date)
+        ).values_list('student_id', flat=True)
+
+        eligible_students = group.students.filter(
+            Q(id__in=active_enr_ids) |
+            Q(group=group, joined_at__date__lte=month_end, is_active=True, is_archived=False)
+        ).distinct()
+
+        for student in eligible_students:
             base_price = group.monthly_price
             if student.status in [
                 "low_income",

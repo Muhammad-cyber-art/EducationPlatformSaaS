@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { toggleTenantStatus } from '../../store/slices/ceoSlice';
 
@@ -25,6 +26,13 @@ export default function TenantDetailModal({ onClose }) {
   const dispatch = useDispatch();
   const { selectedTenant: t, detailLoading } = useSelector((s) => s.ceo);
 
+  const sub = t?.subscription;
+  const daysLeft = useMemo(() => {
+    if (!sub?.expires_at) return null;
+    // eslint-disable-next-line react-hooks/purity
+    return Math.max(0, Math.floor((new Date(sub.expires_at).getTime() - Date.now()) / 86_400_000));
+  }, [sub?.expires_at]);
+
   if (detailLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center"
@@ -37,14 +45,9 @@ export default function TenantDetailModal({ onClose }) {
 
   if (!t) return null;
 
-  const sub   = t.subscription;
   const plan  = sub?.plan || 'starter';
   const pStyle = PLAN_STYLE[plan] || PLAN_STYLE.starter;
   const domList = t.domains?.map((d) => d.domain).join(', ') || '—';
-
-  const daysLeft = sub?.expires_at
-    ? Math.max(0, Math.floor((new Date(sub.expires_at) - Date.now()) / 86_400_000))
-    : null;
 
   const handleToggle = () => {
     dispatch(toggleTenantStatus({ id: t.id, is_active: !t.is_active }));

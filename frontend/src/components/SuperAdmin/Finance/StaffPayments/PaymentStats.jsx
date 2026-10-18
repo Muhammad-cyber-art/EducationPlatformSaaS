@@ -1,6 +1,15 @@
 import React, { useState } from "react";
 import { Receipt, Users, TrendingUp, PlusCircle, MinusCircle, CalendarDays, CheckCircle2, UserCheck } from "lucide-react";
 
+// KPI kartalar uchun skeleton
+const KpiSkeleton = () => (
+    <div className="p-4 rounded-2xl bg-[var(--bg-panel)] border border-[#2a2a2a] shadow-lg animate-pulse">
+        <div className="h-3 w-20 bg-[#2a2a2a] rounded mb-3" />
+        <div className="h-7 w-32 bg-[#2a2a2a] rounded mb-2" />
+        <div className="h-2 w-24 bg-[#2a2a2a] rounded" />
+    </div>
+);
+
 const PaymentStats = ({
     data,
     isPercentageType,
@@ -11,16 +20,6 @@ const PaymentStats = ({
     isSuperAdmin,
     kpiLoading
 }) => {
-
-    // KPI kartalar uchun skeleton
-    const KpiSkeleton = () => (
-        <div className="p-4 rounded-2xl bg-[var(--bg-panel)] border border-[#2a2a2a] shadow-lg animate-pulse">
-            <div className="h-3 w-20 bg-[#2a2a2a] rounded mb-3" />
-            <div className="h-7 w-32 bg-[#2a2a2a] rounded mb-2" />
-            <div className="h-2 w-24 bg-[#2a2a2a] rounded" />
-        </div>
-    );
-
     return (
         <div className={`grid gap-4 ${isPercentageType || isStudentCountType ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
             {isPercentageType ? (

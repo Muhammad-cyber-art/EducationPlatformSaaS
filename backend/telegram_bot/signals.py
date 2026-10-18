@@ -3,7 +3,6 @@ from django.dispatch import receiver
 from django.db.models import Q
 from groups.models import Student
 from homework_attends.models import Attendance, MockTestResult, HomeworkSubmission, Homework
-from finance.models import Payment
 from .utils import send_telegram_message_async, get_student_telegram_ids
 from django.db import transaction
 
@@ -169,38 +168,8 @@ def notify_new_student(sender, instance, created, **kwargs):
             transaction.on_commit(lambda c=cid: send_telegram_message_async(c, text))
 
 
-@receiver(post_save, sender=Payment)
-def notify_payment(sender, instance, created, **kwargs):
-    """To'lov tasdiqlanganda — faqat yangi to'lov yoki is_paid=True o'zgarganda"""
-    if not instance.is_paid:
-        return
-    
-    # Arxivlangan guruh yoki o'quvchiga xabar yubormaslik
-    if not is_valid_for_notification(instance.student, instance.group):
-        return
-    
-    # TUZATISH #7: update_fields=None bo'lsa ham tekshiriladi.
-    update_fields = kwargs.get('update_fields')
-    if not created:
-        # update_fields yo'q (oddiy .save()) yoki 'is_paid' da o'zgarish yo'q — o'tkazamiz
-        if not update_fields or 'is_paid' not in update_fields:
-            return
-        # Bulk update yoki boshqa sabab bilan qayta saqlanganda — xabar yubormaslik
-        # (faqat explicit is_paid=True o'zgarishida yuborish)
-    
-    student = instance.student
-    text = (
-        f"<b>To'lov tasdiqlandi!</b>\n\n"
-        f"O'quvchi: {student.full_name}\n"
-        f"Guruh: {instance.group.name if instance.group else 'Nomalum'}\n"
-        f"Oy: {instance.month.strftime('%B %Y') if instance.month else ''}\n"
-        f"Summa: {float(instance.amount) if instance.amount else 0:,.0f} so'm\n"
-        f"Sana: {instance.paid_at.strftime('%Y-%m-%d %H:%M') if instance.paid_at else ''}"
-    )
-    
-    chat_ids = get_student_telegram_ids(student)
-    for cid in chat_ids:
-        transaction.on_commit(lambda c=cid: send_telegram_message_async(c, text))
+# DIQQAT: O'quvchi to'lovi qabul qilinganda Telegram bot orqali xabarnoma yuborish
+# talabga asosan butunlay o'chirildi (ota-onalar va o'quvchilarga to'lov xabari bormaydi).
 
 
 @receiver(post_save, sender=MockTestResult)

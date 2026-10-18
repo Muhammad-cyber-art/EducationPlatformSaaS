@@ -43,15 +43,6 @@ export default function MentorRegister() {
         }
     }, [userData.id, perms.teachers, isSuperAdmin, navigate]);
 
-    // Filial yuklanganda yoki o'zgarganda formni yangilaymiz
-    useEffect(() => {
-        if (currentBranchId) {
-            setForm(prev => ({
-                ...prev,
-                branch_id: currentBranchId
-            }));
-        }
-    }, [currentBranchId]);
 
     function handleChange(e) {
         setForm({

@@ -2,7 +2,7 @@ import logging
 import traceback
 from decimal import Decimal
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models import Sum, Q, F, Count
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
@@ -98,7 +98,14 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = super().get_queryset()
         if user.role == 'admin':
-            return qs.filter(Q(group__branch=user.branch) | Q(student__branch=user.branch))
+            allowed_branches = [user.branch_id] if user.branch_id else []
+            if hasattr(user, 'branch_accesses'):
+                allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
+            return qs.filter(
+                Q(group__branch_id__in=allowed_branches) |
+                Q(student__branch_id__in=allowed_branches) |
+                Q(student__enrollments__is_active=True, student__enrollments__group__branch_id__in=allowed_branches)
+            ).distinct()
         elif user.role != 'super_admin':
             return Payment.objects.none()
         return qs
@@ -549,10 +556,18 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='student-history/(?P<student_id>[^/.]+)')
     def student_history(self, request, student_id=None):
-        # BUG-9 FIX: Admin o'ziga tegishli bo'lmagan filialdagi o'quvchining
-        # moliya tarixini ko'rolmasligini ta'minlash.
-        if request.user.role == 'admin' and request.user.branch_id:
-            student = get_object_or_404(Student, id=student_id, branch_id=request.user.branch_id)
+        # BUG-9 FIX: Admin ruxsatini filial va faol guruhlar bo'yicha tekshirish
+        if request.user.role == 'admin':
+            allowed_branches = [request.user.branch_id] if request.user.branch_id else []
+            if hasattr(request.user, 'branch_accesses'):
+                allowed_branches.extend(request.user.branch_accesses.values_list('branch_id', flat=True))
+            student = get_object_or_404(
+                Student.objects.filter(
+                    Q(branch_id__in=allowed_branches) |
+                    Q(enrollments__is_active=True, enrollments__group__branch_id__in=allowed_branches)
+                ).distinct(),
+                id=student_id
+            )
         else:
             student = get_object_or_404(Student, id=student_id)
         payments = Payment.objects.filter(student=student).order_by('-month')
@@ -1257,46 +1272,108 @@ def trigger_monthly_payments(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_single_student_payment(request):
+    """
+    O'quvchi profilida joriy oy uchun to'lov ma'lumotini yaratish (agar mavjud bo'lmasa).
+    group_id berilsa — shu guruh uchun, berilmasa — o'quvchining barcha faol guruhlari uchun yaratadi.
+    """
     try:
         student_id = request.data.get('student_id')
         group_id = request.data.get('group_id')
-        if not student_id or not group_id:
-            return Response({"error": "student_id va group_id talab qilinadi"}, status=400)
+        if not student_id:
+            return Response({"error": "student_id talab qilinadi"}, status=400)
         
-        from groups.models import Group , Student
+        from groups.models import Group, Student, GroupEnrollment
         from finance.models import Payment
         from finance.utils import calculate_attendance_based_student_payment, floor_amount
+        from finance.services import auto_pay_from_wallet
         from decimal import Decimal
         from django.utils import timezone
         
-        student = get_object_or_404(Student, id=student_id)
-        group = get_object_or_404(Group, id=group_id)
+        if request.user.role == 'admin' and request.user.branch_id:
+            student = get_object_or_404(Student, id=student_id, branch_id=request.user.branch_id)
+        else:
+            student = get_object_or_404(Student, id=student_id)
         
         month_date = timezone.localdate().replace(day=1)
         
-        if Payment.objects.filter(student=student, group=group, month=month_date).exists():
-            return Response({"error": "Bu oy uchun to'lov qog'ozi allaqachon yaratilgan"}, status=400)
-            
-        base_price = group.monthly_price
-        if student.status in ["low_income", "negotiated", "discount", "teacher_negotiated"]:
-            if student.custom_fee is not None:
-                base_price = student.custom_fee
-
-        if student.status == "discount":
-            payment_amount = calculate_attendance_based_student_payment(
-                student, group, month_date
-            )
+        target_groups = []
+        if group_id:
+            group = get_object_or_404(Group, id=group_id)
+            target_groups.append(group)
         else:
-            payment_amount = Decimal(str(floor_amount(base_price)))
+            # O'quvchining barcha faol guruhlarini aniqlash
+            active_enrollments = GroupEnrollment.objects.filter(
+                student=student, is_active=True
+            ).select_related('group')
+            target_groups = [e.group for e in active_enrollments if e.group and e.group.is_faol]
+            if not target_groups and student.group and student.group.is_faol:
+                target_groups = [student.group]
 
-        payment, created = Payment.objects.get_or_create(
-            student=student,
-            group=group,
-            month=month_date,
-            defaults={"amount": payment_amount, "is_paid": False},
-        )
-        
-        return Response({"success": True, "created": created}, status=200)
+        if not target_groups:
+            return Response({
+                "error": "O'quvchi birorta ham faol guruhga biriktirilmagan"
+            }, status=400)
+
+        created_count = 0
+        already_exists_count = 0
+        for group in target_groups:
+            if Payment.objects.filter(student=student, group=group, month=month_date).exists():
+                already_exists_count += 1
+                continue
+                
+            base_price = group.monthly_price
+            if student.status in ["low_income", "negotiated", "discount", "teacher_negotiated"]:
+                if student.custom_fee is not None:
+                    base_price = student.custom_fee
+
+            month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
+
+            if student.status == "discount":
+                payment_amount = calculate_attendance_based_student_payment(
+                    student, group, month_date
+                )
+                is_auto_discount = True
+            else:
+                is_auto_discount = False
+                if group.start_date and group.start_date > month_date:
+                    from groups.utils import get_lessons_in_month
+                    full_sched = get_lessons_in_month(group._get_effective_days(), month_date.year, month_date.month)
+                    full_count = max(1, len(full_sched))
+                    daily = Decimal(str(base_price)) / Decimal(str(full_count))
+                    lesson_count = len(month_lessons) if month_lessons else full_count
+                    payment_amount = floor_amount(daily * Decimal(str(lesson_count)))
+                else:
+                    payment_amount = Decimal(str(floor_amount(base_price)))
+
+            payment, created = Payment.objects.get_or_create(
+                student=student,
+                group=group,
+                month=month_date,
+                defaults={
+                    "amount": payment_amount,
+                    "is_paid": False,
+                    "is_auto_discount": is_auto_discount,
+                },
+            )
+            if created:
+                created_count += 1
+                auto_pay_from_wallet(student)
+
+        if created_count > 0:
+            msg = f"Joriy oy uchun {created_count} ta to'lov varaqasi yaratildi"
+        elif already_exists_count > 0:
+            msg = "Joriy oy uchun to'lov ma'lumoti allaqachon mavjud"
+        else:
+            msg = "To'lov ma'lumoti yaratilmadi"
+
+        all_student_payments = Payment.objects.filter(student=student).order_by('-month', '-id')
+
+        return Response({
+            "success": True,
+            "created_count": created_count,
+            "message": msg,
+            "payments": PaymentSerializer(all_student_payments, many=True).data
+        }, status=200)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 

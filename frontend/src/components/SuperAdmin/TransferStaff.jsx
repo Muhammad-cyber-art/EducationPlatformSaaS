@@ -44,13 +44,14 @@ export default function TransferStaff({ isOpen, onClose }) {
  ? `/register/users/?role=mentor&branch=${selectedSourceBranch}`
  : `/groups/admins/?branch_id=${selectedSourceBranch}`;
 
- const res = await api.get(url);
- setStaff(safeArray(res.data));
- } catch (error) {
- } finally {
- setLoading(false);
- }
- }
+    const res = await api.get(url);
+    setStaff(safeArray(res.data));
+  } catch (error) {
+    toast.error(error.response?.data?.error || "Xodimlarni yuklashda xatolik yuz berdi");
+  } finally {
+    setLoading(false);
+  }
+}
 
  useEffect(() => {
  if (isOpen && selectedSourceBranch) {

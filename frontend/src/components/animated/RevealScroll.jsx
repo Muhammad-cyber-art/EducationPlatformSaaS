@@ -1,8 +1,7 @@
 // RevealOnScroll.jsx
 import React from"react";
-import { useInView } from"react-intersection-observer";
-import { motion } from"framer-motion";
-import PrivateRoute from"../Safety/ProtectedRoute";
+import { useInView } from "react-intersection-observer";
+import { motion } from "framer-motion";
 
 export default function RevealOnScroll({ children, className ="" }) {
  const [ref, inView] = useInView({

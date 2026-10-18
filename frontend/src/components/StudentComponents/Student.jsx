@@ -21,6 +21,7 @@ import StudentAttendanceHeatmap from "./Student/StudentAttendanceHeatmap";
 import StudentModals from "./Student/StudentModals";
 import UnenrollSelectModal from "./Student/UnenrollSelectModal";
 import JoinGroupModal from "./Student/Modals/JoinGroupModal";
+import { isCurrentMonthPayment } from "./Student/paymentStatus";
 import { Loader2 } from "lucide-react";
 
 const initialState = {
@@ -146,14 +147,32 @@ export default function StudentProfilePage() {
     () => (Array.isArray(paymentsAllGroups) ? paymentsAllGroups : []),
     [paymentsAllGroups],
   );
-  const primaryPayment = useMemo(
-    () => paymentsArray.find((p) => p.group === primaryGroup.id) || {},
-    [paymentsArray, primaryGroup.id],
-  );
+  const primaryPayment = useMemo(() => {
+    // 1. Shu guruh uchun joriy oy to'lovini qidiramiz
+    const currentP = paymentsArray.find(
+      (p) => p.group === primaryGroup.id && isCurrentMonthPayment(p)
+    );
+    if (currentP) return currentP;
+    // 2. Aks holda eng oxirgi to'lov
+    return paymentsArray.find((p) => p.group === primaryGroup.id) || {};
+  }, [paymentsArray, primaryGroup.id]);
 
   const payments = useMemo(() => {
-    const historyPayments = studentHistory?.monthly_payments || [];
-    return historyPayments
+    const historyPayments = Array.isArray(studentHistory?.monthly_payments)
+      ? studentHistory.monthly_payments
+      : [];
+    const allGroups = Array.isArray(paymentsAllGroups) ? paymentsAllGroups : [];
+
+    // Map orqali id bo'yicha birlashtiramiz (agar studentHistory hali yangilanmagan bo'lsa ham paymentsAllGroups dagi yangi to'lov darhol ko'rinadi)
+    const paymentMap = new Map();
+    historyPayments.forEach((p) => paymentMap.set(p.id, p));
+    allGroups.forEach((p) => {
+      if (!paymentMap.has(p.id)) {
+        paymentMap.set(p.id, p);
+      }
+    });
+
+    return Array.from(paymentMap.values())
       .map((p) => {
         const groupInfo = groups.find((g) => g.id === p.group);
         return {
@@ -162,7 +181,7 @@ export default function StudentProfilePage() {
         };
       })
       .sort((a, b) => new Date(b.month) - new Date(a.month));
-  }, [studentHistory?.monthly_payments, groups]);
+  }, [studentHistory, paymentsAllGroups, groups]);
 
   const extraTransactions = useMemo(() => {
     const historyExtras = studentHistory?.extra_transactions || [];
@@ -259,8 +278,15 @@ export default function StudentProfilePage() {
     try {
       await api.delete(`/finance/student-payments/${paymentId}/`);
       toast.success("Muvaffaqiyatli o'chirildi");
-      queryClient.invalidateQueries(["payments-all"]);
-      queryClient.invalidateQueries(["student-history", student_id]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["payments-all"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["student"] }),
+      ]);
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["payments-all", student_id] }),
+        queryClient.refetchQueries({ queryKey: ["student-history", student_id] }),
+      ]);
     } catch {
       toast.error("Xatolik!");
     }
@@ -352,7 +378,7 @@ export default function StudentProfilePage() {
               {...{
                 studentData,
                 groups,
-                paymentsAllGroups,
+                paymentsAllGroups: payments,
                 showGroupMenu,
                 dispatch,
                 unenrollMutation,
@@ -376,6 +402,7 @@ export default function StudentProfilePage() {
                 dispatch,
                 historyLoading,
                 paymentLoading,
+                generatePaymentMutation,
               }}
               canConfirmPayment={permissions.canConfirmPayment}
               studentStatus={studentData?.status}

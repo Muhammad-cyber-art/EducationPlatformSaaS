@@ -23,8 +23,10 @@ const getBaseUrl = () => {
 const BASE_URL = getBaseUrl();
 const REFRESH_ENDPOINT = "refresh/";
 
-// Debug: log the base URL to make sure it's correct
-console.log("API Base URL:", BASE_URL);
+// BUG FIX: Production da API URL ni console ga chiqarmaslik (xavfsizlik)
+if (import.meta.env.DEV) {
+  console.log("API Base URL:", BASE_URL);
+}
 
 // Asosiy api client (barcha so'rovlar shu orqali ketadi)
 const api = axios.create({
@@ -223,14 +225,22 @@ api.interceptors.response.use(
  } catch (refreshError) {
  isRefreshing = false;
  onRefreshFailed(refreshError);
+
+ const isNetworkError =
+ !refreshError.response ||
+ refreshError.code === "ERR_NETWORK" ||
+ refreshError.code === "ECONNABORTED";
+
+ if (!isNetworkError) {
  clearTokensAndLogout();
+ }
  return Promise.reject(refreshError);
  }
  }
 
  // --- GLOBAL ERROR HANDLING ---
- // Faqat 401 bo'lmagan xatolarni toast qilamiz (401 yuqorida handle qilingan)
- if (status >= 400 && status !== 401) {
+ const isNetworkFailure = !error.response || error.code === "ERR_NETWORK" || error.code === "ECONNABORTED";
+ if (!isNetworkFailure && status >= 400 && status !== 401) {
  const message = error.response?.data?.detail ||
  error.response?.data?.message ||
 "Tizimda kutilmagan xatolik yuz berdi";

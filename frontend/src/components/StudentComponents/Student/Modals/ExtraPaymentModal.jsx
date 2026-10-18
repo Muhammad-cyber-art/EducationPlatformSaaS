@@ -4,25 +4,25 @@ import { CreditCard, Save, Loader2 } from"lucide-react";
 import AmountInput from "../../../Common/AmountInput";
 
 export const ExtraPaymentModal = ({ isOpen, onClose, onSave, loading, studentName, adminName, groups = [] }) => {
+  const initialGroup = groups && groups.length > 0 ? groups[0].id : "";
   const [data, setData] = useState({
     amount: "",
     payer_name: studentName || "",
     description: "",
     transaction_type: "income",
-    group: ""
+    group: initialGroup
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      setData({
-        amount: "",
-        payer_name: studentName || "",
-        description: "",
-        transaction_type: "income",
-        group: groups && groups.length > 0 ? groups[0].id : ""
-      });
-    }
-  }, [isOpen, studentName, groups]);
+  const handleClose = () => {
+    setData({
+      amount: "",
+      payer_name: studentName || "",
+      description: "",
+      transaction_type: "income",
+      group: groups && groups.length > 0 ? groups[0].id : ""
+    });
+    onClose();
+  };
 
   if (!isOpen) return null;
   return createPortal(
@@ -96,7 +96,7 @@ export const ExtraPaymentModal = ({ isOpen, onClose, onSave, loading, studentNam
           </div>
 
           <div className="flex gap-4 pt-6">
-            <button onClick={onClose} className="flex-1 py-4 rounded-2xl border border-[var(--border-glass)] text-[10px] font-black capitalize tracking-widest hover:bg-white/5 transition-all">Yopish</button>
+            <button onClick={handleClose} className="flex-1 py-4 rounded-2xl border border-[var(--border-glass)] text-[10px] font-black capitalize tracking-widest hover:bg-white/5 transition-all">Yopish</button>
             <button disabled={loading || !data.group || groups.length === 0} onClick={() => onSave(data)} className={`flex-1 py-4 rounded-2xl text-[10px] font-black capitalize tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${data.transaction_type === 'income' ? 'bg-[var(--gold)] text-black shadow-[0_0_20px_#b8860b30]' : 'bg-red-500 text-white shadow-[0_0_20px_#ef444430]'}`}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Saqlash
             </button>

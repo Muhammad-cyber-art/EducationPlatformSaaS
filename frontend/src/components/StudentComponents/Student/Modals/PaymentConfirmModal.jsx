@@ -6,52 +6,44 @@ import { PaymentTypeChoiceModal } from "./PaymentTypeChoiceModal";
 
 export const PaymentConfirmModal = ({ isOpen, onClose, onConfirm, data, loading }) => {
     const [method, setMethod] = useState("cash");
-    const [amount, setAmount] = useState("");
+    const [customAmount, setCustomAmount] = useState(null);
     const [receiptImage, setReceiptImage] = useState(null);
     const [preview, setPreview] = useState(null);
     const [notes, setNotes] = useState("");
     const [noReceipt, setNoReceipt] = useState(false);
-    const [calculateRefund, setCalculateRefund] = useState(true);
+    const [customRefund, setCustomRefund] = useState(null);
     const [showTypeChoice, setShowTypeChoice] = useState(false);
 
-    // Boshlang'ich holatni o'rnatish
-    useEffect(() => {
-        if (data) {
-            setCalculateRefund(!data.ignore_refund);
-        }
-    }, [data]);
+    const calculateRefund = customRefund !== null ? customRefund : !data?.ignore_refund;
 
-    // Hisoblangan summani o'rnatish
+    // Hisoblangan summani aniqlash
     const expectedAmount = useMemo(() => {
         if (!data) return 0;
         const refund = data.refundAmount || 0;
         const fullAmount = data.fullAmount || 0;
         const remaining = data.remainingAmount;
 
-        // BUG #1 FIX: Agar bu davomiy (partial) to'lov bo'lsa — qolgan summani ko'rsatamiz.
-        // Davomiy to'lov: remaining > 0 VA remaining < fullAmount (allaqachon bir qismi to'langan).
-        // Yangi to'lov: remaining == fullAmount (hali hech narsa to'lanmagan).
+        // Davomiy (partial) to'lov: remaining > 0 VA remaining < fullAmount
         const isPartialContinuation = remaining != null && remaining > 0 && remaining < fullAmount;
         if (isPartialContinuation) {
-            // Davomiy to'lovda refund qo'llanmaydi — qolgan summani to'laydi
             return remaining;
         }
 
-        // Yangi to'lov: refund toggle to'g'ri ishlaydi
-        // calculateRefund = true  → fullAmount - refund (masalan 400 - 314 = 86)
-        // calculateRefund = false → fullAmount           (masalan 400)
         return calculateRefund ? Math.max(0, fullAmount - refund) : fullAmount;
     }, [data, calculateRefund]);
 
-    useEffect(() => {
-        if (data) {
-            setAmount(String(Math.floor(expectedAmount) || 0));
-        }
-    }, [data, expectedAmount]);
+    const amount = customAmount !== null ? customAmount : String(Math.floor(expectedAmount) || 0);
 
-    useEffect(() => {
-        if (!isOpen) setShowTypeChoice(false);
-    }, [isOpen]);
+    const handleClose = () => {
+        setShowTypeChoice(false);
+        setCustomAmount(null);
+        setCustomRefund(null);
+        setReceiptImage(null);
+        setPreview(null);
+        setNotes("");
+        setNoReceipt(false);
+        onClose();
+    };
 
     if (!isOpen) return null;
 
@@ -170,7 +162,10 @@ export const PaymentConfirmModal = ({ isOpen, onClose, onConfirm, data, loading 
                                         type="checkbox" 
                                         className="sr-only peer"
                                         checked={calculateRefund}
-                                        onChange={(e) => setCalculateRefund(e.target.checked)}
+                                        onChange={(e) => {
+                                            setCustomRefund(e.target.checked);
+                                            setCustomAmount(null);
+                                        }}
                                     />
                                     <div className="w-10 h-5 bg-white/10 border border-white/20 rounded-full peer-checked:bg-amber-500 transition-all"></div>
                                     <div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full transition-all peer-checked:translate-x-5 shadow-sm"></div>
@@ -206,7 +201,7 @@ export const PaymentConfirmModal = ({ isOpen, onClose, onConfirm, data, loading 
                             <div className="relative">
                                 <AmountInput
                                     value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
+                                    onChange={(e) => setCustomAmount(e.target.value)}
                                     className="w-full bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-2xl py-4 px-6 text-xl font-black text-emerald-400 focus:border-amber-500/50 outline-none transition-all cursor-text"
                                     placeholder="0"
                                 />
@@ -276,7 +271,7 @@ export const PaymentConfirmModal = ({ isOpen, onClose, onConfirm, data, loading 
 
                     <div className="flex gap-4 w-full pt-2">
                         <button
-                            onClick={onClose}
+                            onClick={handleClose}
                             disabled={loading}
                             className="flex-1 py-4 rounded-2xl border border-[var(--border-glass)] text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-all disabled:opacity-50"
                         >

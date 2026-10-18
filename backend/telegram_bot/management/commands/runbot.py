@@ -152,22 +152,28 @@ class Command(BaseCommand):
                 return
 
             # 2. Argument berilmagan bo'lsa: Bazadagi barcha bot tokeni bor faol tenantlarni qidiramiz
-            active_tenants = list(Tenant.objects.filter(is_active=True).exclude(Q(telegram_bot_token__isnull=True) | Q(telegram_bot_token='')))
-        except Exception as db_err:
-            logger.warning(f"Tenantlarni bazadan o'qishda xatolik ({db_err}). Fallback tekshirilmoqda...")
-            active_tenants = []
-        
-        if not active_tenants:
-            # Fallback: settings.TELEGRAM_BOT_TOKEN
-            fallback_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-            if fallback_token:
-                self.stdout.write(self.style.WARNING("Ogohlantirish: O'quv markazlarda alohida bot token topilmadi. Fallback (.env / settings.TELEGRAM_BOT_TOKEN) ishlatilmoqda..."))
-                app = build_bot_application(fallback_token, schema_name=None, tenant_name='Global')
-                app.run_polling(drop_pending_updates=True)
-                return
-            else:
-                self.stdout.write(self.style.ERROR("XATO: Hech bir o'quv markazda telegram bot token topilmadi va settings.TELEGRAM_BOT_TOKEN ham bo'sh!\nCEO paneldan o'quv markazga bot token kiriting yoki --schema parametrini bering."))
-                return
+            import time
+            while True:
+                try:
+                    active_tenants = list(Tenant.objects.filter(is_active=True).exclude(Q(telegram_bot_token__isnull=True) | Q(telegram_bot_token='')))
+                except Exception as db_err:
+                    logger.warning(f"Tenantlarni bazadan o'qishda xatolik ({db_err}). Fallback tekshirilmoqda...")
+                    active_tenants = []
+
+                if active_tenants:
+                    break
+
+                # Fallback: settings.TELEGRAM_BOT_TOKEN
+                fallback_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+                if fallback_token:
+                    self.stdout.write(self.style.WARNING("Ogohlantirish: O'quv markazlarda alohida bot token topilmadi. Fallback (.env / settings.TELEGRAM_BOT_TOKEN) ishlatilmoqda..."))
+                    app = build_bot_application(fallback_token, schema_name=None, tenant_name='Global')
+                    app.run_polling(drop_pending_updates=True)
+                    return
+
+                self.stdout.write(self.style.WARNING("OGOHLANTIRISH: Hech bir o'quv markazda telegram bot token topilmadi va settings.TELEGRAM_BOT_TOKEN ham bo'sh."))
+                self.stdout.write("Bot kutish rejimida (har 30 soniyada yangi tokenlar mavjudligi tekshiriladi)...")
+                time.sleep(30)
 
         if len(active_tenants) == 1:
             t = active_tenants[0]

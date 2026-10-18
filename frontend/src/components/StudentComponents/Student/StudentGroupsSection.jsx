@@ -1,6 +1,6 @@
 import React from "react";
 import { GraduationCap, MoreVertical, LogIn, LogOut, CheckCircle2, XCircle, User, DollarSign, Clock } from "lucide-react";
-import { getPaymentStatus } from "./paymentStatus";
+import { getPaymentStatus, isCurrentMonthPayment } from "./paymentStatus";
 
 const StudentGroupsSection = ({
     studentData,
@@ -16,7 +16,14 @@ const StudentGroupsSection = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {groups?.map(group => {
                 const paymentsArray = Array.isArray(paymentsAllGroups) ? paymentsAllGroups : [];
-                const groupPayment = paymentsArray.find(p => p.group === group.id);
+
+                // Ushbu guruh uchun joriy oydagi to'lovni topish (Timezone-safe)
+                const currentMonthGroupPayment = paymentsArray.find(
+                    p => p.group === group.id && isCurrentMonthPayment(p)
+                );
+
+                // Fallback: Agar joriy oy bo'lmasa, eng oxirgi to'lov
+                const groupPayment = currentMonthGroupPayment || paymentsArray.find(p => p.group === group.id);
                 const payStatus = getPaymentStatus(groupPayment);
                 const progressPct = groupPayment?.amount > 0 && payStatus.key === 'partial'
                     ? Math.min(100, Math.round((payStatus.paidAmount / Number(groupPayment.amount)) * 100))
@@ -54,54 +61,66 @@ const StudentGroupsSection = ({
 
                             <div className="relative">
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); dispatch({ type: 'TOGGLE_MENU', payload: group.id }); }}
+                                    onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        dispatch({ type: 'TOGGLE_MENU', payload: showGroupMenu === group.id ? false : group.id }); 
+                                    }}
                                     className="p-2 text-[var(--text-muted)] hover:text-white transition-all rounded-lg"
                                 >
                                     <MoreVertical size={16} />
                                 </button>
 
                                 {showGroupMenu === group.id && (
-                                    <div className="absolute right-0 top-full mt-2 w-44 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl shadow-2xl z-50 overflow-hidden animate-in zoom-in-95 duration-100 origin-top-right">
-                                        <button
+                                    <>
+                                        <div 
+                                            className="fixed inset-0 z-40" 
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                dispatch({ type: 'TOGGLE_TRANSFER_MODAL', payload: true, group: group });
                                                 dispatch({ type: 'TOGGLE_MENU', payload: false });
                                             }}
-                                            className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-[var(--text-primary)] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-black transition-colors"
-                                        >
-                                            <LogIn size={14} /> Ko'chirish
-                                        </button>
-                                        {!groupPayment && (
+                                        />
+                                        <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl shadow-2xl z-50 overflow-hidden animate-in zoom-in-95 duration-100 origin-top-right">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    dispatch({ type: 'TOGGLE_TRANSFER_MODAL', payload: true, group: group });
+                                                    dispatch({ type: 'TOGGLE_MENU', payload: false });
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-[var(--text-primary)] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-black transition-colors"
+                                            >
+                                                <LogIn size={14} /> Ko'chirish
+                                            </button>
+                                            {!currentMonthGroupPayment && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        dispatch({ type: 'TOGGLE_MENU', payload: false });
+                                                        generatePaymentMutation.mutate(group.id);
+                                                    }}
+                                                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-amber-500 uppercase tracking-widest hover:bg-amber-500 hover:text-black transition-colors"
+                                                    disabled={generatePaymentMutation.isPending}
+                                                >
+                                                    {generatePaymentMutation.isPending ? <DollarSign size={14} className="animate-spin" /> : <DollarSign size={14} />} To'lov yaratish
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     dispatch({ type: 'TOGGLE_MENU', payload: false });
-                                                    generatePaymentMutation.mutate(group.id);
-                                                }}
-                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-[var(--text-primary)] uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-colors"
-                                                disabled={generatePaymentMutation.isLoading}
-                                            >
-                                                {generatePaymentMutation.isLoading ? <DollarSign size={14} className="animate-spin" /> : <DollarSign size={14} />} Oylik yaratish
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                dispatch({ type: 'TOGGLE_MENU', payload: false });
-                                                if (studentData?.groups?.length > 1) {
-                                                    dispatch({ type: 'TOGGLE_UNENROLL_SELECT_MODAL', payload: true });
-                                                } else {
-                                                    if (window.confirm("Guruhdan chiqarishni tasdiqlaysizmi?")) {
-                                                        unenrollMutation.mutate(group.id);
+                                                    if (studentData?.groups?.length > 1) {
+                                                        dispatch({ type: 'TOGGLE_UNENROLL_SELECT_MODAL', payload: true });
+                                                    } else {
+                                                        if (window.confirm("Guruhdan chiqarishni tasdiqlaysizmi?")) {
+                                                            unenrollMutation.mutate(group.id);
+                                                        }
                                                     }
-                                                }
-                                            }}
-                                            className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-colors"
-                                        >
-                                            <LogOut size={14} /> Chiqarish
-                                        </button>
-                                    </div>
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-colors"
+                                            >
+                                                <LogOut size={14} /> Chiqarish
+                                            </button>
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         </div>

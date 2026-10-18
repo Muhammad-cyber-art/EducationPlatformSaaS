@@ -29,6 +29,7 @@ urlpatterns = [
         path('reports/', include('reports.urls')),
         path('permissions/', include('permissions.urls')),
         path('bot/', include('telegram_bot.urls')),
+        path('v1/sync/', include('sync_engine.urls')),
 
         # ── API Dokumentatsiya ─────────────────────────────────────────────
         path('schema/', SpectacularAPIView.as_view(), name='schema'),

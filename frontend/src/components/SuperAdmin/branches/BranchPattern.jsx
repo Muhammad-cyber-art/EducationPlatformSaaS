@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
 import WarningModal from "../../Errors/Warning";
@@ -12,48 +12,35 @@ const BranchPattern = () => {
     const location = useLocation();
     const { branch_id } = useParams();
     const message = "Filial qo'shish hazil ish emas, keyin uni o'chirib tashlab bo'lmaydi";
-    const [activeBranchId, setActiveBranchId] = useState(null);
     const [modal, setModal] = useState(false);
     const [stafmodal, setStaffModal] = useState(false);
 
     // Use React Query to fetch branches
-    const { data: branchesData, isLoading } = useQuery({
+    const { data: branchesData } = useQuery({
         queryKey: ['branches'],
         queryFn: async () => {
             const res = await api.get("/add_branch/branches/");
-            // Pagination yoki oddiy massivni qo'llab-quvvatlash
             return res.data.results || res.data || [];
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
         refetchOnWindowFocus: false,
     });
 
-    const branches = Array.isArray(branchesData) ? branchesData : [];
+    const branches = useMemo(() => (Array.isArray(branchesData) ? branchesData : []), [branchesData]);
+    const urlId = branch_id ? Number(branch_id) : null;
+    const activeBranchId = urlId ?? branches[0]?.id ?? null;
     const activeBranch = branches.find(b => b.id === activeBranchId);
 
     useEffect(() => {
-        if (branches.length > 0) {
-            const urlId = branch_id ? Number(branch_id) : null;
-            if (urlId) {
-                setActiveBranchId(urlId);
-            } else {
-                const firstId = branches[0].id;
-                setActiveBranchId(firstId);
-                if (location.pathname === '/dashboard' || location.pathname === '/') {
-                    navigate(`branch/${firstId}`, { replace: true });
-                }
+        if (branches.length > 0 && !urlId) {
+            const firstId = branches[0].id;
+            if (location.pathname === '/dashboard' || location.pathname === '/') {
+                navigate(`branch/${firstId}`, { replace: true });
             }
         }
-    }, [branches, branch_id, location.pathname, navigate]);
-
-    useEffect(() => {
-        if (branch_id) {
-            setActiveBranchId(Number(branch_id));
-        }
-    }, [branch_id]);
+    }, [branches, urlId, location.pathname, navigate]);
 
     const handleTabClick = (id) => {
-        setActiveBranchId(id);
         navigate(`branch/${id}`);
     };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchTenants, toggleTenantStatus } from '../../store/slices/ceoSlice';
@@ -42,16 +42,17 @@ export default function CEOTenants() {
   const [filterActive, setFilterActive] = useState('');
   const [page,       setPage]       = useState(1);
 
-  const load = () => {
+  const load = useCallback(() => {
     const params = { page, page_size: 15 };
     if (search)       params.search    = search;
     if (filterPlan)   params.plan      = filterPlan;
     if (filterActive !== '') params.is_active = filterActive;
     dispatch(fetchTenants(params));
-  };
+  }, [page, search, filterPlan, filterActive, dispatch]);
 
-  useEffect(() => { load(); }, [page]);
-  useEffect(() => { setPage(1); load(); }, [search, filterPlan, filterActive]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const openDetail = (id) => {
     navigate(`/ceo/tenants/${id}`);
@@ -94,7 +95,7 @@ export default function CEOTenants() {
             className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }}>
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Nom yoki domen bo'yicha qidirish..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all"
             style={{ background: 'var(--input-bg)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}
@@ -103,7 +104,7 @@ export default function CEOTenants() {
         </div>
 
         {/* Plan filter */}
-        <select value={filterPlan} onChange={(e) => setFilterPlan(e.target.value)}
+        <select value={filterPlan} onChange={(e) => { setFilterPlan(e.target.value); setPage(1); }}
           className="px-3 py-2.5 rounded-xl text-sm outline-none"
           style={{ background: 'var(--input-bg)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
           <option value="">Barcha tariflar</option>
@@ -113,7 +114,7 @@ export default function CEOTenants() {
         </select>
 
         {/* Active filter */}
-        <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)}
+        <select value={filterActive} onChange={(e) => { setFilterActive(e.target.value); setPage(1); }}
           className="px-3 py-2.5 rounded-xl text-sm outline-none"
           style={{ background: 'var(--input-bg)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
           <option value="">Barcha holatlar</option>

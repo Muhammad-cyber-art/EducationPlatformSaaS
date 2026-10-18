@@ -329,22 +329,87 @@ class Student(models.Model):
         # branchni guruhdan olamiz
         if self.group and not self.branch:
             self.branch = self.group.branch
+        elif not self.group and not self.branch and self.pk:
+            first_enr = self.enrollments.filter(is_active=True).select_related('group', 'group__branch').first()
+            if first_enr and first_enr.group:
+                self.group = first_enr.group
+                self.branch = first_enr.group.branch
 
         is_new = self.pk is None
+        old_group_id = None
+        if not is_new:
+            try:
+                old_inst = Student.objects.filter(pk=self.pk).values('group_id').first()
+                if old_inst:
+                    old_group_id = old_inst['group_id']
+            except Exception:
+                pass
+
         super(Student, self).save(*args, **kwargs)
 
-        # ✅ Task 1: M2M va Enrollment synchronization
-        # Agar ForeignKey 'group' o'rnatilgan bo'lsa, Enrollment ham mavjudligiga ishonch hosil qilamiz
+        # ✅ M2M va Enrollment synchronization
+        # Faqat yangi yaratilganda yoki FK 'group' haqiqatda o'zgarganda faollashtiramiz.
+        # Bu o'quvchi guruhdan chiqarilganda (is_active=False) oddiy profil tahririda
+        # eski guruh enrollmenti noo'rin qayta yoqilib (resurrected) ketishini oldini oladi.
         if self.group:
-            # BUG #5 FIX: get_or_create faqat yangi yaratilganda defaults ni qo'llaydi.
-            # Agar is_active=False bo'lgan eski enrollment mavjud bo'lsa — u yoqilmagan qolardi.
-            # Endi aniq ravishda is_active=True ga o'tkaziladi.
-            obj, created = GroupEnrollment.objects.get_or_create(
-                student=self, group=self.group, defaults={"is_active": True}
-            )
-            if not created and not obj.is_active:
-                obj.is_active = True
-                obj.save(update_fields=['is_active'])
+            if is_new or (old_group_id != self.group_id):
+                obj, created = GroupEnrollment.objects.get_or_create(
+                    student=self, group=self.group, defaults={"is_active": True, "left_at": None}
+                )
+                if not created and (not obj.is_active or obj.left_at is not None):
+                    obj.is_active = True
+                    obj.left_at = None
+                    obj.save(update_fields=['is_active', 'left_at'])
+
+    def sync_active_group_and_branch(self, save=True):
+        """
+        O'quvchining legacy 'group' va 'branch' maydonlarini uning haqiqiy
+        faol enrollmentlari (GroupEnrollment) bilan uyg'unlashtiradi.
+        Agar guruh o'chib ketgan yoki nofaol bo'lsa, mavjud faol guruhga ulaydi.
+        """
+        if not self.pk:
+            return False
+
+        active_enrollments = list(
+            self.enrollments.filter(is_active=True, group__isnull=False)
+            .select_related('group', 'group__branch')
+            .order_by('-joined_at')
+        )
+
+        updated_fields = []
+
+        if active_enrollments:
+            active_group_ids = [e.group_id for e in active_enrollments]
+            active_branch_ids = [e.group.branch_id for e in active_enrollments if e.group.branch_id]
+
+            # 1. Agar student.group bo'sh bo'lsa yoki faol guruhlar ro'yxatida bo'lmasa
+            if not self.group_id or self.group_id not in active_group_ids:
+                primary_enrollment = active_enrollments[0]
+                self.group = primary_enrollment.group
+                updated_fields.append('group')
+
+            # 2. Agar student.branch bo'sh bo'lsa yoki faol guruhlar filialiga to'g'ri kelmasa
+            if not self.branch_id or (active_branch_ids and self.branch_id not in active_branch_ids):
+                target_group = self.group or active_enrollments[0].group
+                if target_group and target_group.branch:
+                    self.branch = target_group.branch
+                    updated_fields.append('branch')
+        else:
+            # Agar birorta ham faol enrollment bo'lmasa:
+            if self.group_id is not None:
+                self.group = None
+                updated_fields.append('group')
+
+            if not self.branch_id:
+                any_enr = self.enrollments.filter(group__branch__isnull=False).select_related('group__branch').first()
+                if any_enr and any_enr.group and any_enr.group.branch:
+                    self.branch = any_enr.group.branch
+                    updated_fields.append('branch')
+
+        if updated_fields and save:
+            Student.objects.filter(pk=self.pk).update(**{f: getattr(self, f) for f in updated_fields})
+
+        return bool(updated_fields)
 
     def get_absences_count(self, year, month, group=None):
         """O'quvchining berilgan oydagi qoldirgan darslari sonini qaytaradi.
@@ -362,11 +427,13 @@ class Student(models.Model):
         # Faqat o'tib bo'lgan va oydagi dars kunlarini olamiz
         passed_lessons = [d for d in lesson_dates if d <= today]
 
-        # O'quvchi guruhga qo'shilgan sanadan oldingi darslarni hisobga olmaslik (BUG FIX)
+        # O'quvchi guruhga qo'shilgan sanadan oldingi va chiqqan sanadan keyingi darslarni hisobga olmaslik (BUG FIX)
         enrollment = self.enrollments.filter(group=target_group).first()
         joined_date = enrollment.joined_at.date() if (enrollment and enrollment.joined_at) else (self.joined_at.date() if self.joined_at else None)
         if joined_date:
             passed_lessons = [d for d in passed_lessons if d >= joined_date]
+        if enrollment and enrollment.left_at:
+            passed_lessons = [d for d in passed_lessons if d <= enrollment.left_at.date()]
 
         total_passed = len(passed_lessons)
 
@@ -499,6 +566,12 @@ class GroupEnrollment(models.Model):
     )
     joined_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+    left_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Guruhdan chiqqan yoki ko'chgan vaqt",
+        help_text="O'quvchi guruhdan chiqqan yoki boshqa guruhga ko'chirilgan sana",
+    )
 
     # Guruh uchun individual narx (agar student modelidagidan farq qilsa)
     # Hozircha Student modelidagi custom_fee ishlatiladi, lekin kelajakda guruh kesimida bo'lishi mumkin.
@@ -510,6 +583,7 @@ class GroupEnrollment(models.Model):
         indexes = [
             models.Index(fields=["student", "is_active"]),
             models.Index(fields=["group", "is_active"]),
+            models.Index(fields=["group", "left_at"]),
         ]
 
     def __str__(self):

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from django.forms.models import model_to_dict
-from django.db import transaction
+from django.db import transaction, models
 from .models import ArchivedStudent, ArchivedStaff, ArchivedGroup, ArchivedLid
 from finance.models import Payment
 import json
@@ -153,26 +153,48 @@ def move_group_to_archive(group, archived_by, reason: str = "") -> ArchivedGroup
     uni to'liq arxivlamay — faqat shu guruh enrollment'ini o'chirish kerak.
     Aksincha, u boshqa faol guruhlardan ham yo'qolib ketardi.
     """
-    from groups.models import Group, GroupEnrollment
+    from groups.models import Group, GroupEnrollment, Student
     from finance.models import Payment
     import logging
     logger = logging.getLogger(__name__)
 
-    # 1. Guruhdagi barcha o'quvchilarni M2M orqali olamiz (snapshot uchun)
-    students = list(group.students.all())
+    # 1. Faqat shu guruhda ayni paytda faol bo'lgan o'quvchilarni olamiz
+    active_enrollment_student_ids = GroupEnrollment.objects.filter(
+        group=group,
+        is_active=True
+    ).values_list('student_id', flat=True)
+
+    # Legacy FK orqali to'g'ridan-to'g'ri biriktirilgan o'quvchilarni ham inobatga olamiz
+    current_students = list(Student.objects.filter(
+        models.Q(id__in=active_enrollment_student_ids) |
+        models.Q(group=group, is_active=True, is_archived=False)
+    ).distinct())
 
     # Arxivlanishi kerak bo'lgan va faqat shu guruhda bo'lgan studentlarni
     # boshqa guruhlarda ham bor bo'lganlardan ajratamiz.
     students_to_fully_archive = []   # Boshqa guruhi yo'q → to'liq arxivlanadi
     students_to_unenroll_only = []   # Boshqa guruhi bor  → faqat enrollment o'chadi
 
-    for student in students:
-        # Shu guruhdan tashqari boshqa faol guruhlari bormi?
-        other_active_groups = student.groups.exclude(id=group.id)
-        if other_active_groups.exists():
+    for student in current_students:
+        # Shu guruhdan tashqari boshqa FAOL guruhlari bormi?
+        other_active = GroupEnrollment.objects.filter(
+            student=student,
+            is_active=True
+        ).exclude(group=group).exists()
+        
+        if not other_active:
+            # Agar GroupEnrollment bo'lmasa, legacy FK tekshiramiz
+            other_active = Student.objects.filter(id=student.id).exclude(group=group).filter(
+                group__isnull=False, group__is_faol=True
+            ).exists()
+
+        if other_active:
             students_to_unenroll_only.append(student)
         else:
             students_to_fully_archive.append(student)
+
+    # Guruhdan avval chiqqan/ko'chgan (is_active=False) enrollmentlarni tozalaymiz (o'quvchiga tegmasdan)
+    GroupEnrollment.objects.filter(group=group, is_active=False).delete()
 
     logger.info(
         f"[GroupArchive] Guruh='{group.name}' (ID={group.id}): "
@@ -201,8 +223,8 @@ def move_group_to_archive(group, archived_by, reason: str = "") -> ArchivedGroup
         Payment.objects.filter(student=student, group=group).delete()
         # GroupEnrollment ni o'chirish
         GroupEnrollment.objects.filter(student=student, group=group).delete()
-        # Agar legacy FK ham shu guruhga ko'rsatib turgan bo'lsa — boshqa guruhga o'tkazamiz
-        if student.group_id == group.id:
+        # Agar legacy FK ham shu guruhga ko'rsatib turgan bo'lsa yoki bo'sh bo'lsa — boshqa guruhga o'tkazamiz
+        if student.group_id == group.id or not student.group_id:
             # BUG FIX: student.groups — barcha (is_active=False ham) enrollmentlarni qaytaradi.
             # Faqat FAOL enrollmentlardagi guruhni keyingi guruh sifatida olamiz.
             next_group = Group.objects.filter(
@@ -216,6 +238,8 @@ def move_group_to_archive(group, archived_by, reason: str = "") -> ArchivedGroup
                 f"[GroupArchive] Student '{student.full_name}' (ID={student.id}) "
                 f"legacy FK yangilandi → '{next_group}'"
             )
+        elif hasattr(student, 'sync_active_group_and_branch'):
+            student.sync_active_group_and_branch()
 
     # 3. O'quvchilar bo'shatilgandan keyin qolgan "yetim" to'lovlarni topib saqlaymiz
     remaining_payments = Payment.objects.filter(group=group)
@@ -285,7 +309,34 @@ def restore_student_from_archive(archived_student_id, restored_by):
         if not group:
             group = Group.objects.filter(name__iexact=archived.last_group_name, is_archived=False).first()
     
-    # Studentni qayta yaratish
+    # 1. Soft-archived student bazada mavjudmi? (Tarix va ID saqlanishi uchun)
+    student = Student.objects.filter(id=archived.original_id).first()
+    if student:
+        student.is_archived = False
+        student.is_active = True
+        student.archived_at = None
+        if branch:
+            student.branch = branch
+        if group:
+            student.group = group
+            if not student.branch:
+                student.branch = group.branch
+        student.save()
+        
+        if group:
+            from groups.models import GroupEnrollment
+            enrollment, created = GroupEnrollment.objects.get_or_create(
+                student=student, group=group, defaults={"is_active": True, "left_at": None}
+            )
+            if not created and (not enrollment.is_active or enrollment.left_at is not None):
+                enrollment.is_active = True
+                enrollment.left_at = None
+                enrollment.save(update_fields=['is_active', 'left_at'])
+                
+        archived.delete()
+        return student
+
+    # 2. Hard-deleted student (orqaga moslik uchun):
     student = Student.objects.create(
         full_name=archived.full_name,
         branch=branch,
@@ -306,14 +357,91 @@ def restore_student_from_archive(archived_student_id, restored_by):
     # Many-to-Many bog'liqlikni ham tiklaymiz
     if group:
         from groups.models import GroupEnrollment
-        # BUG #6 FIX: Agar is_active=False bo'lgan eski enrollment mavjud bo'lsa, uni yoqamiz.
         enrollment, created = GroupEnrollment.objects.get_or_create(
-            student=student, group=group, defaults={"is_active": True}
+            student=student, group=group, defaults={"is_active": True, "left_at": None}
         )
-        if not created and not enrollment.is_active:
+        if not created and (not enrollment.is_active or enrollment.left_at is not None):
             enrollment.is_active = True
-            enrollment.save(update_fields=['is_active'])
-    
+            enrollment.left_at = None
+            enrollment.save(update_fields=['is_active', 'left_at'])
+
+    # Metadata dagi to'lovlarni tiklash
+    saved_payments = metadata.get('payments', [])
+    for p_data in saved_payments:
+        try:
+            m_date = p_data.get('month')
+            if isinstance(m_date, str):
+                try:
+                    m_date = datetime.strptime(m_date[:10], '%Y-%m-%d').date()
+                except Exception:
+                    pass
+            Payment.objects.create(
+                student=student,
+                group_id=p_data.get('group'),
+                month=m_date,
+                amount=p_data.get('amount'),
+                paid_amount=p_data.get('paid_amount', 0),
+                is_paid=p_data.get('is_paid', False),
+                is_partial=p_data.get('is_partial', False),
+                payment_method=p_data.get('payment_method', 'cash'),
+                notes=p_data.get('notes', ''),
+                is_auto_discount=p_data.get('is_auto_discount', False),
+            )
+        except Exception:
+            pass
+
+    # Yetim qolgan Attendance, Homework, MockTest, FinanceTransaction larni qayta ulash
+    from homework_attends.models import Attendance, HomeworkSubmission, MockTestResult
+    from finance.models import FinanceTransaction
+    from django.db.models import Q
+    att_qs = Attendance.objects.filter(
+        Q(student__isnull=True) | Q(student_id=archived.original_id),
+        student_full_name=student.full_name
+    )
+    if student.branch:
+        att_qs = att_qs.filter(Q(group__branch=student.branch) | Q(group__isnull=True))
+    att_qs.update(student=student)
+
+    hw_qs = HomeworkSubmission.objects.filter(
+        Q(student__isnull=True) | Q(student_id=archived.original_id),
+        student_full_name=student.full_name
+    )
+    if student.branch:
+        hw_qs = hw_qs.filter(Q(homework__group__branch=student.branch) | Q(homework__group__isnull=True))
+    hw_qs.update(student=student)
+
+    mock_qs = MockTestResult.objects.filter(
+        Q(student__isnull=True) | Q(student_id=archived.original_id),
+        student_full_name=student.full_name
+    )
+    if student.branch:
+        mock_qs = mock_qs.filter(Q(test__group__branch=student.branch) | Q(test__group__isnull=True))
+    mock_qs.update(student=student)
+
+    tx_qs = FinanceTransaction.objects.filter(
+        Q(student__isnull=True) | Q(student_id=archived.original_id),
+        student_name=student.full_name
+    )
+    if student.branch:
+        tx_qs = tx_qs.filter(Q(branch=student.branch) | Q(branch__isnull=True))
+    tx_qs.update(student=student)
+
+    if student.telegram_id:
+        try:
+            from telegram_bot.models import BotProfile
+            BotProfile.objects.update_or_create(
+                telegram_id=student.telegram_id,
+                defaults={
+                    'student': student,
+                    'phone_number': student.phone or '',
+                    'role': 'student',
+                    'is_active': True,
+                }
+            )
+        except Exception:
+            pass
+
+    archived.delete()
     return student
 
 @transaction.atomic

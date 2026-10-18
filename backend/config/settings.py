@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'reports',
     'permissions',
     'telegram_bot',
+    'sync_engine',
     # ── Third-party packages ───────────────────────────────────────────────
     "django_celery_beat",
     'rest_framework',
@@ -99,6 +100,7 @@ from corsheaders.defaults import default_headers
 
 _cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if origin.strip()]
+_tenant_base_domain = os.getenv('TENANT_BASE_DOMAIN', 'chronous.uz').strip()
 
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
@@ -115,7 +117,12 @@ if DEBUG:
             if origin not in CSRF_TRUSTED_ORIGINS:
                 CSRF_TRUSTED_ORIGINS.append(origin)
 else:
-    CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+    CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
+    # Multi-Tenant subdomenlar uchun wildcard CSRF ishonchli domenlar:
+    if _tenant_base_domain:
+        for domain_pattern in [f"https://*.{_tenant_base_domain}", f"https://{_tenant_base_domain}"]:
+            if domain_pattern not in CSRF_TRUSTED_ORIGINS:
+                CSRF_TRUSTED_ORIGINS.append(domain_pattern)
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://.*\.localhost(:\d+)?$",
@@ -367,35 +374,44 @@ from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     'create-attendance-every-day': {
         'task': 'homework_attends.tasks.create_attendance_task',
-        'schedule': crontab(hour=0, minute=0), # Har kuni yarim tunda
+        'schedule': crontab(hour=0, minute=0),  # Har kuni yarim tunda (Toshkent vaqti)
     },
     'generate-monthly-payments-first-day': {
         'task': 'finance.tasks.generate_monthly_payments_task',
-        'schedule': crontab(day_of_month=1, hour=0, minute=5), # Har oyning 1-kuni 00:05 da
+        'schedule': crontab(day_of_month=1, hour=0, minute=5),  # Har oyning 1-kuni 00:05 da
     },
     'check-uncollected-reports-every-30-minutes': {
         'task': 'reports.tasks.alert_uncollected_reports_task',
-        'schedule': crontab(minute='*/30'), # Har 30 daqiqada fonda tekshirish
+        'schedule': crontab(minute='*/30'),  # Har 30 daqiqada fonda tekshirish
     },
     'send-daily-reports-to-admins': {
         'task': 'reports.send_daily_reports_to_admins',
-        'schedule': crontab(hour=23, minute=50), # Har kuni 23:50 da jo'natiladi
+        'schedule': crontab(hour=20, minute=0),  # Har kuni soat 20:00 da
+    },
+    'send-monthly-attendance-to-admins': {
+        'task': 'reports.send_monthly_attendance_to_admins',
+        'schedule': crontab(hour=21, minute=0, day_of_month='28-31'),  # Har oy oxirida 21:00 da
     },
     'send-monthly-financial-to-super-admins': {
         'task': 'reports.send_monthly_financial_to_super_admins',
-        'schedule': crontab(hour=23, minute=55), # Har kuni tekshiriladi, lekin faqat oyning oxirida ishlaydi
+        'schedule': crontab(hour=21, minute=30, day_of_month='28-31'),  # Har oy oxirida 21:30 da
+    },
+    'pandas-daily-branch-report': {
+        'task': 'telegram_bot.tasks.trigger_daily_branch_reports_pandas',
+        'schedule': crontab(minute=0, hour=2),  # Har kuni soat 02:00 da
+    },
+    'pandas-monthly-attendance-report': {
+        'task': 'telegram_bot.tasks.trigger_monthly_attendance_reports_pandas',
+        'schedule': crontab(minute=0, hour=3, day_of_month='1'),  # Oyning 1-kuni 03:00 da
+    },
+    'pandas-monthly-finance-report': {
+        'task': 'telegram_bot.tasks.trigger_monthly_finance_reports_pandas',
+        'schedule': crontab(minute=30, hour=3, day_of_month='1'),  # Oyning 1-kuni 03:30 da
     },
 }
 
-# Production Optimization & Logging
+# Production Logging
 if not DEBUG:
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
-    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
-    CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False') == 'True'
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
 
     # Log katalogi mavjudligini ta'minlash (FileHandler ochilishidan oldin)
     LOG_DIR = os.path.join(BASE_DIR, 'logs')

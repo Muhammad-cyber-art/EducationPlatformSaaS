@@ -65,9 +65,12 @@ const StudentModals = ({
  currentBranchId={studentData?.branch_id}
  api={api}
  onSuccess={() => {
- queryClient.invalidateQueries(['student']);
- queryClient.invalidateQueries(['payments-all']);
- queryClient.invalidateQueries(['student-history', studentData?.id]);
+ queryClient.invalidateQueries({ queryKey: ['student'] });
+ queryClient.invalidateQueries({ queryKey: ['payments-all'] });
+ queryClient.invalidateQueries({ queryKey: ['student-history', studentData?.id] });
+ queryClient.invalidateQueries({ queryKey: ['student-transfers', studentData?.id] });
+ queryClient.invalidateQueries({ queryKey: ['groups-list'] });
+ queryClient.invalidateQueries({ queryKey: ['transfer-groups'] });
  }}
  />
 
