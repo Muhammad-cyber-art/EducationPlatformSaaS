@@ -2,21 +2,19 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { syncService } from '../services/syncService';
+import { attendanceOfflineService } from '../services/attendanceOfflineService';
+import toast from 'react-hot-toast';
 
 /**
- * BUG FIX: useSyncProgress hook endi to'g'ri cleanup qiladi.
- *
- * Oldingi versiyada:
- * - isOnline holati navigator.onLine bilan bir marta o'qilar, keyin eski qolardi.
- * - React StrictMode da ikki marta subscribe bo'lib, listener chiqib ketmay qolardi.
- *
- * Hozirgi versiyada:
- * - window online/offline eventlari ham kuzatiladi (ikki qavatli xavfsizlik)
- * - useRef orqali stale closure muammosi hal qilinadi
- * - Barcha eventListener-lar cleanup qilinadi
+ * useSyncProgress hook:
+ * - Leads va oflayn mutatsiyalarni (syncService) kuzatadi
+ * - Davomat, guruhlar va o'quvchilar ro'yxatini (attendanceOfflineService) orqa fonda yuklash holatini ko'rsatadi
+ * - [Sync] tugmasi bosilganda barcha ma'lumotlarni bir vaqtda serverdan tortib oladi
  */
 export function useSyncProgress() {
-  const [isSyncing, setIsSyncing] = useState(syncService.isSyncing);
+  const [isSyncing, setIsSyncing] = useState(
+    syncService.isSyncing || attendanceOfflineService.isPrefetching
+  );
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -35,7 +33,7 @@ export function useSyncProgress() {
     mountedRef.current = true;
 
     // 1. SyncService eventlarini eshitish
-    const unsubscribe = syncService.subscribe((event, data) => {
+    const unsubscribeSync = syncService.subscribe((event, data) => {
       if (!mountedRef.current) return;
 
       switch (event) {
@@ -49,7 +47,9 @@ export function useSyncProgress() {
         case 'sync_complete':
         case 'sync_failed':
         case 'sync_skipped':
-          setIsSyncing(false);
+          if (!attendanceOfflineService.isPrefetching) {
+            setIsSyncing(false);
+          }
           break;
         case 'network_status':
           setIsOnline(data.isOnline);
@@ -59,7 +59,20 @@ export function useSyncProgress() {
       }
     });
 
-    // 2. BUG FIX: window eventlari ham kuzatiladi — SyncService notify-dan mustaqil
+    // 2. AttendanceOfflineService (guruhlar, o'quvchilar, davomat) eventlarini eshitish
+    const unsubscribeAttendance = attendanceOfflineService.subscribe((event) => {
+      if (!mountedRef.current) return;
+
+      if (event === 'prefetch_start') {
+        setIsSyncing(true);
+      } else if (event === 'prefetch_complete' || event === 'prefetch_error') {
+        if (!syncService.isSyncing) {
+          setIsSyncing(false);
+        }
+      }
+    });
+
+    // 3. Window network eventlari
     const handleOnline = () => {
       if (mountedRef.current) setIsOnline(true);
     };
@@ -72,15 +85,30 @@ export function useSyncProgress() {
 
     return () => {
       mountedRef.current = false;
-      unsubscribe();
+      unsubscribeSync();
+      unsubscribeAttendance();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  const triggerSync = useCallback(() => {
-    syncService.synchronize();
-  }, []);
+  const triggerSync = useCallback(async () => {
+    if (isSyncing || !isOnline) return;
+
+    setIsSyncing(true);
+    try {
+      await Promise.allSettled([
+        syncService.synchronize(),
+        attendanceOfflineService.prefetchBundle(true)
+      ]);
+      toast.success("Oflayn ma'lumotlar to'liq yangilandi!", { id: 'offline-sync-success' });
+    } catch (err) {
+      console.warn("Manual sync error:", err);
+      toast.error("Sinxronizatsiyada xatolik yuz berdi", { id: 'offline-sync-error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing, isOnline]);
 
   return {
     isSyncing,
