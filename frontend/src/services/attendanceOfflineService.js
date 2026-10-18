@@ -197,31 +197,37 @@ class AttendanceOfflineService {
           }
         }
 
-        // 6. O'quvchilarning kalendardagi 1 oylik davomat matritsasini saqlash
+        // 6. O'quvchilarning kalendardagi 1 oylik davomat matritsasini saqlash (barcha guruhlar va alohida guruhlar)
         if (student_monthly_attendances && student_monthly_attendances.length > 0) {
           for (const monthly of student_monthly_attendances) {
             if (!monthly || !monthly.student_id) continue;
             const studentId = Number(monthly.student_id);
             const mYear = monthly.year || current_year;
             const mMonth = monthly.month || current_month;
+            const grpKey = monthly.req_group_id ? String(monthly.req_group_id) : 'all';
 
             await db.query_cache.put({
-              query_key: `student-monthly_${studentId}_${mYear}_${mMonth}_all`,
+              query_key: `student-monthly_${studentId}_${mYear}_${mMonth}_${grpKey}`,
               data: monthly,
               updated_at: nowIso,
             });
 
-            await db.query_cache.put({
-              query_key: `student-monthly_${studentId}_${mYear}_${mMonth}`,
-              data: monthly,
-              updated_at: nowIso,
-            });
+            if (grpKey === 'all') {
+              await db.query_cache.put({
+                query_key: `student-monthly_${studentId}_${mYear}_${mMonth}`,
+                data: monthly,
+                updated_at: nowIso,
+              });
+            }
 
             if (this.queryClient) {
-              this.queryClient.setQueryData(['student-monthly-attendance', String(studentId), mYear, mMonth, ''], monthly);
-              this.queryClient.setQueryData(['student-monthly-attendance', Number(studentId), mYear, mMonth, ''], monthly);
-              this.queryClient.setQueryData(['student-monthly-attendance', String(studentId), mYear, mMonth, undefined], monthly);
-              this.queryClient.setQueryData(['student-monthly-attendance', Number(studentId), mYear, mMonth, undefined], monthly);
+              const qKey = grpKey === 'all' ? '' : grpKey;
+              this.queryClient.setQueryData(['student-monthly-attendance', String(studentId), mYear, mMonth, qKey], monthly);
+              this.queryClient.setQueryData(['student-monthly-attendance', Number(studentId), mYear, mMonth, qKey], monthly);
+              if (grpKey === 'all') {
+                this.queryClient.setQueryData(['student-monthly-attendance', String(studentId), mYear, mMonth, undefined], monthly);
+                this.queryClient.setQueryData(['student-monthly-attendance', Number(studentId), mYear, mMonth, undefined], monthly);
+              }
             }
           }
         }

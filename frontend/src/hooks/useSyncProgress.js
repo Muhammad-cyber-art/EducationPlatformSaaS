@@ -3,17 +3,19 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { syncService } from '../services/syncService';
 import { attendanceOfflineService } from '../services/attendanceOfflineService';
+import { financeOfflineService } from '../services/financeOfflineService';
 import toast from 'react-hot-toast';
 
 /**
  * useSyncProgress hook:
  * - Leads va oflayn mutatsiyalarni (syncService) kuzatadi
  * - Davomat, guruhlar va o'quvchilar ro'yxatini (attendanceOfflineService) orqa fonda yuklash holatini ko'rsatadi
+ * - Moliya va Kassa ma'lumotlarini (financeOfflineService) orqa fonda yuklash holatini ko'rsatadi
  * - [Sync] tugmasi bosilganda barcha ma'lumotlarni bir vaqtda serverdan tortib oladi
  */
 export function useSyncProgress() {
   const [isSyncing, setIsSyncing] = useState(
-    syncService.isSyncing || attendanceOfflineService.isPrefetching
+    syncService.isSyncing || attendanceOfflineService.isPrefetching || financeOfflineService.isPrefetching
   );
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -47,7 +49,7 @@ export function useSyncProgress() {
         case 'sync_complete':
         case 'sync_failed':
         case 'sync_skipped':
-          if (!attendanceOfflineService.isPrefetching) {
+          if (!attendanceOfflineService.isPrefetching && !financeOfflineService.isPrefetching) {
             setIsSyncing(false);
           }
           break;
@@ -66,13 +68,26 @@ export function useSyncProgress() {
       if (event === 'prefetch_start') {
         setIsSyncing(true);
       } else if (event === 'prefetch_complete' || event === 'prefetch_error') {
-        if (!syncService.isSyncing) {
+        if (!syncService.isSyncing && !financeOfflineService.isPrefetching) {
           setIsSyncing(false);
         }
       }
     });
 
-    // 3. Window network eventlari
+    // 3. FinanceOfflineService (kassa, to'lovlar, filiallar) eventlarini eshitish
+    const unsubscribeFinance = financeOfflineService.subscribe((event) => {
+      if (!mountedRef.current) return;
+
+      if (event === 'finance_prefetch_start') {
+        setIsSyncing(true);
+      } else if (event === 'finance_prefetch_complete' || event === 'finance_prefetch_error') {
+        if (!syncService.isSyncing && !attendanceOfflineService.isPrefetching) {
+          setIsSyncing(false);
+        }
+      }
+    });
+
+    // 4. Window network eventlari
     const handleOnline = () => {
       if (mountedRef.current) setIsOnline(true);
     };
@@ -87,6 +102,7 @@ export function useSyncProgress() {
       mountedRef.current = false;
       unsubscribeSync();
       unsubscribeAttendance();
+      unsubscribeFinance();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -99,7 +115,8 @@ export function useSyncProgress() {
     try {
       await Promise.allSettled([
         syncService.synchronize(),
-        attendanceOfflineService.prefetchBundle(true)
+        attendanceOfflineService.prefetchBundle(true),
+        financeOfflineService.prefetchFinanceBundle(),
       ]);
       toast.success("Oflayn ma'lumotlar to'liq yangilandi!", { id: 'offline-sync-success' });
     } catch (err) {

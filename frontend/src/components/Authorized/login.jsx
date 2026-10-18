@@ -8,6 +8,7 @@ import ThemeToggle from "../ThemeToggle";
 import { User, Lock, ArrowRight, ShieldCheck, Eye, EyeOff, Building2, Globe, ChevronLeft } from "lucide-react";
 import { extractSubdomain } from "../../utils/subdomain";
 import { attendanceOfflineService } from "../../services/attendanceOfflineService";
+import { financeOfflineService } from "../../services/financeOfflineService";
 
 export default function Login() {
   const user_info = get_user_info();
@@ -134,8 +135,9 @@ export default function Login() {
       const access = res.data.access;
       const payload = jwtDecode(access);
 
-      // Tizimga kirilganda orqa fonda davomat ma'lumotlarini oldindan yuklab olish
+      // Tizimga kirilganda orqa fonda davomat va moliya ma'lumotlarini oldindan yuklab olish
       attendanceOfflineService.prefetchBundle().catch(() => {});
+      financeOfflineService.prefetchFinanceBundle().catch(() => {});
 
       let role = payload.role;
       if (payload.is_superuser) {

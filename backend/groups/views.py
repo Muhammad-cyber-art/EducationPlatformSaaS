@@ -729,6 +729,27 @@ class GroupViewSet(viewsets.ModelViewSet):
                         active_enrollments=active_enrollments
                     )
                     student_monthly_attendances.append(st_monthly)
+
+                    # Agar o'quvchi bir nechta guruhga a'zo bo'lsa, har bir guruh uchun alohida hisoblaymiz
+                    student_distinct_groups = [e.group for e in active_enrollments if e.group]
+                    if not student_distinct_groups and st.group:
+                        student_distinct_groups = [st.group]
+                    elif st.group and st.group not in student_distinct_groups:
+                        student_distinct_groups.append(st.group)
+
+                    if len(student_distinct_groups) > 1:
+                        for grp in student_distinct_groups:
+                            st_grp_monthly = compute_student_monthly_attendance(
+                                student=st,
+                                year=year,
+                                month=month,
+                                req_group_id=grp.id,
+                                today=today,
+                                group_lessons_cache=group_lessons_cache,
+                                attendance_records=att_by_student.get(st.id, []),
+                                active_enrollments=active_enrollments
+                            )
+                            student_monthly_attendances.append(st_grp_monthly)
                 except Exception as ex:
                     logger.warning(f"Error computing monthly attendance for student {st.id}: {ex}")
 

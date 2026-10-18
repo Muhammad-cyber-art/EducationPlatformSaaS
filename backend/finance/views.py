@@ -2395,3 +2395,98 @@ class SpecialStudentsDashboardAPIView(APIView):
         })
         
         return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def offline_finance_bundle(request):
+    """
+    Offline-First Kassa va To'lovlar bundle:
+    - Bugungi daromad va xarajatlar (today stats)
+    - Joriy oyning barcha to'lovlari (incomes)
+    - Joriy oyning barcha chiqimlari (withdrawals)
+    - Filiallar ro'yxati
+    - O'quvchilarning so'nggi to'lovlari (student-payments)
+    """
+    from calendar import monthrange
+    user = request.user
+    today = timezone.localdate()
+    current_month_str = today.strftime('%Y-%m')
+    start_of_month = today.replace(day=1)
+    _, last_day = monthrange(today.year, today.month)
+    end_of_month = today.replace(day=last_day)
+
+    allowed_branches = []
+    if user.role == 'admin':
+        if user.branch_id:
+            allowed_branches.append(user.branch_id)
+        if hasattr(user, 'branch_accesses'):
+            allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
+        allowed_branches = [int(b) for b in allowed_branches if b is not None]
+
+    tx_qs = FinanceTransaction.objects.select_related(
+        'marked_by', 'branch', 'student', 'group'
+    ).exclude(record_type='reversal')
+
+    if allowed_branches:
+        tx_qs = tx_qs.filter(branch_id__in=allowed_branches)
+
+    # 1. Bugungi operatsiyalar
+    today_incomes_qs = tx_qs.filter(date=today, transaction_type='income', category='student_fee')
+    today_expenses_qs = tx_qs.filter(date=today, transaction_type='expense')
+
+    today_incomes = FinanceTransactionSerializer(today_incomes_qs[:500], many=True).data
+    today_expenses = FinanceTransactionSerializer(today_expenses_qs[:500], many=True).data
+
+    total_today = sum(Decimal(str(p['amount'])) for p in today_incomes if p.get('status') != 'cancelled')
+    total_verified = sum(
+        Decimal(str(p['amount'])) for p in today_incomes 
+        if p.get('status') != 'cancelled' and (p.get('is_verified') or (p.get('payment_details') and p.get('payment_details', {}).get('is_verified')))
+    )
+    total_withdrawn = sum(Decimal(str(w['amount'])) for w in today_expenses if w.get('status') != 'cancelled')
+
+    # 2. Joriy oydagi barcha daromadlar (incomes)
+    month_incomes_qs = tx_qs.filter(
+        date__gte=start_of_month,
+        date__lte=end_of_month,
+        transaction_type='income',
+        category='student_fee'
+    ).order_by('-date', '-id')[:1000]
+    month_incomes = FinanceTransactionSerializer(month_incomes_qs, many=True).data
+
+    # 3. Joriy oydagi barcha xarajatlar (expenses)
+    month_expenses_qs = tx_qs.filter(
+        date__gte=start_of_month,
+        date__lte=end_of_month,
+        transaction_type='expense'
+    ).order_by('-date', '-id')[:1000]
+    month_expenses = FinanceTransactionSerializer(month_expenses_qs, many=True).data
+
+    # 4. Filiallar
+    branch_qs = Branch.objects.filter(is_active=True)
+    if allowed_branches:
+        branch_qs = branch_qs.filter(id__in=allowed_branches)
+    branches_data = [{'id': b.id, 'name': b.name} for b in branch_qs]
+
+    # 5. O'quvchilarning oxirgi to'lovlari (student-payments)
+    payment_qs = Payment.objects.select_related('student', 'group').order_by('-created_at')
+    if allowed_branches:
+        payment_qs = payment_qs.filter(student__branch_id__in=allowed_branches)
+    student_payments = PaymentSerializer(payment_qs[:1000], many=True).data
+
+    return Response({
+        'current_date': str(today),
+        'current_month': current_month_str,
+        'today_stats': {
+            'totalToday': float(total_today),
+            'totalVerified': float(total_verified),
+            'totalWithdrawn': float(total_withdrawn),
+        },
+        'today_incomes': today_incomes,
+        'today_expenses': today_expenses,
+        'month_incomes': month_incomes,
+        'month_expenses': month_expenses,
+        'branches': branches_data,
+        'student_payments': student_payments,
+    })
+

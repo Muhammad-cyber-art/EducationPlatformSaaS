@@ -82,7 +82,7 @@ class SyncEngineAPIView(APIView):
                                     applied_queue_ids.append(queue_id)
                             except Exception as att_err:
                                 logger.exception(f"[SyncEngine] Davomat sinxronlashda xato: {att_err}")
-                                applied_queue_ids.append(queue_id)
+                                # Serverda kutilmagan xatolik yuz bersa, outboxdan o'chirmaymiz (keyinroq retry bo'ladi)
                         else:
                             applied_queue_ids.append(queue_id)
                         continue

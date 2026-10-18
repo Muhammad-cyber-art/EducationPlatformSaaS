@@ -104,18 +104,7 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
     keepPreviousData: true,
   });
 
-  const stats = attendancePayload?.stats || {
-    total_scheduled: 0,
-    total_passed: 0,
-    attended_count: 0,
-    absent_count: 0,
-    unconfirmed_count: 0,
-    future_count: 0,
-    attendance_rate: 100,
-  };
-
   const groups = attendancePayload?.groups || [];
-  const days = attendancePayload?.days || [];
 
   // O'quvchi a'zo bo'lgan faol guruhlar ro'yxati (API eng ishonchli manba)
   const allGroupsList = useMemo(() => {
@@ -132,6 +121,91 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
     });
     return Array.from(map.values());
   }, [studentGroups, groups]);
+
+  // Guruh tanlanganda kunlar va statistikani alohida filtrlab ajratish (ikkita guruh kunlari aralashib ketmasligi uchun)
+  const { days, stats } = useMemo(() => {
+    const rawDays = attendancePayload?.days || [];
+    const serverStats = attendancePayload?.stats;
+    const isFilteredByGroup = Boolean(selectedGroupId && String(selectedGroupId).trim() !== "");
+
+    // Agar server allaqachon aynan shu guruh bo'yicha ma'lumot bergan bo'lsa
+    if (!isFilteredByGroup || (attendancePayload?.req_group_id && String(attendancePayload.req_group_id) === String(selectedGroupId))) {
+      return {
+        days: rawDays,
+        stats: serverStats || {
+          total_scheduled: 0,
+          total_passed: 0,
+          attended_count: 0,
+          absent_count: 0,
+          unconfirmed_count: 0,
+          future_count: 0,
+          attendance_rate: 100,
+        }
+      };
+    }
+
+    // Guruh nomi va ID bo'yicha aniq filtr
+    const selectedGroupObj = allGroupsList.find((g) => String(g.id) === String(selectedGroupId));
+    const targetName = selectedGroupObj?.name?.trim().toLowerCase();
+    const targetId = Number(selectedGroupId);
+
+    let scheduled = 0;
+    let passed = 0;
+    let attended = 0;
+    let absent = 0;
+    let unconfirmed = 0;
+    let future = 0;
+
+    const processedDays = rawDays.map((d) => {
+      let isForThisGroup = false;
+      if (Array.isArray(d.group_ids) && d.group_ids.length > 0) {
+        isForThisGroup = d.group_ids.includes(targetId);
+      } else if (Array.isArray(d.groups) && targetName) {
+        isForThisGroup = d.groups.some((gn) => String(gn).trim().toLowerCase() === targetName);
+      }
+
+      if (!isForThisGroup) {
+        return {
+          ...d,
+          is_lesson_day: false,
+          status: "no_lesson",
+          groups: [],
+        };
+      }
+
+      // Ushbu tanlangan guruh darsi kuni
+      scheduled += 1;
+      if (d.status === "future") {
+        future += 1;
+      } else if (d.status === "present") {
+        passed += 1;
+        attended += 1;
+      } else if (d.status === "absent") {
+        passed += 1;
+        absent += 1;
+      } else if (d.status === "unconfirmed") {
+        passed += 1;
+        unconfirmed += 1;
+      }
+
+      return d;
+    });
+
+    const rate = passed > 0 ? Math.round((attended / passed) * 1000) / 10 : future > 0 ? 0 : 100.0;
+
+    return {
+      days: processedDays,
+      stats: {
+        total_scheduled: scheduled,
+        total_passed: passed,
+        attended_count: attended,
+        absent_count: absent,
+        unconfirmed_count: unconfirmed,
+        future_count: future,
+        attendance_rate: rate,
+      },
+    };
+  }, [attendancePayload, selectedGroupId, allGroupsList]);
 
   // Sahifa aylantirilganda (scroll) tooltipni xavfsiz yopish
   useEffect(() => {

@@ -159,8 +159,21 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
     queryFn: async () => {
       try {
         const res = await api.get(`/finance/student-payments/?student=${student_id}`);
+        if (res.data) {
+          try {
+            await db.query_cache.put({
+              query_key: `payments-all_${student_id}`,
+              data: res.data,
+              updated_at: new Date().toISOString(),
+            });
+          } catch (e) {}
+        }
         return res.data;
       } catch (err) {
+        try {
+          const cached = await db.query_cache.get(`payments-all_${student_id}`);
+          if (cached?.data) return cached.data;
+        } catch (e) {}
         return [];
       }
     },
@@ -174,8 +187,21 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
     queryFn: async () => {
       try {
         const res = await api.get(`/finance/student-payments/student-history/${student_id}/`);
+        if (res.data) {
+          try {
+            await db.query_cache.put({
+              query_key: `student-history_${student_id}`,
+              data: res.data,
+              updated_at: new Date().toISOString(),
+            });
+          } catch (e) {}
+        }
         return res.data;
       } catch (err) {
+        try {
+          const cached = await db.query_cache.get(`student-history_${student_id}`);
+          if (cached?.data) return cached.data;
+        } catch (e) {}
         return { monthly_payments: [] };
       }
     },

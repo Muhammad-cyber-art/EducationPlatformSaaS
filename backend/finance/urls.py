@@ -5,7 +5,8 @@ from .views import (
     StaffProfileViewSet, FinanceDashboardView, trigger_monthly_payments,
     FinanceTransactionViewSet, EmployeeAdvanceViewSet, AbsentTodayStudentsView,
     payment_statistics_view, MonthlyBranchTrendsView, AdminExpenseViewSet, MentorGroupSalaryConfigViewSet,
-    SpecialStudentsDashboardAPIView, generate_single_student_payment
+    SpecialStudentsDashboardAPIView, generate_single_student_payment,
+    offline_finance_bundle
 )
 
 router = DefaultRouter()
@@ -18,6 +19,7 @@ router.register(r'admin-expenses', AdminExpenseViewSet, basename='admin-expense'
 router.register(r'mentor-group-salary-configs', MentorGroupSalaryConfigViewSet, basename='mentor-group-salary-config')
 urlpatterns = [
     path('', include(router.urls)),
+    path('offline-bundle/', offline_finance_bundle, name='offline-finance-bundle'),
     path('statistics/', FinanceDashboardView.as_view(), name='finance-stats'),
     path('generate/',trigger_monthly_payments, name='trigger-monthly-payments'),
     path('generate-student-payment/', generate_single_student_payment, name='generate-single-student-payment'),

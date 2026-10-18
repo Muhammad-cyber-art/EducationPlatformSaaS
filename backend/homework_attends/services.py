@@ -147,19 +147,23 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
     """
     from groups.models import GroupEnrollment
 
-    # Faqat shu kunda guruhda bo'lgan yoki mavjud davomat yozuvi bor studentlar qabul qilinadi
-    active_student_ids = set(
+    # Faqat shu guruhga aloqador yoki mavjud davomat yozuvi bor studentlar qabul qilinadi
+    group_enrollment_student_ids = set(
         GroupEnrollment.objects.filter(
-            group=group,
-            joined_at__date__lte=requested_date,
+            group=group
         ).filter(
             models.Q(is_active=True) | models.Q(left_at__date__gte=requested_date)
         ).values_list('student_id', flat=True)
     )
-
+    direct_student_ids = set(
+        Student.objects.filter(
+            models.Q(group=group) | models.Q(enrollments__group=group),
+            is_active=True
+        ).values_list('id', flat=True)
+    )
     existing_attendances = Attendance.objects.filter(group=group, date=requested_date)
     attendance_map = {att.student_id: att for att in existing_attendances}
-    valid_student_ids = active_student_ids | set(attendance_map.keys())
+    valid_student_ids = group_enrollment_student_ids | direct_student_ids | set(attendance_map.keys())
 
     to_create = []
     to_update = []
@@ -567,14 +571,31 @@ def compute_student_monthly_attendance(
             ).select_related('group')
         )
 
-    available_groups = [e.group for e in active_enrollments if e.group]
-    if not available_groups and student.group:
-        available_groups = [student.group]
+    if req_group_id is not None:
+        try:
+            req_group_id = int(req_group_id)
+        except (ValueError, TypeError):
+            req_group_id = None
+
+    available_groups_dict = {}
+    for e in active_enrollments:
+        if e.group and e.group.id not in available_groups_dict:
+            available_groups_dict[e.group.id] = e.group
+    if student.group and student.group.id not in available_groups_dict:
+        available_groups_dict[student.group.id] = student.group
+
+    available_groups = list(available_groups_dict.values())
 
     if req_group_id:
         active_groups = [g for g in available_groups if g.id == req_group_id]
-        if not active_groups and student.group and student.group.id == req_group_id:
-            active_groups = [student.group]
+        if not active_groups:
+            try:
+                from groups.models import Group
+                direct_grp = Group.objects.filter(id=req_group_id).first()
+                if direct_grp:
+                    active_groups = [direct_grp]
+            except Exception:
+                active_groups = []
     else:
         active_groups = available_groups
 
@@ -707,6 +728,10 @@ def compute_student_monthly_attendance(
                 status_str = "unconfirmed"
             lesson_groups_names = [r.group_name or (r.group.name if r.group else "Guruh") for r in records_today]
 
+        day_group_ids = [g['id'] for g in day_groups_with_lesson]
+        if not day_group_ids and records_today:
+            day_group_ids = [r.group_id for r in records_today if r.group_id]
+
         days_data.append({
             "date": curr_date_str,
             "day": day_num,
@@ -714,6 +739,7 @@ def compute_student_monthly_attendance(
             "is_lesson_day": is_lesson or (len(records_today) > 0),
             "status": status_str,
             "groups": lesson_groups_names,
+            "group_ids": day_group_ids,
             "is_today": is_today
         })
 
@@ -725,6 +751,7 @@ def compute_student_monthly_attendance(
     return {
         "student_id": student.id,
         "student_name": student.full_name,
+        "req_group_id": req_group_id,
         "year": year,
         "month": month,
         "groups": [{"id": g.id, "name": g.name} for g in available_groups],

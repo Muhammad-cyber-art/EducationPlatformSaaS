@@ -132,22 +132,50 @@ export async function clearAttendanceDraft(groupId, date) {
  * 2. sync_queue ga 'attendance' mutatsiyasini qo'shadi
  * 3. Qoralamani tozalaydi
  */
-export async function queueAttendanceConfirm(groupId, date, attendancesList) {
+export async function queueAttendanceConfirm(groupId, date, attendancesList, markedByUser = null) {
   const now = new Date().toISOString();
 
   await db.transaction('rw', [db.attendance_records, db.attendance_drafts, db.sync_queue], async () => {
-    // 1. Lokal keshga yozish
+    // 1. Lokal keshga yozish (avvalgi eski yozuvlarni tozalab, yangisini qo'yish)
+    try {
+      const existing = await db.attendance_records
+        .where('group_id')
+        .equals(Number(groupId))
+        .filter((a) => a.date === date)
+        .toArray();
+
+      if (existing.length > 0) {
+        const ids = existing.map((e) => e.local_id).filter(Boolean);
+        if (ids.length > 0) {
+          await db.attendance_records.bulkDelete(ids);
+        }
+      }
+    } catch (e) {}
+
     for (const item of attendancesList) {
-      await db.attendance_records.put({
+      await db.attendance_records.add({
         group_id: Number(groupId),
         date,
         student_id: Number(item.student_id),
         is_present: Boolean(item.is_present),
+        marked_by: markedByUser || { id: 1, full_name: 'Men' },
         updated_at: now,
       });
     }
 
-    // 2. Outbox navbatiga qo'shish
+    // 2. Outbox navbatiga qo'shish (agar avval pending bo'lsa, yangisiga almashtirish)
+    try {
+      const existingPending = await db.sync_queue
+        .where('status')
+        .equals('pending')
+        .filter((q) => q.entity === 'attendance' && Number(q.data?.group_id) === Number(groupId) && q.data?.date === date)
+        .toArray();
+
+      if (existingPending.length > 0) {
+        await db.sync_queue.bulkDelete(existingPending.map((p) => p.queue_id));
+      }
+    } catch (e) {}
+
     await db.sync_queue.add({
       action: 'confirm',
       entity: 'attendance',

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../../../../tokenUpdater/updater";
 import toast from "react-hot-toast";
 import { get_user_info } from "../../../Authorized/getRole";
+import { db } from "../../../../db/db";
 
 export const formatCurrency = (val) => {
     return Number(val).toLocaleString() + " UZS";
@@ -137,28 +138,53 @@ export const useKassa = () => {
     const userInfo = useMemo(() => get_user_info(), []);
 
     const fetchTodayStats = useCallback(async () => {
+        const today = new Date().toISOString().split('T')[0];
+        const cacheKey = `kassa_today_stats_${filters.branch || 'all'}`;
         try {
-            const today = new Date().toISOString().split('T')[0];
             const baseParams = { date: today, branch: filters.branch || undefined };
             
             // Fetch all incomes for today
             const incRes = await api.get("/finance/transactions/", { params: { ...baseParams, transaction_type: 'income', category: 'student_fee', exclude_reversals: 'true', page_size: 1000 } });
-            const todayIncomes = incRes.data.results || incRes.data;
+            const todayIncomes = incRes.data.results || incRes.data || [];
             
             const expRes = await api.get("/finance/transactions/", { params: { ...baseParams, transaction_type: 'expense', page_size: 1000 } });
-            const todayExpenses = expRes.data.results || expRes.data;
+            const todayExpenses = expRes.data.results || expRes.data || [];
 
             const totalToday = todayIncomes.reduce((sum, p) => p.status === 'cancelled' ? sum : sum + Number(p.amount), 0);
             const totalVerified = todayIncomes.filter(p => (p.is_verified || p.payment_details?.is_verified) && p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.amount), 0);
             const totalWithdrawn = todayExpenses.reduce((sum, w) => w.status === 'cancelled' ? sum : sum + Number(w.amount), 0);
 
-            dispatch({ type: 'SET_TODAY_STATS', payload: { totalToday, totalVerified, totalWithdrawn } });
+            const payload = { totalToday, totalVerified, totalWithdrawn };
+            dispatch({ type: 'SET_TODAY_STATS', payload });
+
+            // Keshga saqlash
+            try {
+                await db.query_cache.put({
+                    query_key: cacheKey,
+                    data: payload,
+                    updated_at: new Date().toISOString()
+                });
+            } catch (e) {}
         } catch (err) {
-            console.error("Error fetching today stats:", err);
+            // Oflayn keshdan olish
+            try {
+                const cached = await db.query_cache.get(cacheKey);
+                if (cached?.data) {
+                    dispatch({ type: 'SET_TODAY_STATS', payload: cached.data });
+                    return;
+                }
+                const fallbackCached = await db.query_cache.get('kassa_today_stats_all');
+                if (fallbackCached?.data) {
+                    dispatch({ type: 'SET_TODAY_STATS', payload: fallbackCached.data });
+                    return;
+                }
+            } catch (e) {}
+            console.warn("[Kassa] Error fetching today stats, falling back to empty:", err?.message);
         }
     }, [filters.branch]);
 
     const fetchPayments = useCallback(async (page = 1, isLoadMore = false) => {
+        const cacheKey = `kassa_incomes_${filters.month}_${filters.branch || 'all'}`;
         try {
             if (isLoadMore) dispatch({ type: 'SET_LOADING_MORE', payload: true });
             else dispatch({ type: 'SET_LOADING', payload: true });
@@ -176,7 +202,7 @@ export const useKassa = () => {
             };
 
             const res = await api.get("/finance/transactions/", { params });
-            const data = res.data.results || res.data;
+            const data = res.data.results || res.data || [];
             const hasMore = res.data.next !== null && res.data.next !== undefined;
 
             dispatch({ 
@@ -184,8 +210,38 @@ export const useKassa = () => {
                 payload: { data, page, hasMore } 
             });
             if (!isLoadMore) dispatch({ type: 'SET_PAGES', payload: { paymentsPage: 1 } });
+
+            // 1-sahifani keshga yozamiz
+            if (page === 1 && !filters.search) {
+                try {
+                    await db.query_cache.put({
+                        query_key: cacheKey,
+                        data,
+                        updated_at: new Date().toISOString()
+                    });
+                } catch (e) {}
+            }
         } catch (error) {
-            console.error(error);
+            // Oflayn rejimda keshdan yuklash
+            try {
+                const cached = await db.query_cache.get(cacheKey);
+                if (cached?.data) {
+                    dispatch({ 
+                        type: 'SET_PAYMENTS', 
+                        payload: { data: cached.data, page: 1, hasMore: false } 
+                    });
+                    return;
+                }
+                const fallbackCached = await db.query_cache.get(`kassa_incomes_${filters.month}`);
+                if (fallbackCached?.data) {
+                    dispatch({ 
+                        type: 'SET_PAYMENTS', 
+                        payload: { data: fallbackCached.data, page: 1, hasMore: false } 
+                    });
+                    return;
+                }
+            } catch (e) {}
+            console.warn("[Kassa] Error fetching payments, offline fallback:", error?.message);
         } finally {
             dispatch({ type: 'SET_LOADING', payload: false });
             dispatch({ type: 'SET_LOADING_MORE', payload: false });
@@ -193,6 +249,7 @@ export const useKassa = () => {
     }, [filters.month, filters.search, filters.branch]);
 
     const fetchWithdrawals = useCallback(async (page = 1, isLoadMore = false) => {
+        const cacheKey = `kassa_expenses_${filters.month}_${filters.branch || 'all'}`;
         try {
             if (isLoadMore) dispatch({ type: 'SET_LOADING_MORE', payload: true });
             else dispatch({ type: 'SET_LOADING', payload: true });
@@ -207,7 +264,7 @@ export const useKassa = () => {
             };
 
             const res = await api.get("/finance/transactions/", { params });
-            const rawData = res.data.results || res.data;
+            const rawData = res.data.results || res.data || [];
             const data = (rawData || []).filter(t => t.status !== 'cancelled');
             const hasMore = res.data.next !== null && res.data.next !== undefined;
 
@@ -216,8 +273,36 @@ export const useKassa = () => {
                 payload: { data, page, hasMore } 
             });
             if (!isLoadMore) dispatch({ type: 'SET_PAGES', payload: { withdrawalsPage: 1 } });
+
+            if (page === 1) {
+                try {
+                    await db.query_cache.put({
+                        query_key: cacheKey,
+                        data,
+                        updated_at: new Date().toISOString()
+                    });
+                } catch (e) {}
+            }
         } catch (error) {
-            console.error(error);
+            try {
+                const cached = await db.query_cache.get(cacheKey);
+                if (cached?.data) {
+                    dispatch({ 
+                        type: 'SET_WITHDRAWALS', 
+                        payload: { data: cached.data, page: 1, hasMore: false } 
+                    });
+                    return;
+                }
+                const fallbackCached = await db.query_cache.get(`kassa_expenses_${filters.month}`);
+                if (fallbackCached?.data) {
+                    dispatch({ 
+                        type: 'SET_WITHDRAWALS', 
+                        payload: { data: fallbackCached.data, page: 1, hasMore: false } 
+                    });
+                    return;
+                }
+            } catch (e) {}
+            console.warn("[Kassa] Error fetching withdrawals, offline fallback:", error?.message);
         } finally {
             dispatch({ type: 'SET_LOADING', payload: false });
             dispatch({ type: 'SET_LOADING_MORE', payload: false });
@@ -249,8 +334,23 @@ export const useKassa = () => {
         const fetchBranches = async () => {
             try {
                 const res = await api.get("/add_branch/branches/");
-                dispatch({ type: 'SET_BRANCHES', payload: res.data.results || res.data });
-            } catch (err) { console.error(err); }
+                const bData = res.data.results || res.data || [];
+                dispatch({ type: 'SET_BRANCHES', payload: bData });
+                try {
+                    await db.query_cache.put({
+                        query_key: 'branches_list',
+                        data: bData,
+                        updated_at: new Date().toISOString()
+                    });
+                } catch (e) {}
+            } catch (err) {
+                try {
+                    const cached = await db.query_cache.get('branches_list');
+                    if (cached?.data) {
+                        dispatch({ type: 'SET_BRANCHES', payload: cached.data });
+                    }
+                } catch (e) {}
+            }
         };
         fetchBranches();
     }, []);
