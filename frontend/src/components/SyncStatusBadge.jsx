@@ -1,16 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSyncProgress } from '../hooks/useSyncProgress';
-import { RefreshCw, Wifi, WifiOff, CloudUpload } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, CloudUpload, Database } from 'lucide-react';
 
 /**
- * BUG FIX: SyncStatusBadge endi loyihaning CSS dizayn tizimiga (var(--*)) mos.
- * Oldingi versiyada Tailwind bg-neutral-900 va boshqa generic klasslari ishlatilgandi —
- * bu loyihaning dark/light theme almashinuvida noto'g'ri rang ko'rsatardi.
- *
- * Qo'shimcha: React.memo bilan keraksiz re-render oldini olinadi.
+ * SyncStatusBadge:
+ * Tarmoq holati (Online/Offline), outbox navbati, va eng muhimi —
+ * serverdagi bazani lokal IndexedDB ga to'liq nusxalab olish (Local DB Copy) tugmasi.
  */
 const SyncStatusBadge = React.memo(function SyncStatusBadge() {
   const { isSyncing, isOnline, progress, pendingCount, triggerSync } = useSyncProgress();
+  const [dbStatus, setDbStatus] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('local_db_status') || 'null');
+    } catch (_) {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (!isSyncing) {
+      try {
+        setDbStatus(JSON.parse(localStorage.getItem('local_db_status') || 'null'));
+      } catch (_) {}
+    }
+  }, [isSyncing]);
 
   return (
     <div
@@ -42,9 +55,20 @@ const SyncStatusBadge = React.memo(function SyncStatusBadge() {
         )}
       </div>
 
+      {/* Lokal Baza Nusxasi Statusi */}
+      {dbStatus?.groups_count > 0 && (
+        <div
+          className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 font-bold"
+          title={`Lokal bazada ${dbStatus.groups_count} ta guruh va ${dbStatus.students_count || 0} ta o'quvchi nusxalangan`}
+        >
+          <Database size={10} />
+          <span className="text-[9px] font-mono">{dbStatus.groups_count} guruh nusxalangan</span>
+        </div>
+      )}
+
       {/* Navbatdagi yozuvlar (Outbox) — faqat pending bo'lganda ko'rinadi */}
       {pendingCount > 0 && (
-        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 font-bold">
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 font-bold" title="Serverga yuborilishi kutilayotgan amallar soni">
           <CloudUpload size={11} />
           <span className="text-[9px]">{pendingCount}</span>
         </div>
@@ -65,12 +89,12 @@ const SyncStatusBadge = React.memo(function SyncStatusBadge() {
         </div>
       )}
 
-      {/* Qo'lda sinxronlash tugmasi */}
+      {/* Serverdagi bazani lokal xotiraga nusxalash tugmasi */}
       <button
         onClick={triggerSync}
         disabled={isSyncing || !isOnline}
-        title={isSyncing ? 'Sinxronlanmoqda...' : 'Hozir sinxronlash'}
-        className="flex items-center gap-1 px-2 py-0.5 rounded-lg font-bold transition-all active:scale-95 disabled:opacity-40"
+        title={isSyncing ? "Serverdagi baza lokal xotiraga nusxalanmoqda..." : "Serverdagi barcha guruhlar, o'quvchilar va davomatlarni lokal xotiraga to'liq nusxalab olish"}
+        className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg font-bold transition-all active:scale-95 disabled:opacity-40 hover:border-[var(--gold)]/40"
         style={{
           background: 'var(--bg-void)',
           border: '1px solid var(--border-glass)',
@@ -82,7 +106,7 @@ const SyncStatusBadge = React.memo(function SyncStatusBadge() {
           className={isSyncing ? 'animate-spin text-blue-400' : ''}
         />
         <span className="text-[9px]">
-          {isSyncing ? 'Yuklanmoqda' : 'Sync'}
+          {isSyncing ? 'Nusxalanmoqda...' : 'Bazani nusxalash'}
         </span>
       </button>
     </div>

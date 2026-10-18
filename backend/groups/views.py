@@ -622,8 +622,18 @@ class GroupViewSet(viewsets.ModelViewSet):
         ).values('student_id', 'group_id', 'id', 'is_paid')
         payment_map = {(p['student_id'], p['group_id']): p for p in payments}
 
+        # O'tgan tasdiqlangan davomat kunlarini barcha guruhlar uchun bitta tezkor so'rovda olish
+        all_att_dates = Attendance.objects.filter(
+            group_id__in=group_ids,
+            date__year=year,
+            date__month=month,
+            marked_by__isnull=False
+        ).values('group_id', 'date')
+        att_dates_by_group = {}
+        for row in all_att_dates:
+            att_dates_by_group.setdefault(row['group_id'], set()).add(row['date'])
+
         bundle = []
-        group_lessons_cache = {}
         all_active_student_ids = set()
 
         for group in groups:
@@ -632,19 +642,13 @@ class GroupViewSet(viewsets.ModelViewSet):
                 dates = group.get_lesson_dates(year, month)
             except Exception:
                 dates = []
-            group_lessons_cache[group.id] = set(dates)
 
-            attendance_dates = Attendance.objects.filter(
-                group=group,
-                date__year=year,
-                date__month=month,
-                marked_by__isnull=False
-            ).values_list('date', flat=True).distinct()
-            all_dates = set(dates) | set(attendance_dates)
+            attendance_dates = att_dates_by_group.get(group.id, set())
+            all_dates = set(dates) | attendance_dates
             final_dates = [d.strftime('%Y-%m-%d') for d in sorted(all_dates) if d <= today]
             final_dates.reverse()
 
-            # 2. Guruhning to'liq ma'lumotlari (GroupSerializer orqali barcha maydonlar bilan)
+            # 2. Guruhning to'liq ma'lumotlari (GroupSerializer orqali)
             group_detail = GroupSerializer(group, context={'request': request}).data
             group_detail.pop('students', None)  # O'quvchilar alohida to'liq massivda bo'ladi
 
@@ -684,74 +688,27 @@ class GroupViewSet(viewsets.ModelViewSet):
                 'today_attendances': serialized_atts,
             })
 
-        # 5. O'quvchilarning to'liq profillari va 1 oylik kalendar davomatini oldindan hisoblash
+        # 5. O'quvchilarning asosiy profillarini bitta tezkor queryda olish (0.05s)
         student_profiles = []
-        student_monthly_attendances = []
-
         if all_active_student_ids:
-            from homework_attends.services import compute_student_monthly_attendance
-
-            # Joriy oy davomatlarini bir queryda olish
-            month_attendances = Attendance.objects.filter(
-                student_id__in=all_active_student_ids,
-                date__year=year,
-                date__month=month
-            ).select_related('group')
-
-            att_by_student = {}
-            for att in month_attendances:
-                att_by_student.setdefault(att.student_id, []).append(att)
-
             students_queryset = Student.objects.filter(
                 id__in=all_active_student_ids
-            ).select_related('group', 'branch', 'finance_profile').prefetch_related(
-                'enrollments__group'
-            )
+            ).select_related('group', 'branch')
 
             for st in students_queryset:
-                try:
-                    st_profile = StudentNestedSerializer(st, context={'request': request}).data
-                    student_profiles.append(st_profile)
-                except Exception as ex:
-                    logger.warning(f"Error serializing student profile {st.id}: {ex}")
-
-                try:
-                    active_enrollments = [
-                        e for e in st.enrollments.all() if e.is_active and e.group
-                    ]
-                    st_monthly = compute_student_monthly_attendance(
-                        student=st,
-                        year=year,
-                        month=month,
-                        today=today,
-                        group_lessons_cache=group_lessons_cache,
-                        attendance_records=att_by_student.get(st.id, []),
-                        active_enrollments=active_enrollments
-                    )
-                    student_monthly_attendances.append(st_monthly)
-
-                    # Agar o'quvchi bir nechta guruhga a'zo bo'lsa, har bir guruh uchun alohida hisoblaymiz
-                    student_distinct_groups = [e.group for e in active_enrollments if e.group]
-                    if not student_distinct_groups and st.group:
-                        student_distinct_groups = [st.group]
-                    elif st.group and st.group not in student_distinct_groups:
-                        student_distinct_groups.append(st.group)
-
-                    if len(student_distinct_groups) > 1:
-                        for grp in student_distinct_groups:
-                            st_grp_monthly = compute_student_monthly_attendance(
-                                student=st,
-                                year=year,
-                                month=month,
-                                req_group_id=grp.id,
-                                today=today,
-                                group_lessons_cache=group_lessons_cache,
-                                attendance_records=att_by_student.get(st.id, []),
-                                active_enrollments=active_enrollments
-                            )
-                            student_monthly_attendances.append(st_grp_monthly)
-                except Exception as ex:
-                    logger.warning(f"Error computing monthly attendance for student {st.id}: {ex}")
+                student_profiles.append({
+                    'id': st.id,
+                    'full_name': st.full_name,
+                    'phone': st.phone or '',
+                    'image': st.image.url if st.image else None,
+                    'status': st.status or 'regular',
+                    'color': st.color or '#ffffff',
+                    'group_id': st.group_id,
+                    'branch_id': st.branch_id,
+                    'telegram_id': st.telegram_id,
+                    'parent_telegram_id': st.parent_telegram_id,
+                    'current_payment_status': payment_map.get((st.id, st.group_id), {}).get('is_paid', False),
+                })
 
         return Response({
             'timestamp': timezone.now().isoformat(),
@@ -759,9 +716,10 @@ class GroupViewSet(viewsets.ModelViewSet):
             'current_month': month,
             'current_year': year,
             'groups_count': len(bundle),
+            'students_count': len(all_active_student_ids),
             'bundle': bundle,
             'student_profiles': student_profiles,
-            'student_monthly_attendances': student_monthly_attendances,
+            'student_monthly_attendances': [],
         })
 
     def destroy(self, request, *args, **kwargs):

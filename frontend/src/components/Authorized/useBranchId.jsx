@@ -1,5 +1,3 @@
-// src/hooks/useCurrentBranch.js
-
 import { useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +5,7 @@ import { get_user_info } from "./getRole";
 import api from "../../tokenUpdater/updater";
 import { useDispatch } from "react-redux";
 import { setBranch } from "../../store/slices/mentorSlice";
+import { cacheUserMe, getCachedUserMe } from "../../db/db";
 
 /**
  * Admin panelda joriy filialni aniqlash uchun universal hook
@@ -20,8 +19,18 @@ export function useCurrentBranch() {
 
   const { data: userMe } = useQuery({
     queryKey: ["user-me"],
-    queryFn: () => api.get("/user/me/").then((res) => res.data),
-    staleTime: 60 * 1000,
+    queryFn: async () => {
+      try {
+        const res = await api.get("/user/me/");
+        if (res.data) {
+          cacheUserMe(res.data);
+        }
+        return res.data;
+      } catch (err) {
+        return (await getCachedUserMe()) || null;
+      }
+    },
+    staleTime: Infinity,
   });
 
   const userInfo = useMemo(() => {

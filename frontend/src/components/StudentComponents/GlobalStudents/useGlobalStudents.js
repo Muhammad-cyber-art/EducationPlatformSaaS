@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from"react";
-import { useNavigate, useOutletContext } from"react-router-dom";
-import { useQuery } from"@tanstack/react-query";
-import api from"../../../tokenUpdater/updater";
-import toast from"react-hot-toast";
-import { get_user_info } from"../../Authorized/getRole";
-import { useCurrentBranch } from"../../Authorized/useBranchId";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import api from "../../../tokenUpdater/updater";
+import { db } from "../../../db/db";
+import toast from "react-hot-toast";
+import { get_user_info } from "../../Authorized/getRole";
+import { useCurrentBranch } from "../../Authorized/useBranchId";
 
 export const useGlobalStudents = () => {
  const navigate = useNavigate();
@@ -35,9 +36,22 @@ export const useGlobalStudents = () => {
  setLoading(true);
  try {
  const res = await api.get(`/groups/nested_students/?branch_id=${activeBranchId}&search=${search}&page_size=200`);
- setStudents(res.data.results || res.data);
+ setStudents(res.data.results || res.data || []);
  } catch {
- toast.error("Ma'lumotlarni yuklashda xatolik.");
+ try {
+   const q = search.toLowerCase().trim();
+   const localStudents = await db.students.toArray();
+   const filtered = localStudents.filter(s => {
+     const matchBranch = !activeBranchId || Number(s.branch_id) === Number(activeBranchId);
+     const matchSearch = (s.full_name || '').toLowerCase().includes(q) || (s.phone || '').includes(q);
+     return matchBranch && matchSearch;
+   });
+   if (filtered.length > 0) {
+     setStudents(filtered);
+     return;
+   }
+ } catch (_) {}
+ toast.error("Oflayn: o'quvchi lokal bazadan topilmadi.");
  } finally {
  setTimeout(() => setLoading(false), 300);
  }

@@ -52,8 +52,8 @@ class AttendanceOfflineService {
       return { success: false, reason: 'offline' };
     }
 
-    // 3. Agar hozir yuklanayotgan bo'lsa — qayta chaqirmaslik
-    if (this.isPrefetching) {
+    // 3. Agar hozir yuklanayotgan bo'lsa va force bo'lmasa — qayta chaqirmaslik
+    if (this.isPrefetching && !force) {
       return { success: false, reason: 'already_running' };
     }
 
@@ -61,7 +61,7 @@ class AttendanceOfflineService {
     this.notify('prefetch_start', { timestamp: new Date().toISOString() });
 
     try {
-      const response = await api.get('/groups/groups/offline-attendance-bundle/');
+      const response = await api.get('/groups/groups/offline-attendance-bundle/', { timeout: 20000 });
       const {
         bundle = [],
         student_profiles = [],
@@ -295,9 +295,64 @@ class AttendanceOfflineService {
         }
       }
 
+      // 5. Kassa va to'lov ma'lumotlarini (Cashier Desk) lokal keshga olish
+      try {
+        const storedBranch = localStorage.getItem('active_branch_id') || localStorage.getItem('branch_id');
+        const now = new Date();
+        const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (storedBranch) {
+          const cashRes = await api.get('/finance/student-payments/cashier-desk/', {
+            params: { branch_id: storedBranch, month: curMonth },
+            timeout: 8000,
+          });
+          if (cashRes.data) {
+            await db.query_cache.put({
+              query_key: `cashier-desk_${storedBranch}_${curMonth}`,
+              data: cashRes.data,
+              updated_at: nowIso,
+            });
+            if (this.queryClient) {
+              this.queryClient.setQueryData(['cashier-desk', Number(storedBranch), curMonth], cashRes.data);
+              this.queryClient.setQueryData(['cashier-desk', String(storedBranch), curMonth], cashRes.data);
+            }
+          }
+        }
+      } catch (cashErr) {
+        console.warn('[AttendanceOfflineService] Cashier prefetch skipped:', cashErr?.message);
+      }
+
+      // 6. User profile va ruxsatlarini oflayn keshga olish
+      try {
+        const userRes = await api.get('/user/me/', { timeout: 5000 });
+        if (userRes.data) {
+          const { cacheUserMe } = await import('../db/db');
+          await cacheUserMe(userRes.data);
+          if (this.queryClient) {
+            this.queryClient.setQueryData(['user-me'], userRes.data);
+          }
+        }
+      } catch (_) {}
+
       this.lastPrefetchedAt = nowIso;
-      this.notify('prefetch_complete', { count: groups_count, timestamp: nowIso });
-      return { success: true, count: groups_count };
+      const studentsCount = response.data?.students_count || (student_profiles ? student_profiles.length : 0);
+      try {
+        localStorage.setItem(
+          'local_db_status',
+          JSON.stringify({
+            synced_at: nowIso,
+            groups_count: groups_count || bundle.length,
+            students_count: studentsCount,
+            has_finance: true,
+          })
+        );
+      } catch (_) {}
+
+      this.notify('prefetch_complete', {
+        count: groups_count || bundle.length,
+        studentsCount,
+        timestamp: nowIso,
+      });
+      return { success: true, count: groups_count || bundle.length, studentsCount };
     } catch (error) {
       console.warn('[AttendanceOfflineService] prefetch error:', error?.message);
       this.notify('prefetch_error', { error: error?.message });

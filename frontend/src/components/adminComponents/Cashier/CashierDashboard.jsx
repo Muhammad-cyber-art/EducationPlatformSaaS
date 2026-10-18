@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import api from '../../../tokenUpdater/updater';
+import { db } from '../../../db/db';
 import { useCurrentBranch } from '../../Authorized/useBranchId';
 import ColumnTeachersGroups from './ColumnTeachersGroups';
 import GroupRoster from './GroupRoster';
@@ -47,13 +48,30 @@ export default function CashierDashboard() {
   } = useQuery({
     queryKey: ['cashier-desk', currentBranchId, selectedMonth],
     queryFn: async () => {
-      const res = await api.get('/finance/student-payments/cashier-desk/', {
-        params: {
-          branch_id: currentBranchId,
-          month: selectedMonth
+      try {
+        const res = await api.get('/finance/student-payments/cashier-desk/', {
+          params: {
+            branch_id: currentBranchId,
+            month: selectedMonth
+          }
+        });
+        if (res.data) {
+          db.query_cache.put({
+            query_key: `cashier-desk_${currentBranchId}_${selectedMonth}`,
+            data: res.data,
+            updated_at: new Date().toISOString()
+          }).catch(() => {});
         }
-      });
-      return res.data;
+        return res.data;
+      } catch (err) {
+        try {
+          const cached = await db.query_cache.get(`cashier-desk_${currentBranchId}_${selectedMonth}`);
+          if (cached?.data) {
+            return cached.data;
+          }
+        } catch (_) {}
+        throw err;
+      }
     },
     enabled: !!currentBranchId,
     staleTime: 30 * 1000,

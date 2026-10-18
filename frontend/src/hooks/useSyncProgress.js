@@ -112,16 +112,25 @@ export function useSyncProgress() {
     if (isSyncing || !isOnline) return;
 
     setIsSyncing(true);
+    const toastId = toast.loading("Baza lokal xotiraga nusxalanmoqda...");
     try {
-      await Promise.allSettled([
+      const results = await Promise.allSettled([
         syncService.synchronize(),
         attendanceOfflineService.prefetchBundle(true),
         financeOfflineService.prefetchFinanceBundle(),
       ]);
-      toast.success("Oflayn ma'lumotlar to'liq yangilandi!", { id: 'offline-sync-success' });
+
+      const attRes = results[1]?.status === 'fulfilled' ? results[1].value : null;
+      const count = attRes?.count ?? 0;
+      const students = attRes?.studentsCount ?? 0;
+
+      toast.success(
+        `Lokal baza nusxalandi! (${count} ta guruh, ${students} ta o'quvchi)`,
+        { id: toastId, icon: "💾", duration: 4000 }
+      );
     } catch (err) {
       console.warn("Manual sync error:", err);
-      toast.error("Sinxronizatsiyada xatolik yuz berdi", { id: 'offline-sync-error' });
+      toast.error("Baza nusxalashda xatolik yuz berdi", { id: toastId });
     } finally {
       setIsSyncing(false);
     }
