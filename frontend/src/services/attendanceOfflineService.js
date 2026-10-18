@@ -79,6 +79,8 @@ class AttendanceOfflineService {
       }
 
       const nowIso = new Date().toISOString();
+      // Guruhlarni branch_id bo'yicha guruhlab to'playmiz (keyinchalik groups-list cache uchun)
+      const groupsByBranch = new Map(); // key: branch_id (Number), value: [group_detail, ...]
 
       // IndexedDB ga atomik tarzda yozish
       await db.transaction('rw', [db.groups, db.students, db.attendance_records, db.query_cache, db.sync_meta], async () => {
@@ -88,12 +90,22 @@ class AttendanceOfflineService {
           // 1. Guruh ma'lumotlarini saqlash
           if (item.group_detail) {
             const bId = item.group_detail.branch?.id || item.group_detail.branch_id;
+            const numBId = bId ? Number(bId) : null;
             await db.groups.put({
               ...item.group_detail,
               id: groupId,
-              branch_id: bId ? Number(bId) : undefined,
+              branch_id: numBId || undefined,
               updated_at: nowIso,
             });
+
+            // Guruhni branch bo'yicha to'plash (groups-list cache uchun)
+            if (numBId) {
+              if (!groupsByBranch.has(numBId)) groupsByBranch.set(numBId, []);
+              groupsByBranch.get(numBId).push(item.group_detail);
+            }
+            // branch_id null bo'lsa ham 0 key altida saqlaylik (super_admin uchun)
+            if (!groupsByBranch.has(0)) groupsByBranch.set(0, []);
+            groupsByBranch.get(0).push(item.group_detail);
 
             // React Query keshini to'ldirish
             await db.query_cache.put({
@@ -238,6 +250,34 @@ class AttendanceOfflineService {
           value: nowIso,
         });
       });
+
+      // Transaction tugagandan keyin guruhlar ro'yxatini TanStack Query cache ga joylash.
+      // Bu — GroupsPage oflayn holatda guruhlarni ko'rsatishi uchun eng muhim qadam.
+      if (this.queryClient && groupsByBranch.size > 0) {
+        for (const [branchKey, groupsList] of groupsByBranch.entries()) {
+          const paginatedData = {
+            count: groupsList.length,
+            next: null,
+            previous: null,
+            results: groupsList,
+          };
+          // branchKey===0 degani "filtrsiz" (super_admin yoki filial tanlanmagan)
+          const bId = branchKey === 0 ? undefined : branchKey;
+          // useInfiniteQuery format: {pages: [...], pageParams: [...]}
+          const infiniteData = { pages: [paginatedData], pageParams: [1] };
+          this.queryClient.setQueryData(['groups', bId, ''], infiniteData);
+          this.queryClient.setQueryData(['groups', bId, undefined], infiniteData);
+          this.queryClient.setQueryData(['groups', String(bId || ''), ''], infiniteData);
+          // db.query_cache ga ham saqlaymiz (useGroupsData offline fallback uchun)
+          try {
+            await db.query_cache.put({
+              query_key: `groups_list_${branchKey}`,
+              data: groupsList,
+              updated_at: nowIso,
+            });
+          } catch (_) {}
+        }
+      }
 
       this.lastPrefetchedAt = nowIso;
       this.notify('prefetch_complete', { count: groups_count, timestamp: nowIso });

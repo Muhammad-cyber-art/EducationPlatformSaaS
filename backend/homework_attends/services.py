@@ -161,9 +161,10 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             is_active=True
         ).values_list('id', flat=True)
     )
+    active_student_ids = group_enrollment_student_ids | direct_student_ids
     existing_attendances = Attendance.objects.filter(group=group, date=requested_date)
     attendance_map = {att.student_id: att for att in existing_attendances}
-    valid_student_ids = group_enrollment_student_ids | direct_student_ids | set(attendance_map.keys())
+    valid_student_ids = active_student_ids | set(attendance_map.keys())
 
     to_create = []
     to_update = []
@@ -262,7 +263,7 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             threading.Thread(target=background_notifications, args=(updated_ids, schema_name)).start()
 
     # Guruhda faol yoki shu kuni davomati bo'lgan studentlarning davomatini qaytaramiz
-    visible_ids = active_student_ids | set(existing_attendances.values_list('student_id', flat=True))
+    visible_ids = valid_student_ids | processed_student_ids | set(existing_attendances.values_list('student_id', flat=True))
     return (
         Attendance.objects
         .filter(group=group, date=requested_date, student_id__in=visible_ids)

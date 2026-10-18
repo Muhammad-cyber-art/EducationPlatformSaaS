@@ -79,6 +79,9 @@ export default defineConfig({
         // BUG FIX: SPA routing — offline holatda barcha yo'llar index.html ga
         navigateFallback: '/index.html',
 
+        // API va media so'rovlar hech qachon SPA index.html ga yo'naltirilmasligi kerak
+        navigateFallbackDenylist: [/^\/api\//, /^\/media\//],
+
         // Statik fayllarni (JS, CSS, HTML, Media, Shriftlar) to'liq keshga olish
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
 
@@ -102,23 +105,6 @@ export default defineConfig({
               expiration: {
                 maxEntries: 30,
                 maxAgeSeconds: 60 * 60 * 24 * 365, // 1 yil
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            // Oflayn o'qish: Guruhlar, o'quvchilar, foydalanuvchi ma'lumotlari NetworkFirst orqali keshlanadi
-            urlPattern: /\/api\/(?:groups|user|branches|reports|homework_attends)\/.*/i,
-            handler: 'NetworkFirst',
-            method: 'GET',
-            options: {
-              cacheName: 'api-get-cache-v1',
-              networkTimeoutSeconds: 12, // 3s juda oz edi, og'ir so'rovlarda ERR_FAILED tashlayotgan edi
-              expiration: {
-                maxEntries: 150,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 kun saqlanadi
               },
               cacheableResponse: {
                 statuses: [0, 200],
