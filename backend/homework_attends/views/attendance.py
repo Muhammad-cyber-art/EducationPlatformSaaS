@@ -187,10 +187,13 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 return Response({"detail": f"Faqat bugungi yoki oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin."}, status=status.HTTP_400_BAD_REQUEST)
 
 
-        
-        queryset = bulk_confirm_attendance(group, requested_date, attendances_payload, request.user)
-        serializer = AttendanceSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        try:
+            queryset = bulk_confirm_attendance(group, requested_date, attendances_payload, request.user)
+            serializer = AttendanceSerializer(queryset, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(f"Attendance confirm failed for group {group_id}: {e}")
+            return Response({"detail": f"Davomatni tasdiqlashda xatolik: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
     def _user_can_access_group(self, user, group):
         """Foydalanuvchi guruhga kirish huquqini tekshirish"""

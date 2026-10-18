@@ -158,27 +158,43 @@ class AttendanceOfflineService {
           }
 
           // 4. Bugungi davomatni saqlash
-          const todayAtts = item.today_attendances || [];
-          if (todayAtts.length > 0) {
-            const mappedAtts = todayAtts.map((a) => ({
-              ...a,
-              group_id: groupId,
-              date: a.date || current_date,
+          // MUHIM FIX (Vanishing Attendance himoyasi): Agar ushbu guruh va sana bo'yicha lokal
+          // Outbox (sync_queue) da pending tasdiqlangan davomat bo'lsa, uni serverning eski holati bilan
+          // aslo ustidan bosib (overwrite) yubormaymiz!
+          const hasPendingQueue = await db.sync_queue
+            .where('status')
+            .equals('pending')
+            .filter(
+              (q) =>
+                q.entity === 'attendance' &&
+                Number(q.data?.group_id) === groupId &&
+                q.data?.date === current_date
+            )
+            .count();
+
+          if (!hasPendingQueue) {
+            const todayAtts = item.today_attendances || [];
+            if (todayAtts.length > 0) {
+              const mappedAtts = todayAtts.map((a) => ({
+                ...a,
+                group_id: groupId,
+                date: a.date || current_date,
+                updated_at: nowIso,
+              }));
+
+              await db.attendance_records.bulkPut(mappedAtts);
+            }
+
+            await db.query_cache.put({
+              query_key: `attendance_${groupId}_${current_date}`,
+              data: todayAtts,
               updated_at: nowIso,
-            }));
+            });
 
-            await db.attendance_records.bulkPut(mappedAtts);
-          }
-
-          await db.query_cache.put({
-            query_key: `attendance_${groupId}_${current_date}`,
-            data: todayAtts,
-            updated_at: nowIso,
-          });
-
-          if (this.queryClient) {
-            this.queryClient.setQueryData(['attendance', String(groupId), current_date], todayAtts);
-            this.queryClient.setQueryData(['attendance', Number(groupId), current_date], todayAtts);
+            if (this.queryClient) {
+              this.queryClient.setQueryData(['attendance', String(groupId), current_date], todayAtts);
+              this.queryClient.setQueryData(['attendance', Number(groupId), current_date], todayAtts);
+            }
           }
         }
 
@@ -311,13 +327,13 @@ class AttendanceOfflineService {
       }
     }, 2000);
 
-    // 2. Internet tiklanganda avtomatik yangilash
+    // 2. Internet tiklanganda avtomatik yangilash (syncService pending navbatni yuborib bo'lgach ishga tushadi)
     window.addEventListener('online', () => {
       setTimeout(() => {
         if (localStorage.getItem('access_token')) {
           this.prefetchBundle();
         }
-      }, 3000);
+      }, 6000);
     });
 
     // 3. Har 15 daqiqada yangilab borish

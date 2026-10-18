@@ -70,6 +70,24 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
         url += `&group_id=${selectedGroupId}`;
       }
       const cacheKey = `student-monthly_${studentId}_${selectedYear}_${selectedMonth}_${selectedGroupId || 'all'}`;
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline) {
+        try {
+          const cached = await db.query_cache.get(cacheKey);
+          if (cached?.data) return cached.data;
+
+          const fallbackKey = `student-monthly_${studentId}_${selectedYear}_${selectedMonth}_all`;
+          const fallbackCached = await db.query_cache.get(fallbackKey);
+          if (fallbackCached?.data) return fallbackCached.data;
+
+          const simpleKey = `student-monthly_${studentId}_${selectedYear}_${selectedMonth}`;
+          const simpleCached = await db.query_cache.get(simpleKey);
+          if (simpleCached?.data) return simpleCached.data;
+        } catch (e) {}
+        return null;
+      }
+
       try {
         const res = await api.get(url);
         if (res.data) {
@@ -96,7 +114,7 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
           const simpleCached = await db.query_cache.get(simpleKey);
           if (simpleCached?.data) return simpleCached.data;
         } catch (e) {}
-        throw err;
+        return null;
       }
     },
     enabled: !!studentId,

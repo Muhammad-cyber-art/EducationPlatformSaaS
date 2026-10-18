@@ -135,8 +135,21 @@ export async function clearAttendanceDraft(groupId, date) {
 export async function queueAttendanceConfirm(groupId, date, attendancesList, markedByUser = null) {
   const now = new Date().toISOString();
 
-  await db.transaction('rw', [db.attendance_records, db.attendance_drafts, db.sync_queue], async () => {
-    // 1. Lokal keshga yozish (avvalgi eski yozuvlarni tozalab, yangisini qo'yish)
+  // Studentlar bo'yicha dublikatlarni tozalash (IntegrityError va xatoliklarni oldini olish)
+  const uniqueMap = new Map();
+  for (const item of attendancesList) {
+    const sId = Number(item.student_id);
+    if (sId && !uniqueMap.has(sId)) {
+      uniqueMap.set(sId, {
+        student_id: sId,
+        is_present: Boolean(item.is_present),
+      });
+    }
+  }
+  const cleanList = Array.from(uniqueMap.values());
+
+  await db.transaction('rw', [db.attendance_records, db.attendance_drafts, db.sync_queue, db.query_cache], async () => {
+    // 1. Lokal attendance_records keshga yozish (avvalgi eski yozuvlarni tozalab, yangisini qo'yish)
     try {
       const existing = await db.attendance_records
         .where('group_id')
@@ -152,18 +165,27 @@ export async function queueAttendanceConfirm(groupId, date, attendancesList, mar
       }
     } catch (e) {}
 
-    for (const item of attendancesList) {
-      await db.attendance_records.add({
-        group_id: Number(groupId),
-        date,
-        student_id: Number(item.student_id),
-        is_present: Boolean(item.is_present),
-        marked_by: markedByUser || { id: 1, full_name: 'Men' },
-        updated_at: now,
-      });
+    const recordsToStore = cleanList.map((item) => ({
+      group_id: Number(groupId),
+      date,
+      student_id: item.student_id,
+      is_present: item.is_present,
+      marked_by: markedByUser || { id: 1, full_name: 'Men' },
+      updated_at: now,
+    }));
+
+    for (const rec of recordsToStore) {
+      await db.attendance_records.add(rec);
     }
 
-    // 2. Outbox navbatiga qo'shish (agar avval pending bo'lsa, yangisiga almashtirish)
+    // 2. db.query_cache ni ham yangilab qo'yamiz (offline qidiruvlar darhol ko'rishi uchun)
+    await db.query_cache.put({
+      query_key: `attendance_${groupId}_${date}`,
+      data: recordsToStore,
+      updated_at: now,
+    });
+
+    // 3. Outbox navbatiga qo'shish (agar avval pending bo'lsa, yangisiga almashtirish)
     try {
       const existingPending = await db.sync_queue
         .where('status')
@@ -182,17 +204,46 @@ export async function queueAttendanceConfirm(groupId, date, attendancesList, mar
       data: {
         group_id: Number(groupId),
         date,
-        attendances: attendancesList,
+        attendances: cleanList,
       },
       created_at: now,
       status: 'pending',
     });
 
-    // 3. Qoralamani o'chirish
+    // 4. Qoralamani o'chirish
     await db.attendance_drafts.delete(`${groupId}_${date}`);
   });
 
   return { success: true, queued: true };
+}
+
+// ==========================================
+// USER AUTH & PERMISSIONS OFFLINE KESH
+// ==========================================
+
+export async function cacheUserMe(userData) {
+  try {
+    if (!userData || !userData.id) return;
+    localStorage.setItem('cached_user_me', JSON.stringify(userData));
+    await db.query_cache.put({
+      query_key: 'user-me',
+      data: userData,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (e) {}
+}
+
+export async function getCachedUserMe() {
+  try {
+    const fromStorage = localStorage.getItem('cached_user_me');
+    if (fromStorage) {
+      return JSON.parse(fromStorage);
+    }
+    const rec = await db.query_cache.get('user-me');
+    return rec?.data || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ==========================================

@@ -181,6 +181,10 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             except (ValueError, TypeError):
                 continue
 
+            # Dublikat student_id kelganda qayta ishlamaymiz (500 xatosini oldini olish)
+            if student_id in processed_student_ids:
+                continue
+
             # Faqat shu kunga aloqador studentlar qayta ishlanadi
             if student_id not in valid_student_ids:
                 continue
@@ -208,8 +212,8 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
         if to_update:
             Attendance.objects.bulk_update(to_update, ['is_present', 'marked_by'])
         if to_create:
-            created_objs = Attendance.objects.bulk_create(to_create)
-            updated_ids.extend([obj.id for obj in created_objs])
+            created_objs = Attendance.objects.bulk_create(to_create, ignore_conflicts=True)
+            updated_ids.extend([obj.id for obj in created_objs if getattr(obj, 'id', None)])
 
         # Qo'shimcha: To'lov va maoshni qayta hisoblash (bulk uchun)
         if processed_student_ids:

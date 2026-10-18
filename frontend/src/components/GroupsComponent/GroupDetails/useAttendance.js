@@ -64,20 +64,10 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
       } catch (e) {}
 
       let baseList = [];
-      try {
-        const res = await api.get(`/homework_attends/attendances/?group_id=${group_id}&date=${selectedDate}`);
-        const serverData = res.data?.results || res.data || [];
-        baseList = serverData;
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
-        // Faqat pending bo'lmagandagina server ma'lumotini keshga to'liq saqlaymiz
-        if (!pendingMap) {
-          db.query_cache.put({
-            query_key: `attendance_${group_id}_${selectedDate}`,
-            data: serverData,
-            updated_at: new Date().toISOString()
-          }).catch(() => {});
-        }
-      } catch (err) {
+      if (isOffline) {
+        // OFFLINE: Tarmoq so'rovini umuman kutmasdan darhol lokal bazadan o'qiymiz (0ms delay!)
         try {
           const cached = await db.query_cache.get(`attendance_${group_id}_${selectedDate}`);
           if (cached?.data) {
@@ -86,12 +76,44 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
             const localAtts = await db.attendance_records
               .where('group_id')
               .equals(Number(group_id))
-              .filter(a => a.date === selectedDate)
+              .filter((a) => a.date === selectedDate)
               .toArray();
             baseList = localAtts || [];
           }
-        } catch (cacheErr) {
+        } catch (_) {
           baseList = [];
+        }
+      } else {
+        // ONLINE: Serverdan olishga urinamiz
+        try {
+          const res = await api.get(`/homework_attends/attendances/?group_id=${group_id}&date=${selectedDate}`);
+          const serverData = res.data?.results || res.data || [];
+          baseList = serverData;
+
+          // Faqat pending bo'lmagandagina server ma'lumotini keshga saqlaymiz
+          if (!pendingMap) {
+            db.query_cache.put({
+              query_key: `attendance_${group_id}_${selectedDate}`,
+              data: serverData,
+              updated_at: new Date().toISOString()
+            }).catch(() => {});
+          }
+        } catch (err) {
+          try {
+            const cached = await db.query_cache.get(`attendance_${group_id}_${selectedDate}`);
+            if (cached?.data) {
+              baseList = cached.data?.results || cached.data || [];
+            } else {
+              const localAtts = await db.attendance_records
+                .where('group_id')
+                .equals(Number(group_id))
+                .filter((a) => a.date === selectedDate)
+                .toArray();
+              baseList = localAtts || [];
+            }
+          } catch (_) {
+            baseList = [];
+          }
         }
       }
 
@@ -107,7 +129,7 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
             mergedList.push({
               ...item,
               is_present: pendingMap.get(sId),
-              marked_by: item.marked_by || { id: effectiveUserId, full_name: user_info?.full_name || 'Men' },
+              marked_by: item.marked_by || { id: effectiveUserId || 1, full_name: user_info?.full_name || 'Men' },
             });
           } else {
             mergedList.push(item);
@@ -121,7 +143,7 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
               date: selectedDate,
               student_id: sId,
               is_present: is_pres,
-              marked_by: { id: effectiveUserId, full_name: user_info?.full_name || 'Men' },
+              marked_by: { id: effectiveUserId || 1, full_name: user_info?.full_name || 'Men' },
             });
           }
         });
@@ -131,7 +153,7 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
 
       return baseList;
     },
-    enabled: !!group_id && !!selectedDate && !!effectiveUserId,
+    enabled: !!group_id && !!selectedDate,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -169,9 +191,21 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
     return attendanceArray.some((a) => a.marked_by !== null && a.marked_by !== undefined);
   }, [attendanceData]);
 
-  // 3. Tasdiqlash (Offline-First): Internet bo'lsa serverga, yo'q bo'lsa darhol Outbox navbatiga!
+  // 3. Tasdiqlash (Local-First Architecture):
+  // 1-qadam: Darhol UI keshiga qo'llash (0ms)
+  // 2-qadam: Har doim Dexie va Outbox ga yozish (Ma'lumot yo'qolishiga mutlaqo yo'l qo'yilmaydi)
+  // 3-qadam: Agar onlayn bo'lsa serverga yuborish, server xato bersa ham navbatda saqlab qolish
   const handleConfirmAttendance = async (isLessonDay = true) => {
-    const students = groupStudents || [];
+    // 1. O'quvchilarni olish va dublikatlardan tozalash
+    const uniqueStudentsMap = new Map();
+    (groupStudents || []).forEach((s) => {
+      const sId = Number(s.id);
+      if (sId && !uniqueStudentsMap.has(sId)) {
+        uniqueStudentsMap.set(sId, s);
+      }
+    });
+    const students = Array.from(uniqueStudentsMap.values());
+
     if (students.length === 0) return;
 
     const attendanceArray = Array.isArray(attendanceData) ? attendanceData : [];
@@ -198,54 +232,48 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
 
     const tId = toast.loading("Saqlanmoqda...");
 
-    // Darhol UI keshiga optimistic confirmed holatini qo'llash
+    const userAudit = {
+      id: effectiveUserId || 1,
+      full_name: user_info?.full_name || userData?.full_name || 'Men'
+    };
+
+    // 1. Darhol UI keshiga optimistic confirmed holatini qo'llash (0ms feedback)
     const optimisticConfirmedList = attendances.map((item) => ({
       group_id: Number(group_id),
       date: selectedDate,
       student_id: Number(item.student_id),
       is_present: Boolean(item.is_present),
-      marked_by: { id: effectiveUserId, full_name: user_info?.full_name || 'Men' },
+      marked_by: userAudit,
       updated_at: new Date().toISOString(),
     }));
 
     queryClient.setQueryData(['attendance', String(group_id), selectedDate], optimisticConfirmedList);
     queryClient.setQueryData(['attendance', Number(group_id), selectedDate], optimisticConfirmedList);
 
+    // 2. Har doim birinchi bo'lib lokal Dexie va Outbox ga yozamiz (Local-First Guarantee)
     try {
-      await db.query_cache.put({
-        query_key: `attendance_${group_id}_${selectedDate}`,
-        data: optimisticConfirmedList,
-        updated_at: new Date().toISOString(),
+      await queueAttendanceConfirm(group_id, selectedDate, attendances, userAudit);
+      await clearAttendanceDraft(group_id, selectedDate);
+      setLocalAttendanceByDate((prev) => {
+        const next = { ...prev };
+        delete next[selectedDate];
+        return next;
       });
-    } catch (e) {}
+    } catch (dbErr) {
+      console.error("[Attendance] Dexie save error:", dbErr);
+    }
 
-    // Agar internet umuman bo'lmasa — darhol lokal Outbox ga yozamiz
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
     if (isOffline) {
-      try {
-        await queueAttendanceConfirm(group_id, selectedDate, attendances, {
-          id: effectiveUserId,
-          full_name: user_info?.full_name || 'Men',
-        });
-        await clearAttendanceDraft(group_id, selectedDate);
-        setLocalAttendanceByDate((prev) => {
-          const next = { ...prev };
-          delete next[selectedDate];
-          return next;
-        });
-        toast.success(
-          "Davomat oflayn saqlandi! Internetga ulanganda avtomatik sinxronlanadi.",
-          { id: tId, icon: "💾", duration: 4000 }
-        );
-        return;
-      } catch (offlineErr) {
-        toast.error("Oflayn saqlashda xatolik yuz berdi!", { id: tId });
-        return;
-      }
+      toast.success(
+        "Davomat oflayn saqlandi! Internetga ulanganda avtomatik sinxronlanadi.",
+        { id: tId, icon: "💾", duration: 3500 }
+      );
+      return;
     }
 
-    // Onlayn bo'lsa serverga jo'natamiz, tarmoq xatosi bo'lsa esa graceful fallback qilamiz
+    // 3. Onlayn bo'lsa serverga jo'natishga urinamiz
     try {
       await api.post("/homework_attends/attendances/confirm/", {
         group_id: Number(group_id),
@@ -253,40 +281,33 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
         attendances,
       });
 
-      await clearAttendanceDraft(group_id, selectedDate);
-      toast.success("Davomat muvaffaqiyatli saqlandi.", { id: tId });
+      // Server qabul qildi — outbox navbatidagi yozuvni tozalaymiz (chunki allaqachon serverda saqlandi)
+      try {
+        const queueItems = await db.sync_queue
+          .where('status')
+          .equals('pending')
+          .filter(
+            (q) =>
+              q.entity === 'attendance' &&
+              Number(q.data?.group_id) === Number(group_id) &&
+              q.data?.date === selectedDate
+          )
+          .toArray();
 
-      setLocalAttendanceByDate((prev) => {
-        const next = { ...prev };
-        delete next[selectedDate];
-        return next;
-      });
+        if (queueItems.length > 0) {
+          await db.sync_queue.bulkDelete(queueItems.map((q) => q.queue_id));
+        }
+      } catch (_) {}
+
+      toast.success("Davomat muvaffaqiyatli saqlandi.", { id: tId });
       await refetchAttends();
     } catch (err) {
-      const isNetworkError =
-        !err.response || err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED';
-
-      if (isNetworkError) {
-        // Tarmoq kutilmaganda uzildi — navbatga saqlab qo'yamiz
-        await queueAttendanceConfirm(group_id, selectedDate, attendances, {
-          id: effectiveUserId,
-          full_name: user_info?.full_name || 'Men',
-        });
-        await clearAttendanceDraft(group_id, selectedDate);
-        setLocalAttendanceByDate((prev) => {
-          const next = { ...prev };
-          delete next[selectedDate];
-          return next;
-        });
-        toast.success(
-          "Aloqa uzildi, lekin davomat lokal saqlandi. Internet kelganda jo'natiladi.",
-          { id: tId, icon: "💾", duration: 4000 }
-        );
-      } else {
-        console.error("Attendance confirm error:", err);
-        const msg = err.response?.data?.detail || err.message || "Davomatni saqlashda xatolik!";
-        toast.error(msg, { id: tId });
-      }
+      // Serverda 500 yoki aloqa xatosi bo'lsa ham — lokal bazada va outbox navbatida allaqachon saqlangan!
+      console.warn("[Attendance] Online confirm failed, kept in outbox queue:", err);
+      toast.success(
+        "Davomat lokal saqlandi! Server bilan aloqa tiklanganda avtomatik yuboriladi.",
+        { id: tId, icon: "💾", duration: 4000 }
+      );
     }
   };
 

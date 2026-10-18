@@ -29,9 +29,10 @@ if (import.meta.env.DEV) {
 }
 
 // Asosiy api client (barcha so'rovlar shu orqali ketadi)
+// Offline-First tezligi: 8 soniya timeout (30 soniya kutib foydalanuvchini zeriktirmaslik uchun)
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000, // 30 soniya timeout
+  timeout: 8000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -40,6 +41,7 @@ const api = axios.create({
 // Alohida client refresh so'rovi uchun (interceptorlarga tushmasin)
 const refreshClient = axios.create({
   baseURL: BASE_URL,
+  timeout: 8000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -117,16 +119,25 @@ export function isAccessTokenExpired() {
 }
 
 // =====================
-// Request interceptor
+// Request interceptor (Local-First Offline Fast-Fail)
 // =====================
 api.interceptors.request.use(
  (config) => {
- const token = getAccessToken();
- if (token && config && config.headers) {
- config.headers.Authorization = `Bearer ${token}`;
- }
- applyTenantHeaders(config.headers);
- return config;
+   // Oflayn holatda: tarmoq so'rovini kutmasdan darhol reject qilamiz (0ms delay!)
+   // Natijada Dexie / IndexedDB keshidan bir zumda (0 soniyada) ma'lumot olinadi
+   if (typeof navigator !== 'undefined' && !navigator.onLine) {
+     const error = new Error('Tarmoq aloqasi mavjud emas (offline)');
+     error.code = 'ERR_NETWORK';
+     error.isOffline = true;
+     return Promise.reject(error);
+   }
+
+   const token = getAccessToken();
+   if (token && config && config.headers) {
+     config.headers.Authorization = `Bearer ${token}`;
+   }
+   applyTenantHeaders(config.headers);
+   return config;
  },
  (error) => Promise.reject(error)
 );
