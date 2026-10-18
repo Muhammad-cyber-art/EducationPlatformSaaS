@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
+import { db } from "../../../db/db";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -68,8 +69,35 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
       if (selectedGroupId && String(selectedGroupId).trim() !== "") {
         url += `&group_id=${selectedGroupId}`;
       }
-      const res = await api.get(url);
-      return res.data;
+      const cacheKey = `student-monthly_${studentId}_${selectedYear}_${selectedMonth}_${selectedGroupId || 'all'}`;
+      try {
+        const res = await api.get(url);
+        if (res.data) {
+          try {
+            await db.query_cache.put({
+              query_key: cacheKey,
+              data: res.data,
+              updated_at: new Date().toISOString(),
+            });
+          } catch (e) {}
+        }
+        return res.data;
+      } catch (err) {
+        // Oflayn holatda IndexedDB (Dexie) keshidan yuklash
+        try {
+          const cached = await db.query_cache.get(cacheKey);
+          if (cached?.data) return cached.data;
+
+          const fallbackKey = `student-monthly_${studentId}_${selectedYear}_${selectedMonth}_all`;
+          const fallbackCached = await db.query_cache.get(fallbackKey);
+          if (fallbackCached?.data) return fallbackCached.data;
+
+          const simpleKey = `student-monthly_${studentId}_${selectedYear}_${selectedMonth}`;
+          const simpleCached = await db.query_cache.get(simpleKey);
+          if (simpleCached?.data) return simpleCached.data;
+        } catch (e) {}
+        throw err;
+      }
     },
     enabled: !!studentId,
     staleTime: 1000 * 60, // 1 daqiqa

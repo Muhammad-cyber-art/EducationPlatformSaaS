@@ -115,7 +115,7 @@ export default defineConfig({
             method: 'GET',
             options: {
               cacheName: 'api-get-cache-v1',
-              networkTimeoutSeconds: 3,
+              networkTimeoutSeconds: 12, // 3s juda oz edi, og'ir so'rovlarda ERR_FAILED tashlayotgan edi
               expiration: {
                 maxEntries: 150,
                 maxAgeSeconds: 60 * 60 * 24 * 7, // 7 kun saqlanadi
@@ -124,11 +124,6 @@ export default defineConfig({
                 statuses: [0, 200],
               },
             },
-          },
-          {
-            // Boshqa API so'rovlari (POST, PUT, DELETE va Sync) NetworkOnly — Dexie outbox o'zi boshqaradi
-            urlPattern: /\/api\/.*/i,
-            handler: 'NetworkOnly',
           },
           {
             // Rasm va media fayllar uchun StaleWhileRevalidate
@@ -151,6 +146,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/media': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },

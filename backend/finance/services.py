@@ -641,15 +641,38 @@ def confirm_student_payment(request_user, payment, data):
                 installment_amount = Decimal("0")
 
 
-    # Yangi maydonlarni extract qilamiz
-    method = data.get("payment_method", "cash")
-    receipt = data.get("receipt_image")
+    # Yangi maydonlarni extract qilamiz:
+    # payment_method va method aliaslarini qabul qilamiz hamda standartlashtiramiz
+    raw_method = data.get("payment_method") or data.get("method") or "cash"
+    normalized_method = str(raw_method).strip().lower()
+    if normalized_method in ["click", "karta", "card", "click/karta", "click / card", "click_card"]:
+        method = "click"
+    elif normalized_method in ["payme"]:
+        method = "payme"
+    elif normalized_method in ["cash", "naqd"]:
+        method = "cash"
+    elif normalized_method in ["other", "boshqa"]:
+        method = "other"
+    else:
+        method = raw_method
+
+    # Chek faylini extract qilish: receipt_image yoki receipt
+    receipt = data.get("receipt_image") or data.get("receipt")
+    if not receipt and hasattr(data, "getlist"):
+        receipt_list = data.getlist("receipt_image") or data.getlist("receipt")
+        if receipt_list:
+            receipt = receipt_list[0]
+
     notes = data.get("notes", "")
-    is_receiptless = str(data.get("is_receiptless", False)).lower() in [
-        "true",
-        "1",
-        "yes",
-    ]
+    raw_receiptless = data.get("is_receiptless")
+    if raw_receiptless is not None:
+        is_receiptless = str(raw_receiptless).lower() in ["true", "1", "yes"]
+    else:
+        is_receiptless = False if receipt else (method == "cash")
+
+    # Agar haqiqiy chek fayli biriktirilgan bo'lsa, is_receiptless har doim False bo'lishi shart!
+    if receipt:
+        is_receiptless = False
 
     # Davomat ma'lumotlarini notes ga qo'shamiz
     notes_parts = []

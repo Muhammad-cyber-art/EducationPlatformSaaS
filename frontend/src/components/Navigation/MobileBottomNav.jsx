@@ -1,6 +1,10 @@
-import React from"react";
-import { NavLink } from"react-router-dom";
-import { LayoutDashboard, Users, UserSquare2, Layers, Building2, User, X, UserPlus, Trash2, GraduationCap } from "lucide-react";
+import React from "react";
+import { NavLink } from "react-router-dom";
+import { 
+  LayoutDashboard, Users, UserSquare2, Layers, Building2, 
+  User, X, UserPlus, Trash2, GraduationCap, Wallet, 
+  CalendarDays, DollarSign, TrendingDown 
+} from "lucide-react";
 import { useMobileNav } from "./useMobileNav";
 
 const BranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentBranchParam, currentPath }) => {
@@ -38,7 +42,7 @@ const BranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentBranchP
  </div>
  <div className="flex-1 min-w-0">
  <h4 className="text-sm font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
- {userInfo.branch_name}
+ {userInfo?.branch_name}
  <span className="text-[8px] bg-[var(--gold)] text-black px-2 py-0.5 rounded font-black capitalize tracking-wider">Asosiy</span>
  </h4>
  <p className="text-[9px] text-[var(--text-secondary)] font-bold capitalize tracking-widest opacity-40">Asosiy filial</p>
@@ -47,7 +51,7 @@ const BranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentBranchP
  </NavLink>
 
  {/* Extra Branches */}
- {userInfo.accessible_branches?.filter(b => b.branch_id !== userInfo.branch_id).map((branch) => (
+ {userInfo?.accessible_branches?.filter(b => b.branch_id !== userInfo.branch_id).map((branch) => (
  <NavLink
  key={branch.branch_id}
  to={`${currentPath}?branch=${branch.branch_id}`}
@@ -81,18 +85,29 @@ export default function MobileBottomNav() {
  } = useMobileNav();
 
  const menuItems = [
-   { name: "Asosiy", path: "/admin", icon: <LayoutDashboard size={18} /> },
-   { name: "Guruhlar", path: "/admin/groups", icon: <Layers size={18} /> },
-   { name: "Kutish", path: "/admin/waiting-hall", icon: <UserPlus size={18} /> },
-   { name: "O'quvchi", path: "/admin/all_students", icon: <GraduationCap size={18} /> },
-   { name: "Mentor", path: "/admin/mentors", icon: <UserSquare2 size={18} /> },
-   { name: "Arxiv", path: "/admin/archive", icon: <Trash2 size={18} /> },
-   { name: "Profil", path: "/admin/profile", icon: <User size={18} /> },
+   { name: "Asosiy", path: "/admin", icon: <LayoutDashboard size={19} /> },
+   { name: "Kassa", path: "/admin/kassa", icon: <Wallet size={19} /> },
+   { name: "Guruhlar", path: "/admin/groups", icon: <Layers size={19} /> },
+   { name: "Jadval", path: "/admin/timetable", icon: <CalendarDays size={19} /> },
+   { name: "O'quvchi", path: "/admin/all_students", icon: <GraduationCap size={19} /> },
+   { name: "Kutish", path: "/admin/waiting-hall", icon: <UserPlus size={19} /> },
+   { name: "Mentor", path: "/admin/mentors", icon: <UserSquare2 size={19} /> },
+   ...(userInfo?.permissions?.pay_slip !== false ? [{ name: "Moliya", path: "/admin/finance", icon: <DollarSign size={19} /> }] : []),
+   { name: "Chiqim", path: "/admin/expenses", icon: <TrendingDown size={19} /> },
+   { name: "Arxiv", path: "/admin/archive", icon: <Trash2 size={19} /> },
+   { name: "Profil", path: "/admin/profile", icon: <User size={19} /> },
  ];
 
  return (
  <>
- <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[var(--bg-panel)]/95 backdrop-blur-md border-t border-[var(--border-glass)] flex items-center justify-between px-1 z-50 overflow-x-auto scrollbar-none gap-0.5">
+ <div 
+   className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[var(--bg-panel)]/95 backdrop-blur-xl border-t border-[var(--border-glass)] flex items-center px-2.5 z-50 overflow-x-auto gap-1.5 touch-pan-x select-none"
+   style={{ 
+     scrollbarWidth: 'none', 
+     msOverflowStyle: 'none', 
+     WebkitOverflowScrolling: 'touch' 
+   }}
+ >
  {menuItems.map((item) => {
  const linkTo = getLinkWithBranch(item.path);
  const isActive = location.pathname === item.path || (item.path !=="/admin" && location.pathname.startsWith(item.path));
@@ -101,10 +116,10 @@ export default function MobileBottomNav() {
  <NavLink
  key={item.path}
  to={linkTo}
- className={() => `flex flex-col items-center justify-center gap-0.5 transition-all duration-200 px-1 py-1 rounded-xl shrink-0 flex-1 min-w-[42px] max-w-[62px] ${isActive ?"text-[var(--gold)] scale-105" :"text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+ className={() => `flex flex-col items-center justify-center gap-1 transition-all duration-200 px-3 py-1 rounded-xl shrink-0 min-w-[64px] ${isActive ? "text-[var(--gold)] bg-[var(--gold)]/10 border border-[var(--gold)]/25" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 border border-transparent"}`}
  >
- <div className={`${isActive ?"text-[var(--gold)] drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]" :""}`}>{item.icon}</div>
- <span className="text-[7.5px] font-bold tracking-tighter text-center truncate w-full leading-tight">{item.name}</span>
+ <div className={`${isActive ? "text-[var(--gold)] drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]" : ""}`}>{item.icon}</div>
+ <span className="text-[10px] font-bold tracking-tight text-center whitespace-nowrap leading-tight">{item.name}</span>
  </NavLink>
  );
  })}
@@ -112,15 +127,15 @@ export default function MobileBottomNav() {
  {hasExtraBranches && (
  <button
  onClick={() => setShowBranchModal(true)}
- className="flex flex-col items-center justify-center gap-0.5 transition-all duration-200 px-1 py-1 rounded-xl shrink-0 flex-1 min-w-[42px] max-w-[62px] text-[var(--text-secondary)] hover:text-[var(--gold)]"
+ className="flex flex-col items-center justify-center gap-1 transition-all duration-200 px-3 py-1 rounded-xl shrink-0 min-w-[64px] text-[var(--text-secondary)] hover:text-[var(--gold)] hover:bg-white/5 border border-transparent"
  >
  <div className="relative">
- <Building2 size={18} />
- <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-[var(--gold)] text-black text-[7px] font-bold rounded-full flex items-center justify-center">
- {userInfo.accessible_branches.length + 1}
+ <Building2 size={19} />
+ <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-[var(--gold)] text-black text-[7px] font-bold rounded-full flex items-center justify-center">
+ {userInfo?.accessible_branches?.length ? userInfo.accessible_branches.length + 1 : 1}
  </span>
  </div>
- <span className="text-[7.5px] font-bold tracking-tighter text-center truncate w-full leading-tight">Filiallar</span>
+ <span className="text-[10px] font-bold tracking-tight text-center whitespace-nowrap leading-tight">Filiallar</span>
  </button>
  )}
  </div>

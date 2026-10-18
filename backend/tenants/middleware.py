@@ -320,13 +320,15 @@ class TenantMiddleware(MiddlewareMixin):
     def _is_public_request(path: str) -> bool:
         """
         Public endpoints that do not require tenant schema (public schema).
-        e.g. /api/v1/public/, swagger, redoc, Django admin.
+        e.g. /api/v1/public/, swagger, redoc, Django admin, static and media files.
         """
         public_prefixes = (
             '/api/v1/public/',
             '/api/schema/',
             '/api/docs/',
             '/adminn/',
+            '/media/',
+            '/static/',
         )
         return any(path.startswith(prefix) for prefix in public_prefixes)
 

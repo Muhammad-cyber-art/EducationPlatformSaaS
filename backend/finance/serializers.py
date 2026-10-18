@@ -1167,6 +1167,7 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
             "student_name",
             "group",
             "payer_name",
+            "payment_method",
             "title",
             "description",
             "related_id",
@@ -1199,14 +1200,25 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
                     payment_id = int(parts[1])
                     from finance.models import Payment
                     payment = Payment.objects.filter(id=payment_id).first()
+                    request = self.context.get('request')
                     if payment:
+                        receipt_url = None
+                        if payment.receipt_image:
+                            try:
+                                receipt_url = request.build_absolute_uri(payment.receipt_image.url) if request else payment.receipt_image.url
+                            except Exception:
+                                receipt_url = payment.receipt_image.url
+
+                        method = payment.payment_method or obj.payment_method or 'cash'
+                        method_display = payment.get_payment_method_display() if payment.payment_method else (dict(Payment.PAYMENT_METHODS).get(method, "Naqd (Cash)"))
+
                         return {
                             'original_payment_id': payment.id,
                             'is_verified': payment.is_verified,
-                            'receipt_image': payment.receipt_image.url if payment.receipt_image else None,
+                            'receipt_image': receipt_url,
                             'month': payment.month.strftime('%Y-%m') if payment.month else None,
-                            'payment_method': payment.payment_method,
-                            'payment_method_display': payment.get_payment_method_display(),
+                            'payment_method': method,
+                            'payment_method_display': method_display,
                             'refund_amount': float(payment.refund_amount) if payment.refund_amount else 0,
                             'refund_ignored': payment.refund_ignored,
                             'is_partial': payment.is_partial,
@@ -1215,13 +1227,14 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
                         }
                     else:
                         # Fallback for deleted students where Payment was hard-deleted by migration 0013
+                        method = obj.payment_method or 'cash'
                         return {
                             'original_payment_id': payment_id,
                             'is_verified': obj.is_verified,
                             'receipt_image': None,
                             'month': obj.date.strftime('%Y-%m') if obj.date else None,
-                            'payment_method': obj.payment_method,
-                            'payment_method_display': dict(Payment.PAYMENT_METHODS).get(obj.payment_method, "Noma'lum") if obj.payment_method else "Noma'lum",
+                            'payment_method': method,
+                            'payment_method_display': dict(Payment.PAYMENT_METHODS).get(method, "Naqd (Cash)"),
                             'refund_amount': 0,
                             'refund_ignored': False,
                             'is_partial': False,
@@ -1328,6 +1341,9 @@ class SpecialStudentFinancialSerializer(serializers.Serializer):
     expected_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     debt = serializers.DecimalField(max_digits=12, decimal_places=2)
+    wallet_total_paid = serializers.DecimalField(max_digits=12, decimal_places=2)
+    wallet_total_refunded = serializers.DecimalField(max_digits=12, decimal_places=2)
+    last_payment_date = serializers.DateField(allow_null=True)
 class BranchStatSerializer(serializers.Serializer):
     name = serializers.CharField()
     income = serializers.DecimalField(max_digits=15, decimal_places=2)
@@ -1350,207 +1366,6 @@ class FinanceDashboardSerializer(serializers.Serializer):
     branches = BranchStatSerializer(many=True)
     top_groups = GroupStatSerializer(many=True)
 
-
-class BranchFinanceDetailSerializer(serializers.Serializer):
-    branch = serializers.DictField()
-    stats = serializers.DictField()
-    finance = serializers.DictField()
-    groups = serializers.ListField()
-    period = serializers.DictField()
-
-
-class FinanceTransactionSerializer(serializers.ModelSerializer):
-    marked_by_name = serializers.SerializerMethodField()
-    student_name = serializers.SerializerMethodField()
-    
-    def get_student_name(self, obj):
-        name = obj.student_name or (obj.student.full_name if obj.student else "Noma'lum")
-        if not obj.student and obj.category == 'student_fee':
-            if not name.endswith("(O'chirilgan)"):
-                name = f"{name} (O'chirilgan)"
-        return name
-    branch_name = serializers.ReadOnlyField(source="branch.name")
-    transaction_type_display = serializers.CharField(
-        source="get_transaction_type_display", read_only=True
-    )
-    category_display = serializers.CharField(
-        source="get_category_display", read_only=True
-    )
-    payment_details = serializers.SerializerMethodField()
-
-    class Meta:
-        model = FinanceTransaction
-        fields = [
-            "id",
-            "transaction_type",
-            "transaction_type_display",
-            "category",
-            "category_display",
-            "amount",
-            "date",
-            "status",
-            "record_type",
-            "marked_by",
-            "marked_by_name",
-            "branch",
-            "branch_name",
-            "student",
-            "student_name",
-            "group",
-            "payer_name",
-            "title",
-            "description",
-            "related_id",
-            "created_at",
-            "payment_details",
-        ]
-        read_only_fields = ["id", "created_at", "marked_by"]
-
-    def get_marked_by_name(self, obj) -> str:
-        if obj.marked_by:
-            return obj.marked_by.get_full_name() or obj.marked_by.username
-        return "Tizim"
-
-    def get_payment_details(self, obj):
-        if obj.category == 'student_fee' and obj.related_id and obj.related_id.startswith('STP-'):
-            parts = obj.related_id.split('-')
-            if len(parts) >= 2:
-                try:
-                    payment_id = int(parts[1])
-                    from finance.models import Payment
-                    payment = Payment.objects.filter(id=payment_id).first()
-                    if payment:
-                        return {
-                            'original_payment_id': payment.id,
-                            'is_verified': payment.is_verified,
-                            'receipt_image': payment.receipt_image.url if payment.receipt_image else None,
-                            'month': payment.month.strftime('%Y-%m') if payment.month else None,
-                            'payment_method': payment.payment_method,
-                            'payment_method_display': payment.get_payment_method_display(),
-                            'refund_amount': float(payment.refund_amount) if payment.refund_amount else 0,
-                            'refund_ignored': payment.refund_ignored,
-                            'is_partial': payment.is_partial,
-                            'is_receiptless': payment.is_receiptless,
-                            'group_name': obj.group_name or payment.group_name or (payment.group.name if payment.group else None)
-                        }
-                    else:
-                        # Fallback for deleted students where Payment was hard-deleted by migration 0013
-                        return {
-                            'original_payment_id': payment_id,
-                            'is_verified': obj.is_verified,
-                            'receipt_image': None,
-                            'month': obj.date.strftime('%Y-%m') if obj.date else None,
-                            'payment_method': obj.payment_method,
-                            'payment_method_display': dict(Payment.PAYMENT_METHODS).get(obj.payment_method, "Noma'lum") if obj.payment_method else "Noma'lum",
-                            'refund_amount': 0,
-                            'refund_ignored': False,
-                            'is_partial': False,
-                            'is_receiptless': False,
-                            'group_name': obj.group_name
-                        }
-                except Exception as e:
-                    import traceback
-                    print(f"Exception in get_payment_details ListSerializer: {e}")
-                    traceback.print_exc()
-        return None
-
-
-class CustomPaymentSerializer(serializers.Serializer):
-    student = serializers.IntegerField()
-    group = serializers.IntegerField()
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
-    transaction_type = serializers.ChoiceField(
-        choices=[("income", "Kirim"), ("expense", "Chiqim")], default="income"
-    )
-    payer_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    description = serializers.CharField(
-        max_length=500, required=False, allow_blank=True
-    )
-    date = serializers.DateField(required=False)
-
-
-class EmployeeAdvanceSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(
-        source="employee.get_full_name", read_only=True
-    )
-    marked_by_name = serializers.CharField(
-        source="marked_by.get_full_name", read_only=True
-    )
-
-    class Meta:
-        model = EmployeeAdvance
-        fields = [
-            "id",
-            "employee",
-            "employee_name",
-            "month",
-            "amount",
-            "description",
-            "date",
-            "marked_by",
-            "marked_by_name",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at", "marked_by"]
-
-
-class SuccessSerializer(serializers.Serializer):
-    success = serializers.BooleanField(default=True)
-    message = serializers.CharField(required=False, allow_null=True)
-    count = serializers.IntegerField(required=False, allow_null=True)
-
-
-class AbsentStudentSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-    phone = serializers.CharField()
-    group = serializers.CharField()
-
-
-class PaymentStatisticsSerializer(serializers.Serializer):
-    groups = serializers.ListField(child=serializers.DictField())
-    statistics = serializers.DictField()
-
-
-class AdminExpenseSerializer(serializers.ModelSerializer):
-    marked_by_name = serializers.CharField(
-        source="marked_by.get_full_name", read_only=True
-    )
-    branch_name = serializers.CharField(source="branch.name", read_only=True)
-
-    class Meta:
-        model = AdminExpense
-        fields = [
-            "id",
-            "title",
-            "description",
-            "amount",
-            "date",
-            "branch",
-            "branch_name",
-            "marked_by",
-            "marked_by_name",
-            "created_at",
-        ]
-        read_only_fields = ["id", "marked_by", "created_at"]
-
-
-class SpecialStudentFinancialSerializer(serializers.Serializer):
-    student_id = serializers.IntegerField()
-    full_name = serializers.CharField()
-    phone = serializers.CharField()
-    status = serializers.CharField()
-    status_display = serializers.CharField()
-    group_id = serializers.IntegerField()
-    group_name = serializers.CharField()
-    monthly_price = serializers.DecimalField(max_digits=12, decimal_places=2)
-    custom_fee = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    expected_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
-    paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
-    debt = serializers.DecimalField(max_digits=12, decimal_places=2)
-    wallet_total_paid = serializers.DecimalField(max_digits=12, decimal_places=2)
-    wallet_total_refunded = serializers.DecimalField(max_digits=12, decimal_places=2)
-    last_payment_date = serializers.DateField(allow_null=True)
 
 class SpecialStudentDashboardSummarySerializer(serializers.Serializer):
     total_expected = serializers.DecimalField(max_digits=15, decimal_places=2)

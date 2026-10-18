@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, CreditCard, RotateCcw, Calendar, CheckCircle2, 
+  X, CreditCard, Calendar, CheckCircle2, 
   AlertCircle, Phone, MapPin, User, FileText, Upload, 
-  Layers, Clock, ArrowRight, DollarSign, Loader2, Sparkles, Receipt 
+  Layers, Clock, ArrowRight, DollarSign, Loader2, Sparkles, Receipt, Trash2 
 } from 'lucide-react';
 import api from '../../../tokenUpdater/updater';
 import toast from 'react-hot-toast';
@@ -28,11 +28,7 @@ export default function StudentDetailDrawer({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Refund Form States
-  const [showRefundForm, setShowRefundForm] = useState(false);
-  const [refundAmount, setRefundAmount] = useState('');
-  const [refundReason, setRefundReason] = useState('');
-  const [refunding, setRefunding] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   // Fetch student drill-down details when opened
   useEffect(() => {
@@ -104,10 +100,13 @@ export default function StudentDetailDrawer({
       formData.append('group_id', activeGroup.group_id);
       formData.append('month', month ? `${month}-01` : '');
       formData.append('amount', amountVal);
+      formData.append('payment_method', payMethod);
       formData.append('method', payMethod);
-      formData.append('is_receiptless', isReceiptless ? 'true' : 'false');
+      const effectiveReceiptless = receiptImage ? false : isReceiptless;
+      formData.append('is_receiptless', effectiveReceiptless ? 'true' : 'false');
       formData.append('notes', notes.trim());
-      if (receiptImage && !isReceiptless) {
+      if (receiptImage && !effectiveReceiptless) {
+        formData.append('receipt_image', receiptImage);
         formData.append('receipt', receiptImage);
       }
 
@@ -126,38 +125,29 @@ export default function StudentDetailDrawer({
     }
   };
 
-  // Submit Refund
-  const handleRefundSubmit = async (e) => {
-    e.preventDefault();
-    if (!activeGroup.payment_id) {
-      toast.error("Ushbu to'lov uchun refund mavjud emas");
+  // Cancel Payment completely
+  const handleCancelPayment = async () => {
+    if (!activeGroup?.payment_id) {
+      toast.error("Bekor qilish uchun to'lov topilmadi");
       return;
     }
-    const amountVal = parseFloat(refundAmount);
-    if (isNaN(amountVal) || amountVal <= 0) {
-      toast.error("Refund summasi 0 dan katta bo'lishi kerak");
-      return;
-    }
-    if (amountVal > activeGroup.paid_amount) {
-      toast.error(`Maksimal qaytarish mumkin bo'lgan summa: ${formatCurrency(activeGroup.paid_amount)}`);
-      return;
-    }
+    const studentName = student.student_name || "o'quvchi";
+    const confirmCancel = window.confirm(
+      `Rostdan ham ${studentName} ning to'lovini bekor qilmoqchimisiz?\n\nTo'lov to'liq bekor qilinadi va Super Admin hamda filial kassasida to'lov o'chiriladi.`
+    );
+    if (!confirmCancel) return;
 
     try {
-      setRefunding(true);
-      await api.post(`/finance/student-payments/${activeGroup.payment_id}/refund-money/`, {
-        amount: amountVal,
-        reason: refundReason.trim()
-      });
-      toast.success("Pul muvaffaqiyatli qaytarildi");
-      setShowRefundForm(false);
+      setCancelling(true);
+      await api.delete(`/finance/student-payments/${activeGroup.payment_id}/`);
+      toast.success("To'lov muvaffaqiyatli bekor qilindi!");
       onPaymentSuccess();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.detail || "Refund amalga oshmadi");
+      toast.error(err.response?.data?.detail || "To'lovni bekor qilishda xatolik yuz berdi");
     } finally {
-      setRefunding(false);
+      setCancelling(false);
     }
   };
 
@@ -356,7 +346,15 @@ export default function StudentDetailDrawer({
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => setPayMethod(m.id)}
+                          onClick={() => {
+                            setPayMethod(m.id);
+                            if (m.id === 'click' || m.id === 'payme') {
+                              setIsReceiptless(false);
+                            } else if (m.id === 'cash') {
+                              setIsReceiptless(true);
+                              setReceiptImage(null);
+                            }
+                          }}
                           className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${
                             payMethod === m.id
                               ? 'bg-[var(--gold)] text-black shadow-md'
@@ -396,8 +394,15 @@ export default function StudentDetailDrawer({
                   </div>
 
                   {receiptImage && !isReceiptless && (
-                    <div className="text-[11px] text-emerald-400 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20 truncate">
-                      Chek tanlandi: {receiptImage.name}
+                    <div className="flex items-center justify-between text-[11px] text-emerald-400 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+                      <span className="truncate">Chek tanlandi: {receiptImage.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setReceiptImage(null)}
+                        className="ml-2 text-rose-400 hover:text-rose-300 font-bold"
+                      >
+                        ✕
+                      </button>
                     </div>
                   )}
 
@@ -422,65 +427,19 @@ export default function StudentDetailDrawer({
                 </form>
               </div>
 
-              {/* Refund Accordion / Button */}
+              {/* Cancel Action */}
               {activeGroup.paid_amount > 0 && (
                 <div className="pt-1">
-                  {!showRefundForm ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowRefundForm(true)}
-                      className="w-full py-2 px-3 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-xl border border-zinc-800 flex items-center justify-center gap-2 transition-colors"
-                    >
-                      <RotateCcw size={13} />
-                      <span>Ushbu To'lovdan Pulni Qaytarish (Refund / Reversal)</span>
-                    </button>
-                  ) : (
-                    <form onSubmit={handleRefundSubmit} className="p-3.5 bg-rose-500/5 border border-rose-500/20 rounded-xl space-y-3">
-                      <div className="flex items-center justify-between text-xs font-bold text-rose-400">
-                        <span>Pulni Qaytarish (Refund)</span>
-                        <button 
-                          type="button" 
-                          onClick={() => setShowRefundForm(false)}
-                          className="text-[var(--text-muted)] hover:text-white"
-                        >
-                          Yopish
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[var(--text-muted)] mb-1">
-                          Qaytariladigan summa (Maks: {formatCurrency(activeGroup.paid_amount)})
-                        </label>
-                        <AmountInput
-                          required
-                          value={refundAmount}
-                          onChange={(e) => setRefundAmount(e.target.value)}
-                          placeholder="Summa..."
-                          className="w-full px-3 pr-14 py-1.5 text-xs bg-[var(--bg-void)] border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-rose-500"
-                        />
-                      </div>
-
-                      <div>
-                        <input
-                          type="text"
-                          required
-                          value={refundReason}
-                          onChange={(e) => setRefundReason(e.target.value)}
-                          placeholder="Qaytarish sababi..."
-                          className="w-full px-3 py-1.5 text-xs bg-[var(--bg-void)] border border-zinc-800 rounded-lg text-white"
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={refunding}
-                        className="w-full py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2"
-                      >
-                        {refunding ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                        Pulni Qaytarishni Tasdiqlash
-                      </button>
-                    </form>
-                  )}
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={handleCancelPayment}
+                    className="w-full py-2.5 px-4 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
+                    title="To'lovni butunlay bekor qilish va kassadan o'chirish"
+                  >
+                    {cancelling ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    <span>To'lovni Bekor Qilish</span>
+                  </button>
                 </div>
               )}
 

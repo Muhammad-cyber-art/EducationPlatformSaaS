@@ -7,6 +7,7 @@ import {
   getAttendanceDraft,
   clearAttendanceDraft,
   queueAttendanceConfirm,
+  db,
 } from "../../../db/db";
 
 export const useAttendance = (group_id, selectedDate, groupStudents, userData) => {
@@ -35,10 +36,27 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
 
   const { data: attendanceDataRaw, refetch: refetchAttends } = useQuery({
     queryKey: ['attendance', group_id, selectedDate],
-    queryFn: () =>
-      api
-        .get(`/homework_attends/attendances/?group_id=${group_id}&date=${selectedDate}`)
-        .then((res) => res.data),
+    queryFn: async () => {
+      try {
+        const res = await api.get(`/homework_attends/attendances/?group_id=${group_id}&date=${selectedDate}`);
+        db.query_cache.put({
+          query_key: `attendance_${group_id}_${selectedDate}`,
+          data: res.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return res.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`attendance_${group_id}_${selectedDate}`);
+        if (cached?.data) return cached.data;
+        const localAtts = await db.attendance_records
+          .where('group_id')
+          .equals(Number(group_id))
+          .filter(a => a.date === selectedDate)
+          .toArray();
+        if (localAtts && localAtts.length > 0) return localAtts;
+        return [];
+      }
+    },
     enabled: !!group_id && !!selectedDate && !!userData.id,
     staleTime: 1000 * 60 * 5,
   });

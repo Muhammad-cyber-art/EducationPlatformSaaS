@@ -420,17 +420,28 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
         )
 
         with db_transaction.atomic():
+            now = timezone.now()
             payment.paid_amount -= refund_amount
             if payment.paid_amount <= 0:
-                payment.paid_amount = 0
+                payment.paid_amount = Decimal('0')
                 payment.is_paid = False
                 payment.is_partial = False
+
+                # To'lov to'liq qaytarilganda/bekor qilinganda, original kirim tranzaksiyalarini
+                # 'cancelled' statusiga o'tkazamiz, shunda Super Admin kassasida to'lov o'chadi
+                original_txs = FinanceTransaction.objects.filter(
+                    related_id__startswith=f"STP-{payment.id}-INS-",
+                    status='completed'
+                )
+                for otx in original_txs:
+                    otx.status = 'cancelled'
+                    otx.cancelled_by = request.user
+                    otx.cancelled_at = now
+                    otx.save(update_fields=['status', 'cancelled_by', 'cancelled_at'])
             else:
                 payment.is_paid = False
                 payment.is_partial = True
             payment.save()
-
-            now = timezone.now()
             # TUZATILDI (BUG-REFUND-1): is_verified=True — refund real pul chiqimi,
             # darhol global balansga aks etishi kerak.
             # total_refunded() faqat is_verified=True larni hisoblaydi.
@@ -481,7 +492,11 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Ushbu to'lov allaqachon to'liq amalga oshirilgan"}, status=400)
 
         try:
-            updated_payment = confirm_student_payment(request.user, payment, request.data)
+            payload = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+            if request.FILES:
+                for key in request.FILES:
+                    payload[key] = request.FILES[key]
+            updated_payment = confirm_student_payment(request.user, payment, payload)
             message = "To'lov muvaffaqiyatli qabul qilindi"
             if updated_payment.is_partial and not updated_payment.is_paid:
                 message = (
@@ -1255,7 +1270,11 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             if payment.is_paid and not is_custom:
                 return Response({"detail": "Ushbu to'lov allaqachon to'liq amalga oshirilgan."}, status=400)
 
-            updated_payment = confirm_student_payment(request.user, payment, request.data)
+            payload = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+            if request.FILES:
+                for key in request.FILES:
+                    payload[key] = request.FILES[key]
+            updated_payment = confirm_student_payment(request.user, payment, payload)
 
             msg = "To'lov muvaffaqiyatli qabul qilindi"
             if updated_payment.is_partial and not updated_payment.is_paid:

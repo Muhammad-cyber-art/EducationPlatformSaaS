@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
 import { get_user_info } from "../../Authorized/getRole";
+import { db } from "../../../db/db";
 
 const EMPTY_ARRAY = [];
 
@@ -21,21 +22,68 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
 
   const { data: groupinfo = {}, isError: isGroupError, isLoading: isGroupLoading } = useQuery({
     queryKey: ['group-detail', group_id],
-    queryFn: () => api.get(`/groups/groups/${group_id}/?exclude_students=true`).then(res => res.data),
+    queryFn: async () => {
+      try {
+        const res = await api.get(`/groups/groups/${group_id}/?exclude_students=true`);
+        db.query_cache.put({
+          query_key: `group-detail_${group_id}`,
+          data: res.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return res.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`group-detail_${group_id}`);
+        if (cached?.data) return cached.data;
+        const localGroup = await db.groups.get(Number(group_id));
+        if (localGroup) return localGroup;
+        throw err;
+      }
+    },
     staleTime: 1000 * 60 * 10,
     enabled: !!group_id,
   });
 
   const { data: groupStudentsRaw, isLoading: isStudentsLoading } = useQuery({
     queryKey: ['group-students', group_id],
-    queryFn: () => api.get(`/groups/groups/${group_id}/students/`).then(res => res.data),
+    queryFn: async () => {
+      try {
+        const res = await api.get(`/groups/groups/${group_id}/students/`);
+        db.query_cache.put({
+          query_key: `group-students_${group_id}`,
+          data: res.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return res.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`group-students_${group_id}`);
+        if (cached?.data) return cached.data;
+        const localStudents = await db.students.where('group_id').equals(Number(group_id)).toArray();
+        if (localStudents && localStudents.length > 0) return localStudents;
+        throw err;
+      }
+    },
     staleTime: 1000 * 60 * 10,
     enabled: !!group_id,
   });
 
   const { data: lessonDates = EMPTY_ARRAY } = useQuery({
     queryKey: ['group-lesson-dates', group_id, selectedMonth, selectedYear],
-    queryFn: () => api.get(`/groups/groups/${group_id}/lesson-dates/?month=${selectedMonth}&year=${selectedYear}`).then(res => res.data),
+    queryFn: async () => {
+      try {
+        const res = await api.get(`/groups/groups/${group_id}/lesson-dates/?month=${selectedMonth}&year=${selectedYear}`);
+        db.query_cache.put({
+          query_key: `group-lesson-dates_${group_id}_${selectedMonth}_${selectedYear}`,
+          data: res.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return res.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`group-lesson-dates_${group_id}_${selectedMonth}_${selectedYear}`);
+        if (cached?.data) return cached.data;
+        const todayStr = new Date().toISOString().split('T')[0];
+        return [todayStr];
+      }
+    },
     staleTime: 0,
     enabled: !!group_id && !!selectedMonth && !!selectedYear,
   });

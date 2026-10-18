@@ -535,3 +535,210 @@ def edit_past_attendance(attendance_id, user, new_status, reason=''):
     return attendance
 
 
+def compute_student_monthly_attendance(
+    student,
+    year,
+    month,
+    req_group_id=None,
+    today=None,
+    group_lessons_cache=None,
+    attendance_records=None,
+    active_enrollments=None,
+):
+    """
+    O'quvchining 1 oylik davomat matritsasini GitHub-style heatmap uchun agregatsiya qiladi.
+    Optimizatsiya qilingan: offline bundle yoki bevosita API so'rovida qayta ishlatiladi.
+    """
+    from datetime import date as date_type
+    from calendar import monthrange
+    from groups.models import GroupEnrollment
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if today is None:
+        today = timezone.localdate()
+
+    if active_enrollments is None:
+        active_enrollments = list(
+            GroupEnrollment.objects.filter(
+                student=student,
+                is_active=True
+            ).select_related('group')
+        )
+
+    available_groups = [e.group for e in active_enrollments if e.group]
+    if not available_groups and student.group:
+        available_groups = [student.group]
+
+    if req_group_id:
+        active_groups = [g for g in available_groups if g.id == req_group_id]
+        if not active_groups and student.group and student.group.id == req_group_id:
+            active_groups = [student.group]
+    else:
+        active_groups = available_groups
+
+    # Join date xaritasi
+    join_dates = {}
+    for e in active_enrollments:
+        join_dates[e.group_id] = e.joined_at.date() if e.joined_at else (student.joined_at.date() if student.joined_at else None)
+    if student.group_id and student.group_id not in join_dates:
+        join_dates[student.group_id] = student.joined_at.date() if student.joined_at else None
+
+    # Oydagi barcha faol guruhlarning rejalashtirilgan dars kunlarini olish
+    group_lessons_map = {}
+    for g in active_groups:
+        if group_lessons_cache and g.id in group_lessons_cache:
+            l_dates = group_lessons_cache[g.id]
+        else:
+            try:
+                l_dates = set(g.get_lesson_dates(year, month))
+            except Exception as ex:
+                logger.warning(f"Error fetching lesson dates for group {g.id}: {ex}")
+                l_dates = set()
+
+        group_lessons_map[g.id] = {
+            'id': g.id,
+            'name': g.name,
+            'color': getattr(g, 'color', '#ffffff'),
+            'lesson_dates': l_dates,
+            'join_date': join_dates.get(g.id)
+        }
+
+    # Oydagi mavjud davomat yozuvlarini olish
+    active_gids = [g.id for g in active_groups]
+    if attendance_records is None:
+        attendance_qs = Attendance.objects.filter(
+            student=student,
+            date__year=year,
+            date__month=month
+        ).select_related('group')
+        if req_group_id:
+            attendance_qs = attendance_qs.filter(group_id=req_group_id)
+        else:
+            if active_gids:
+                attendance_qs = attendance_qs.filter(group_id__in=active_gids)
+        records_list = list(attendance_qs)
+    else:
+        if req_group_id:
+            records_list = [r for r in attendance_records if r.group_id == req_group_id]
+        else:
+            records_list = [r for r in attendance_records if not active_gids or r.group_id in active_gids]
+
+    att_by_date = {}
+    for att in records_list:
+        att_date_str = str(att.date)
+        if att_date_str not in att_by_date:
+            att_by_date[att_date_str] = []
+        att_by_date[att_date_str].append(att)
+
+    # Oydagi barcha kunlar bo'yicha matritsani qurish
+    _, last_day_num = monthrange(year, month)
+    days_data = []
+
+    total_scheduled = 0
+    total_passed = 0
+    attended_count = 0
+    absent_count = 0
+    unconfirmed_count = 0
+    future_count = 0
+
+    for day_num in range(1, last_day_num + 1):
+        curr_date = date_type(year, month, day_num)
+        curr_date_str = str(curr_date)
+        is_today = (curr_date == today)
+        is_future = (curr_date > today)
+
+        # Bu kunda darsi bor guruhlarni tekshirish
+        day_groups_with_lesson = []
+        for gid, ginfo in group_lessons_map.items():
+            if curr_date in ginfo['lesson_dates']:
+                day_groups_with_lesson.append(ginfo)
+
+        is_lesson = len(day_groups_with_lesson) > 0
+        records_today = att_by_date.get(curr_date_str, [])
+
+        status_str = "no_lesson"
+        lesson_groups_names = []
+
+        if is_lesson:
+            total_scheduled += 1
+            lesson_groups_names = [g['name'] for g in day_groups_with_lesson]
+
+            joined_all = any(
+                (not ginfo['join_date'] or curr_date >= ginfo['join_date'])
+                for ginfo in day_groups_with_lesson
+            )
+
+            if not joined_all:
+                status_str = "not_joined"
+            elif is_future:
+                status_str = "future"
+                future_count += 1
+            else:
+                total_passed += 1
+                if records_today:
+                    confirmed_records = [r for r in records_today if r.marked_by_id is not None]
+                    if confirmed_records:
+                        if any(r.is_present for r in confirmed_records):
+                            status_str = "present"
+                            attended_count += 1
+                        else:
+                            status_str = "absent"
+                            absent_count += 1
+                    else:
+                        status_str = "unconfirmed"
+                        unconfirmed_count += 1
+                else:
+                    status_str = "unconfirmed"
+                    unconfirmed_count += 1
+        elif records_today:
+            confirmed_records = [r for r in records_today if r.marked_by_id is not None]
+            if confirmed_records:
+                if any(r.is_present for r in confirmed_records):
+                    status_str = "present"
+                    attended_count += 1
+                    total_passed += 1
+                else:
+                    status_str = "absent"
+                    absent_count += 1
+                    total_passed += 1
+            else:
+                status_str = "unconfirmed"
+            lesson_groups_names = [r.group_name or (r.group.name if r.group else "Guruh") for r in records_today]
+
+        days_data.append({
+            "date": curr_date_str,
+            "day": day_num,
+            "day_of_week": curr_date.weekday(),
+            "is_lesson_day": is_lesson or (len(records_today) > 0),
+            "status": status_str,
+            "groups": lesson_groups_names,
+            "is_today": is_today
+        })
+
+    if total_passed > 0:
+        attendance_rate = round((attended_count / total_passed * 100), 1)
+    else:
+        attendance_rate = 0 if future_count > 0 else 100.0
+
+    return {
+        "student_id": student.id,
+        "student_name": student.full_name,
+        "year": year,
+        "month": month,
+        "groups": [{"id": g.id, "name": g.name} for g in available_groups],
+        "stats": {
+            "total_scheduled": total_scheduled,
+            "total_passed": total_passed,
+            "attended_count": attended_count,
+            "absent_count": absent_count,
+            "unconfirmed_count": unconfirmed_count,
+            "future_count": future_count,
+            "attendance_rate": attendance_rate
+        },
+        "days": days_data
+    }
+
+
+

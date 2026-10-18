@@ -374,13 +374,22 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
 
     const onReceipt = (url) => {
         if (!url) return;
-        if (url.startsWith('http')) {
-            setReceiptViewerUrl(url);
-        } else {
+        let finalUrl = url;
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
             const rootUrl = api.defaults.baseURL.replace(/\/api\/?$/, '');
-            const finalUrl = url.startsWith('/') ? `${rootUrl}${url}` : `${rootUrl}/${url}`;
-            setReceiptViewerUrl(finalUrl);
+            finalUrl = url.startsWith('/') ? `${rootUrl}${url}` : `${rootUrl}/${url}`;
+        } else {
+            try {
+                const parsed = new URL(url);
+                if ((parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') && window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+                    const rootUrl = api.defaults.baseURL.replace(/\/api\/?$/, '');
+                    finalUrl = `${rootUrl}${parsed.pathname}`;
+                }
+            } catch (e) {
+                // Ignore parse error
+            }
         }
+        setReceiptViewerUrl(finalUrl);
     };
 
     return (
@@ -460,21 +469,55 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
             {/* Receipt Modal */}
             {receiptViewerUrl && typeof document !== 'undefined' && createPortal(
                 <div
-                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
                     onClick={() => setReceiptViewerUrl(null)}
                 >
-                    <div className="relative max-w-4xl max-h-[90vh] w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                        <button
-                            onClick={() => setReceiptViewerUrl(null)}
-                            className="absolute -top-12 right-0 md:-right-12 w-10 h-10 flex items-center justify-center bg-white/10 text-white rounded-full hover:bg-white/20 transition-all border border-white/20"
-                        >
-                            ✕
-                        </button>
-                        <img
-                            src={receiptViewerUrl}
-                            alt="Chek rasmi"
-                            className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl border border-white/10"
-                        />
+                    <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
+                        <div className="w-full flex items-center justify-between pb-3 text-white">
+                            <span className="text-sm font-bold flex items-center gap-2">
+                                <ImageIcon size={18} className="text-[var(--gold)]" />
+                                To'lov cheki
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href={receiptViewerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors border border-white/10 flex items-center gap-1.5"
+                                >
+                                    <span>Yangi oynada ochish</span>
+                                </a>
+                                <button
+                                    onClick={() => setReceiptViewerUrl(null)}
+                                    className="w-8 h-8 flex items-center justify-center bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/50 p-2">
+                            <img
+                                src={receiptViewerUrl}
+                                alt="Chek rasmi"
+                                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl"
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    const fallback = e.target.nextElementSibling;
+                                    if (fallback) fallback.style.display = 'flex';
+                                }}
+                            />
+                            <div style={{ display: 'none' }} className="p-12 flex-col items-center justify-center text-center space-y-3">
+                                <p className="text-sm text-red-400 font-bold">Rasmni yuklab bo'lmadi</p>
+                                <a
+                                    href={receiptViewerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-[var(--gold)] underline"
+                                >
+                                    To'g'ridan-to'g'ri havolada ochib ko'ring
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>,
                 document.body

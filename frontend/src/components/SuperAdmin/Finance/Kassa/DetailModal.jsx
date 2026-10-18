@@ -1,9 +1,11 @@
 import React from "react";
-import { X, FileText, CheckCircle2 } from "lucide-react";
+import { X, FileText, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { formatCurrency } from "./useKassa";
 
 const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
     if (!show || !payment) return null;
+
+    const receiptUrl = payment.payment_details?.receipt_image;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -39,6 +41,21 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                     {payment.cancelled_by_name || 'Noma\'lum'} tomonidan bekor qilingan
                                     {payment.cancelled_at && ` (${new Date(payment.cancelled_at).toLocaleString('uz-UZ', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })})`}
                                 </p>
+                            </div>
+                        )}
+                        {receiptUrl && (
+                            <div className="col-span-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-blue-400">
+                                    <ImageIcon size={18} />
+                                    <span className="text-xs font-bold">To'lov cheki mavjud</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => window.open(receiptUrl, '_blank')}
+                                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-all shadow-sm flex items-center gap-1.5"
+                                >
+                                    <span>Chekni ko'rish</span>
+                                </button>
                             </div>
                         )}
                         {payment.payment_details?.refund_amount > 0 && !payment.payment_details?.refund_ignored && (
