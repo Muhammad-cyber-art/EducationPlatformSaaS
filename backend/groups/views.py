@@ -594,7 +594,7 @@ class GroupViewSet(viewsets.ModelViewSet):
         month_start = today.replace(day=1)
 
         # Foydalanuvchi roli bo'yicha guruhlar (super_admin, admin, mentor)
-        groups = self.get_queryset().filter(is_archived=False, is_faol=True).select_related(
+        groups = self.get_queryset().filter(is_archived=False).select_related(
             'mentor', 'mentor__branch', 'admin', 'branch'
         ).prefetch_related(
             'enrollments__student',

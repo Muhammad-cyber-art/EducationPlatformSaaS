@@ -25,27 +25,38 @@ const fetchGroupsData = async ({ pageParam = 1, queryKey }) => {
     return res.data;
   } catch (err) {
     // Tarmoq xatosi yoki oflayn: Dexie dagi lokal guruhlardan olamiz
-    const localGroups = await db.groups.toArray();
-    if (localGroups && localGroups.length > 0) {
-      let filtered = localGroups;
-      if (branchId) {
-        filtered = filtered.filter(g => Number(g.branch_id || g.branch?.id) === Number(branchId));
+    try {
+      const localGroups = await db.groups.toArray();
+      if (localGroups && localGroups.length > 0) {
+        let filtered = localGroups;
+        if (branchId) {
+          const byBranch = filtered.filter(g => Number(g.branch_id || g.branch?.id) === Number(branchId));
+          if (byBranch.length > 0) {
+            filtered = byBranch;
+          }
+        }
+        if (search) {
+          const q = search.toLowerCase();
+          filtered = filtered.filter(g =>
+            (g.name || '').toLowerCase().includes(q) ||
+            (g.subject || '').toLowerCase().includes(q)
+          );
+        }
+        return {
+          count: filtered.length,
+          next: null,
+          previous: null,
+          results: filtered
+        };
       }
-      if (search) {
-        const q = search.toLowerCase();
-        filtered = filtered.filter(g =>
-          (g.name || '').toLowerCase().includes(q) ||
-          (g.subject || '').toLowerCase().includes(q)
-        );
-      }
-      return {
-        count: filtered.length,
-        next: null,
-        previous: null,
-        results: filtered
-      };
-    }
-    throw err;
+    } catch (_) {}
+
+    return {
+      count: 0,
+      next: null,
+      previous: null,
+      results: []
+    };
   }
 };
 

@@ -35,6 +35,11 @@ db.version(2).stores({
   sync_meta: '&key, value',
 });
 
+// Sxema versiyasi 3: students jadvalida group_id bo'yicha indeks qo'shildi
+db.version(3).stores({
+  students: '&id, full_name, phone, group_id, branch_id, [branch_id+is_active], updated_at',
+});
+
 // ==========================================
 // YORDAMCHI: DB ochilganda xatolarni ushlab qolish
 // ==========================================

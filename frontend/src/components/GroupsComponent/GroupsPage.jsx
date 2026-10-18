@@ -54,8 +54,9 @@ export default function GroupsListPage() {
  return () => clearTimeout(searchTimer);
  }, [searchTerm]);
 
+ const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
  const effectiveBranchId = user_info?.role ==="super_admin" ? superAdminBranchId : currentBranchId;
- const canFetch = user_info?.role ==="super_admin" ? !!superAdminBranchId : (!branchLoading && hasAccess);
+ const canFetch = isOffline || (user_info?.role ==="super_admin" ? !!superAdminBranchId : (!branchLoading && hasAccess));
 
  const {
  data,

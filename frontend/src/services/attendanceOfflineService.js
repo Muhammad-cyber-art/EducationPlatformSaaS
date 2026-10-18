@@ -87,9 +87,11 @@ class AttendanceOfflineService {
 
           // 1. Guruh ma'lumotlarini saqlash
           if (item.group_detail) {
+            const bId = item.group_detail.branch?.id || item.group_detail.branch_id;
             await db.groups.put({
               ...item.group_detail,
               id: groupId,
+              branch_id: bId ? Number(bId) : undefined,
               updated_at: nowIso,
             });
 

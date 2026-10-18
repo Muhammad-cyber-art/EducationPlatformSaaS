@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
 import toast from "react-hot-toast";
+import { get_user_info } from "../../Authorized/getRole";
 import {
   saveAttendanceDraft,
   getAttendanceDraft,
@@ -12,6 +13,8 @@ import {
 
 export const useAttendance = (group_id, selectedDate, groupStudents, userData) => {
   const [localAttendanceByDate, setLocalAttendanceByDate] = useState({});
+  const user_info = get_user_info();
+  const effectiveUserId = userData?.id || user_info?.user_id;
 
   // 1. Dastlabki yuklanganda IndexedDB'dagi mavjud qoralamani (draft) tiklash
   useEffect(() => {
@@ -57,7 +60,7 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
         return [];
       }
     },
-    enabled: !!group_id && !!selectedDate && !!userData.id,
+    enabled: !!group_id && !!selectedDate && !!effectiveUserId,
     staleTime: 1000 * 60 * 5,
   });
 

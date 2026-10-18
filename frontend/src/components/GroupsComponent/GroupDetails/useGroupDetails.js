@@ -55,11 +55,22 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
         }).catch(() => {});
         return res.data;
       } catch (err) {
-        const cached = await db.query_cache.get(`group-students_${group_id}`);
-        if (cached?.data) return cached.data;
-        const localStudents = await db.students.where('group_id').equals(Number(group_id)).toArray();
-        if (localStudents && localStudents.length > 0) return localStudents;
-        throw err;
+        const cached = (await db.query_cache.get(`group-students_${group_id}`)) ||
+                       (await db.query_cache.get(`group-students_${Number(group_id)}`));
+        if (cached?.data && Array.isArray(cached.data)) return cached.data;
+
+        try {
+          const localStudents = await db.students.where('group_id').equals(Number(group_id)).toArray();
+          if (localStudents && localStudents.length > 0) return localStudents;
+        } catch (_) {}
+
+        try {
+          const allStudents = await db.students.toArray();
+          const filtered = allStudents.filter(s => Number(s.group_id) === Number(group_id));
+          if (filtered && filtered.length > 0) return filtered;
+        } catch (_) {}
+
+        return [];
       }
     },
     staleTime: 1000 * 60 * 10,
