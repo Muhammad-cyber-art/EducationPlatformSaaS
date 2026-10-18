@@ -8,12 +8,15 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 
-def normalize_month(value: date) -> date:
+def normalize_month(value) -> date:
     """
-    Har qanday sanani o'sha oyning 1-kuniga keltiradi
+    Har qanday sana yoki sana matnini (str) o'sha oyning 1-kuniga keltiradi
     """
     if not value:
         return None
+    if isinstance(value, str):
+        parts = value.strip().split('-')
+        return date(int(parts[0]), int(parts[1]), 1)
     return value.replace(day=1)
 
 

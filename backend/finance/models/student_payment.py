@@ -156,6 +156,13 @@ class Payment(models.Model):
             raise ValueError("To'lov summasi 0 dan katta bo'lishi kerak")
 
         with db_transaction.atomic():
+            if self.pk:
+                locked = Payment.objects.select_for_update().get(pk=self.pk)
+                self.amount = locked.amount
+                self.paid_amount = locked.paid_amount
+                self.is_paid = locked.is_paid
+                self.is_partial = locked.is_partial
+
             expected = Decimal(str(self.amount or 0))
             current_paid = Decimal(str(self.paid_amount or 0))
 

@@ -82,7 +82,7 @@ const Kassa = () => {
             }
 
             const transRes = await api.get("/finance/transactions/", { params: transParams });
-            setWithdrawals((transRes.data.results || transRes.data).filter(t => t.category === 'owner_withdrawal' || t.category === 'other'));
+            setWithdrawals((transRes.data.results || transRes.data).filter(t => t.status !== 'cancelled'));
 
         } catch (error) {
             console.error("Error fetching kassa data:", error);
@@ -162,7 +162,7 @@ const Kassa = () => {
     };
 
     const totalToday = payments.filter(p => p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.amount), 0);
-    const totalVerified = payments.filter(p => p.payment_details?.is_verified && p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalVerified = payments.filter(p => (p.is_verified || p.payment_details?.is_verified) && p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.amount), 0);
     const totalWithdrawn = withdrawals.filter(w => w.status !== 'cancelled').reduce((sum, w) => sum + Number(w.amount), 0);
 
     return (
@@ -442,7 +442,7 @@ const Kassa = () => {
                                             <td className="px-8 py-6">
                                                 <div className="inline-flex items-center gap-3 px-4 py-2 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase tracking-wider">
                                                     <CreditCard size={14} />
-                                                    {w.category === 'owner_withdrawal' ? 'Avans / Pul Olish' : 'Boshqa Chiqim'}
+                                                    {w.category_display || (w.category === 'owner_withdrawal' ? 'Avans / Pul Olish' : 'Chiqim')}
                                                 </div>
                                             </td>
                                             <td className="px-8 py-6 text-base font-black text-red-500 tabular-nums tracking-tight">{formatCurrency(w.amount)}</td>

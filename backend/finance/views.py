@@ -149,31 +149,93 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
         return context
 
     def perform_update(self, serializer):
-        """Adminlar tasdiqlangan to'lovni tahrirlaganda Ledger'ni yangilash"""
+        """Adminlar tasdiqlangan to'lovni tahrirlaganda Ledger'ni to'g'ri yangilash"""
         instance = self.get_object()
         old_amount = instance.amount
         old_is_paid = instance.is_paid
+
+        # Super admin bo'lmagan admin tasdiqlangan to'lovni o'zgartira olmaydi
+        if instance.is_verified and self.request.user.role != 'super_admin':
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Super admin tomonidan tasdiqlangan to'lovni faqat Super Admin o'zgartira oladi.")
         
         updated_instance = serializer.save()
         
         if old_is_paid and updated_instance.is_paid and old_amount != updated_instance.amount:
-            # BUG-3 FIX: related_id format "STP-{id}-INS-{uuid}" bo'ladi,
-            # shuning uchun exact match o'rniga startswith filter ishlatiladi.
-            related_id_prefix = f"STP-{updated_instance.id}-INS-"
+            # BUG-3 & AUDIT FIX: Ledger'dagi mavjud tranzaksiyalarni to'g'ridan-to'g'ri o'zgartirmaymiz.
+            # Buning o'rniga summadagi farq (diff) uchun yangi tuzatish tranzaksiyasi (Adjustment / Reversal) yozamiz.
+            import uuid
+            related_id_prefix = f"STP-{updated_instance.id}-"
             _student_name = (
                 updated_instance.student_full_name
                 or (updated_instance.student.full_name if updated_instance.student else "Noma'lum o'quvchi")
             )
-            # Tahrirlashda aslida yangi reversal yaratib yangi payment qilish Ledger tamoyiliga to'g'ri keladi,
-            # Ammo hozircha update qilish logikasini update qilib qoldiramiz yoki qisman to'g'rilaymiz.
-            # Lekin user so'roviga asosan bu yerda ham bekor qilish bo'lishi kerak. Biz hozir amountni shunchaki o'zgartirib qo'yyapmiz.
-            FinanceTransaction.objects.filter(
+            _group_name = (
+                updated_instance.group_name
+                or (updated_instance.group.name if updated_instance.group else "Noma'lum guruh")
+            )
+            _branch = (
+                (updated_instance.student.branch if updated_instance.student else None)
+                or (updated_instance.group.branch if updated_instance.group else None)
+                or getattr(self.request.user, 'branch', None)
+            )
+
+            # Mavjud completed tranzaksiyalar yig'indisi
+            existing_tx_sum = FinanceTransaction.objects.filter(
                 related_id__startswith=related_id_prefix,
                 status='completed'
-            ).update(
-                amount=updated_instance.amount,
-                description=f"Tahrirlandi: {_student_name} to'lovi ({updated_instance.month})"
-            )
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+            diff = Decimal(str(updated_instance.amount)) - existing_tx_sum
+            if diff != Decimal('0') and _branch:
+                now = timezone.now()
+                if diff > 0:
+                    FinanceTransaction.objects.create(
+                        related_id=f"STP-{updated_instance.id}-ADJ-{uuid.uuid4().hex[:8]}",
+                        transaction_type='income',
+                        category='student_fee',
+                        status='completed',
+                        record_type='payment',
+                        amount=diff,
+                        date=updated_instance.paid_at.date() if updated_instance.paid_at else timezone.localdate(),
+                        marked_by=self.request.user,
+                        branch=_branch,
+                        student=updated_instance.student,
+                        group=updated_instance.group,
+                        student_name=_student_name,
+                        group_name=_group_name,
+                        payment_method=updated_instance.payment_method,
+                        title=_student_name,
+                        description=f"Tahrirlandi (+{diff} UZS): {_student_name} ({updated_instance.month})",
+                        is_verified=updated_instance.is_verified,
+                        verified_by=self.request.user if updated_instance.is_verified else None,
+                        verified_at=now if updated_instance.is_verified else None,
+                    )
+                else:
+                    FinanceTransaction.objects.create(
+                        related_id=f"REV-{updated_instance.id}-ADJ-{uuid.uuid4().hex[:8]}",
+                        transaction_type='income',
+                        category='student_fee',
+                        status='completed',
+                        record_type='reversal',
+                        amount=diff,  # manfiy summa
+                        date=timezone.localdate(),
+                        marked_by=self.request.user,
+                        branch=_branch,
+                        student=updated_instance.student,
+                        group=updated_instance.group,
+                        student_name=_student_name,
+                        group_name=_group_name,
+                        payment_method=updated_instance.payment_method,
+                        title=f"Bekor qilindi/kamaytirildi: {_student_name}",
+                        description=f"Tahrirlandi ({diff} UZS): {_student_name} ({updated_instance.month})",
+                        is_verified=updated_instance.is_verified,
+                        verified_by=self.request.user if updated_instance.is_verified else None,
+                        verified_at=now if updated_instance.is_verified else None,
+                    )
+
+            updated_instance.paid_amount = updated_instance.amount
+            updated_instance.save(update_fields=['paid_amount'])
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -583,6 +645,628 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             "ledger_transactions": FinanceTransactionSerializer(ledger, many=True).data
         })
 
+    @action(detail=False, methods=['get'], url_path='cashier-desk')
+    def cashier_desk(self, request):
+        """
+        Filial admini (Branch Admin) uchun yuqori tezlikdagi POS Kassa API.
+        O'qituvchilar -> Guruhlar -> O'quvchilar ierarxiyasini va filial kassa
+        qoldig'ini N+1 so'rovlarsiz qaytaradi.
+        """
+        from decimal import Decimal
+        from django.db.models import Sum, Count, Q
+        from django.utils import timezone
+        from branches.models import Branch
+        from groups.models import Group, GroupEnrollment, Student
+        from finance.models import FinanceTransaction, AdminExpense
+        from homework_attends.models import Attendance
+        from finance.utils import normalize_month
+
+        user = request.user
+        # 1. Filial ruxsatini qat'iy tekshirish (Branch-Level Isolation)
+        if user.role == 'admin':
+            allowed_branches = [user.branch_id] if user.branch_id else []
+            if hasattr(user, 'branch_accesses'):
+                allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
+            safe_branches = [int(b) for b in allowed_branches if b is not None]
+
+            branch_param = request.query_params.get('branch_id')
+            if branch_param:
+                try:
+                    target_branch_id = int(branch_param)
+                except (ValueError, TypeError):
+                    return Response({"detail": "Noto'g'ri branch_id parametri."}, status=status.HTTP_400_BAD_REQUEST)
+                if target_branch_id not in safe_branches:
+                    return Response(
+                        {"detail": "Siz faqat o'zingizga biriktirilgan filial kassa ma'lumotlarini ko'ra olasiz."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                target_branch_id = user.branch_id or (safe_branches[0] if safe_branches else None)
+        elif user.role == 'super_admin':
+            branch_param = request.query_params.get('branch_id')
+            if branch_param:
+                try:
+                    target_branch_id = int(branch_param)
+                except (ValueError, TypeError):
+                    return Response({"detail": "Noto'g'ri branch_id parametri."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                first_b = Branch.objects.first()
+                target_branch_id = first_b.id if first_b else None
+        else:
+            return Response({"detail": "Ruxsat berilmagan foydalanuvchi roli."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not target_branch_id:
+            return Response({"detail": "Filial tanlanmadi yoki topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+
+        branch = Branch.objects.filter(id=target_branch_id).first()
+        if not branch:
+            return Response({"detail": "Filial mavjud emas."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Oyni aniqlash (Default: joriy oy)
+        month_param = request.query_params.get('month')
+        today = timezone.localdate()
+        if month_param:
+            try:
+                parts = month_param.split('-')
+                month_date = timezone.datetime(int(parts[0]), int(parts[1]), 1).date()
+            except Exception:
+                month_date = today.replace(day=1)
+        else:
+            month_date = today.replace(day=1)
+
+        search_query = request.query_params.get('search', '').strip().lower()
+
+        # 3. Filial Kassa Qoldig'i (BranchCashDesk: Bugungi Kirim, Chiqim va Balans)
+        today_incomes = FinanceTransaction.objects.filter(
+            branch_id=target_branch_id,
+            date=today,
+            transaction_type='income',
+            status='completed'
+        ).aggregate(
+            total=Sum('amount'),
+            cash=Sum('amount', filter=Q(payment_method='cash')),
+            card=Sum('amount', filter=Q(payment_method__in=['click', 'payme', 'card']))
+        )
+        today_expenses = FinanceTransaction.objects.filter(
+            branch_id=target_branch_id,
+            date=today,
+            transaction_type='expense',
+            status='completed'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        admin_exp_today = AdminExpense.objects.filter(
+            branch_id=target_branch_id,
+            date=today
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        tot_inc = today_incomes['total'] or Decimal('0')
+        cash_inc = today_incomes['cash'] or Decimal('0')
+        card_inc = today_incomes['card'] or Decimal('0')
+        tot_exp = today_expenses + admin_exp_today
+
+        branch_desk_stats = {
+            "branch_id": branch.id,
+            "branch_name": branch.name,
+            "today_date": str(today),
+            "month": month_date.strftime("%Y-%m"),
+            "today_income": float(tot_inc),
+            "today_cash": float(cash_inc),
+            "today_card": float(card_inc),
+            "today_expense": float(tot_exp),
+            "today_balance": float(tot_inc - tot_exp),
+        }
+
+        # 4. Guruhlarni yig'ish (Single query)
+        groups_qs = Group.objects.filter(
+            branch_id=target_branch_id,
+            is_faol=True,
+            is_archived=False
+        ).select_related('mentor', 'branch').prefetch_related('special_lesson_days', 'canceled_lesson_days')
+
+        group_ids = list(groups_qs.values_list('id', flat=True))
+
+        # 5. Dars kunlarini hisoblash (O'tilgan darslar)
+        group_lesson_counts = {}
+        for g in groups_qs:
+            dates = g.get_lesson_dates(month_date.year, month_date.month)
+            passed = [d for d in dates if d <= today]
+            group_lesson_counts[g.id] = (len(dates), len(passed))
+
+        # 6. Faol enrollmentlar (Bir so'rovda barcha o'quvchilar)
+        enrollments = list(GroupEnrollment.objects.filter(
+            group_id__in=group_ids,
+            is_active=True
+        ).select_related('student', 'group', 'group__mentor').order_by('student__full_name'))
+
+        student_ids = list(set(e.student_id for e in enrollments if e.student_id))
+
+        # 7. Multi-Group Accounting: Har bir o'quvchining BOSHQA qatnashayotgan guruhlari
+        student_other_groups_map = {}
+        if student_ids:
+            all_active_enrollments = GroupEnrollment.objects.filter(
+                student_id__in=student_ids,
+                is_active=True
+            ).select_related('group', 'group__mentor', 'group__branch')
+            for enr in all_active_enrollments:
+                student_other_groups_map.setdefault(enr.student_id, []).append({
+                    "group_id": enr.group_id,
+                    "group_name": enr.group.name if enr.group else "",
+                    "branch_id": enr.group.branch_id if enr.group else None,
+                    "branch_name": enr.group.branch.name if (enr.group and enr.group.branch) else "",
+                    "mentor_name": enr.group.mentor.get_full_name() if (enr.group and enr.group.mentor) else "Biriktirilmagan",
+                    "monthly_price": float(enr.group.monthly_price or 0) if enr.group else 0
+                })
+
+        # 8. O'quvchilarning joriy oydagi to'lovlari (Payment)
+        payments_qs = Payment.objects.filter(
+            group_id__in=group_ids,
+            month=month_date
+        ).select_related('student', 'group', 'marked_by')
+        payment_map = {(p.student_id, p.group_id): p for p in payments_qs}
+
+        # 9. Davomatlar (Bir so'rovda o'quvchining kelgan kunlari soni)
+        attendance_rows = Attendance.objects.filter(
+            group_id__in=group_ids,
+            date__year=month_date.year,
+            date__month=month_date.month,
+            is_present=True,
+            marked_by__isnull=False
+        ).values('group_id', 'student_id').annotate(present_cnt=Count('id'))
+        attendance_map = {(r['group_id'], r['student_id']): r['present_cnt'] for r in attendance_rows}
+
+        # 10. Guruhlar va O'quvchilar ierarxiyasini yig'ish
+        group_rosters = {}
+        debtors_list = []
+        all_branch_debt = Decimal('0')
+        all_branch_collected = Decimal('0')
+
+        # Dastlab bo'sh struktura
+        for g in groups_qs:
+            group_rosters[g.id] = {
+                "id": g.id,
+                "name": g.name,
+                "monthly_price": float(g.monthly_price or 0),
+                "mentor_id": g.mentor_id,
+                "mentor_name": g.mentor.get_full_name() or g.mentor.username if g.mentor else "Biriktirilmagan",
+                "days": g.dars_kunlari or ", ".join([["Du", "Se", "Chor", "Pay", "Ju", "Shan", "Yak"][d] for d in g._get_effective_days()]),
+                "time": g.dars_vaqti or "",
+                "total_lessons": group_lesson_counts.get(g.id, (0, 0))[0],
+                "passed_lessons": group_lesson_counts.get(g.id, (0, 0))[1],
+                "students_count": 0,
+                "paid_count": 0,
+                "partial_count": 0,
+                "unpaid_count": 0,
+                "total_debt": 0.0,
+                "total_collected": 0.0,
+                "students": []
+            }
+
+        for enr in enrollments:
+            student = enr.student
+            group = enr.group
+            if not student or not group:
+                continue
+
+            gid = group.id
+            total_l, passed_l = group_lesson_counts.get(gid, (0, 0))
+            present_c = attendance_map.get((gid, student.id), 0)
+            absences = max(0, passed_l - present_c)
+
+            # Shartnoma summasini aniqlash
+            if student.status == 'teacher_negotiated':
+                base_fee = Decimal('0')
+            elif student.status in ['low_income', 'negotiated'] and student.custom_fee is not None:
+                base_fee = Decimal(str(student.custom_fee))
+            elif student.status == 'discount':
+                if total_l > 0:
+                    daily_fee = Decimal(str(group.monthly_price or 0)) / Decimal(str(total_l))
+                    base_fee = (daily_fee * Decimal(str(present_c))).quantize(Decimal('100'))
+                else:
+                    base_fee = Decimal('0')
+            else:
+                base_fee = Decimal(str(group.monthly_price or 0))
+
+            # Mavjud to'lovni tekshirish
+            pmt = payment_map.get((student.id, gid))
+            if pmt:
+                pmt_id = pmt.id
+                expected_amt = Decimal(str(pmt.amount if pmt.amount is not None else base_fee))
+                paid_amt = Decimal(str(pmt.paid_amount or 0))
+                remaining_amt = pmt.remaining_amount
+                is_paid = pmt.is_paid
+                is_partial = pmt.is_partial
+                pmt_method = pmt.payment_method
+                paid_at = pmt.paid_at.isoformat() if pmt.paid_at else None
+            else:
+                pmt_id = None
+                expected_amt = base_fee
+                paid_amt = Decimal('0')
+                if student.status == 'teacher_negotiated':
+                    remaining_amt = Decimal('0')
+                    is_paid = True
+                else:
+                    remaining_amt = base_fee
+                    is_paid = False
+                is_partial = False
+                pmt_method = None
+                paid_at = None
+
+            # Boshqa guruhlar ro'yxati (o'zidan tashqari)
+            other_grps = [og for og in student_other_groups_map.get(student.id, []) if og['group_id'] != gid]
+
+            student_data = {
+                "student_id": student.id,
+                "student_name": student.full_name,
+                "student_phone": student.phone or "",
+                "parent_phone": student.parent_phone or "",
+                "status": student.status,
+                "status_display": student.get_status_display(),
+                "custom_fee": float(student.custom_fee) if student.custom_fee is not None else None,
+                "group_id": gid,
+                "group_name": group.name,
+                "mentor_name": group.mentor.get_full_name() if group.mentor else "Biriktirilmagan",
+                "payment_id": pmt_id,
+                "expected_amount": float(expected_amt),
+                "paid_amount": float(paid_amt),
+                "remaining_amount": float(remaining_amt),
+                "is_paid": is_paid,
+                "is_partial": is_partial,
+                "payment_method": pmt_method,
+                "paid_at": paid_at,
+                "present_count": present_c,
+                "absences_count": absences,
+                "passed_lessons": passed_l,
+                "total_lessons": total_l,
+                "other_groups_count": len(other_grps),
+                "other_groups": other_grps
+            }
+
+            # Search filter (agar qidiruv bo'lsa)
+            if search_query:
+                s_name = (student.full_name or '').lower()
+                s_phone = (student.phone or '').lower()
+                g_name = (group.name or '').lower()
+                if search_query not in s_name and search_query not in s_phone and search_query not in g_name:
+                    continue
+
+            # Guruh agregatlari
+            g_item = group_rosters[gid]
+            g_item["students_count"] += 1
+            g_item["total_debt"] += float(remaining_amt)
+            g_item["total_collected"] += float(paid_amt)
+            all_branch_debt += remaining_amt
+            all_branch_collected += paid_amt
+
+            if is_paid:
+                g_item["paid_count"] += 1
+            elif is_partial:
+                g_item["partial_count"] += 1
+                g_item["unpaid_count"] += 1
+            else:
+                g_item["unpaid_count"] += 1
+
+            g_item["students"].append(student_data)
+
+            # Qarzdorlar ro'yxatiga qo'shish (Debtors List)
+            if remaining_amt > 0 and student.status != 'teacher_negotiated':
+                debtors_list.append(student_data)
+
+        # Qarzdorlarni summa bo'yicha kamayish tartibida saralash
+        debtors_list.sort(key=lambda d: d["remaining_amount"], reverse=True)
+
+        # 11. O'qituvchilar (Teachers) ierarxiyasi
+        teachers_dict = {}
+        all_groups_list = []
+
+        for gid, grp in group_rosters.items():
+            all_groups_list.append({
+                "id": grp["id"],
+                "name": grp["name"],
+                "monthly_price": grp["monthly_price"],
+                "mentor_id": grp["mentor_id"],
+                "mentor_name": grp["mentor_name"],
+                "days": grp["days"],
+                "time": grp["time"],
+                "students_count": grp["students_count"],
+                "paid_count": grp["paid_count"],
+                "unpaid_count": grp["unpaid_count"],
+                "total_debt": grp["total_debt"],
+                "total_collected": grp["total_collected"],
+            })
+
+            m_id = grp["mentor_id"] or 0
+            if m_id not in teachers_dict:
+                teachers_dict[m_id] = {
+                    "id": m_id,
+                    "name": grp["mentor_name"],
+                    "groups_count": 0,
+                    "active_students_count": 0,
+                    "debtors_count": 0,
+                    "total_debt": 0.0,
+                    "groups": []
+                }
+            t_entry = teachers_dict[m_id]
+            t_entry["groups_count"] += 1
+            t_entry["active_students_count"] += grp["students_count"]
+            t_entry["debtors_count"] += grp["unpaid_count"]
+            t_entry["total_debt"] += grp["total_debt"]
+            t_entry["groups"].append(grp)
+
+        teachers_list = sorted(list(teachers_dict.values()), key=lambda t: t["name"])
+
+        return Response({
+            "branch": branch_desk_stats,
+            "teachers": teachers_list,
+            "all_groups": sorted(all_groups_list, key=lambda g: g["name"]),
+            "debtors": debtors_list,
+            "rosters": group_rosters,
+            "summary": {
+                "total_groups": len(group_ids),
+                "total_students": len(student_ids),
+                "total_debtors": len(debtors_list),
+                "total_debt_amount": float(all_branch_debt),
+                "total_collected_month": float(all_branch_collected),
+            }
+        })
+
+    @action(detail=False, methods=['get'], url_path='cashier-student-detail')
+    def cashier_student_detail(self, request):
+        """
+        O'quvchi bo'yicha drill-down ma'lumotlar:
+        1. Barcha faol guruhlari va ulardagi to'lov/qarz holati (Multi-Group Accounting)
+        2. Ushbu guruhdagi to'lov va davomat statistikasi
+        3. Oxirgi to'lov cheklari va tranzaksiyalar tarixi
+        """
+        from decimal import Decimal
+        from django.db.models import Count, Q
+        from django.utils import timezone
+        from groups.models import Student, Group, GroupEnrollment
+        from finance.models import Payment, FinanceTransaction
+        from homework_attends.models import Attendance
+        from finance.utils import normalize_month
+
+        student_id = request.query_params.get('student_id')
+        if not student_id:
+            return Response({"detail": "student_id talab qilinadi."}, status=400)
+
+        user = request.user
+        if user.role == 'admin':
+            allowed_branches = [user.branch_id] if user.branch_id else []
+            if hasattr(user, 'branch_accesses'):
+                allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
+            safe_branches = [int(b) for b in allowed_branches if b is not None]
+            student = get_object_or_404(
+                Student.objects.filter(
+                    Q(branch_id__in=safe_branches) |
+                    Q(enrollments__is_active=True, enrollments__group__branch_id__in=safe_branches)
+                ).distinct(),
+                id=student_id
+            )
+        else:
+            student = get_object_or_404(Student, id=student_id)
+
+        group_id_param = request.query_params.get('group_id')
+        month_param = request.query_params.get('month')
+        today = timezone.localdate()
+        if month_param:
+            try:
+                parts = month_param.split('-')
+                month_date = timezone.datetime(int(parts[0]), int(parts[1]), 1).date()
+            except Exception:
+                month_date = today.replace(day=1)
+        else:
+            month_date = today.replace(day=1)
+
+        # 1. Barcha faol enrollmentlar (Multi-Group Support)
+        active_enrollments = GroupEnrollment.objects.filter(
+            student=student,
+            is_active=True
+        ).select_related('group', 'group__branch', 'group__mentor')
+
+        all_groups_info = []
+        target_group = None
+        for enr in active_enrollments:
+            g = enr.group
+            if not g:
+                continue
+            if group_id_param and str(g.id) == str(group_id_param):
+                target_group = g
+
+            # Ushbu guruh bo'yicha oylik to'lov
+            pmt = Payment.objects.filter(student=student, group=g, month=month_date).first()
+            if pmt:
+                g_expected = float(pmt.amount or g.monthly_price or 0)
+                g_paid = float(pmt.paid_amount or 0)
+                g_remaining = float(pmt.remaining_amount)
+                g_is_paid = pmt.is_paid
+                g_is_partial = pmt.is_partial
+                pmt_id = pmt.id
+            else:
+                fee = float(student.custom_fee) if (student.status in ['low_income', 'negotiated', 'teacher_negotiated'] and student.custom_fee is not None) else float(g.monthly_price or 0)
+                g_expected = fee
+                g_paid = 0.0
+                g_remaining = 0.0 if student.status == 'teacher_negotiated' else fee
+                g_is_paid = (student.status == 'teacher_negotiated')
+                g_is_partial = False
+                pmt_id = None
+
+            all_groups_info.append({
+                "group_id": g.id,
+                "group_name": g.name,
+                "branch_id": g.branch_id,
+                "branch_name": g.branch.name if g.branch else "",
+                "mentor_name": g.mentor.get_full_name() if g.mentor else "Biriktirilmagan",
+                "monthly_price": float(g.monthly_price or 0),
+                "payment_id": pmt_id,
+                "expected_amount": g_expected,
+                "paid_amount": g_paid,
+                "remaining_amount": g_remaining,
+                "is_paid": g_is_paid,
+                "is_partial": g_is_partial
+            })
+
+        if not target_group and active_enrollments.exists():
+            target_group = active_enrollments.first().group
+
+        # 2. Target guruh davomat statistikasi
+        attendance_stats = {"total_lessons": 0, "passed_lessons": 0, "present_count": 0, "absences": 0}
+        if target_group:
+            dates = target_group.get_lesson_dates(month_date.year, month_date.month)
+            passed = [d for d in dates if d <= today]
+            present_c = Attendance.objects.filter(
+                student=student,
+                group=target_group,
+                date__year=month_date.year,
+                date__month=month_date.month,
+                is_present=True,
+                marked_by__isnull=False
+            ).count()
+            attendance_stats = {
+                "total_lessons": len(dates),
+                "passed_lessons": len(passed),
+                "present_count": present_c,
+                "absences": max(0, len(passed) - present_c)
+            }
+
+        # 3. O'quvchining oxirgi tranzaksiyalari (Unified Ledger)
+        recent_txs = FinanceTransaction.objects.filter(
+            student=student
+        ).select_related('marked_by', 'group', 'branch').order_by('-date', '-id')[:15]
+
+        tx_list = []
+        for tx in recent_txs:
+            tx_list.append({
+                "id": tx.id,
+                "related_id": tx.related_id,
+                "transaction_type": tx.transaction_type,
+                "category": tx.category,
+                "amount": float(tx.amount),
+                "date": str(tx.date),
+                "payment_method": tx.payment_method or "",
+                "group_name": tx.group_name or (tx.group.name if tx.group else ""),
+                "marked_by_name": tx.marked_by.get_full_name() or tx.marked_by.username if tx.marked_by else "",
+                "title": tx.title,
+                "description": tx.description,
+                "is_verified": tx.is_verified,
+                "status": tx.status
+            })
+
+        # 4. Cheklar tarixi (Receipt images)
+        receipt_payments = Payment.objects.filter(
+            student=student,
+            receipt_image__isnull=False
+        ).exclude(receipt_image='').order_by('-paid_at')[:5]
+
+        receipts_list = []
+        for rp in receipt_payments:
+            if rp.receipt_image:
+                try:
+                    url = rp.receipt_image.url
+                except Exception:
+                    url = None
+                if url:
+                    receipts_list.append({
+                        "payment_id": rp.id,
+                        "month": rp.month.strftime("%Y-%m") if rp.month else "",
+                        "group_name": rp.group_name or (rp.group.name if rp.group else ""),
+                        "amount": float(rp.paid_amount or rp.amount or 0),
+                        "payment_method": rp.payment_method,
+                        "receipt_url": url,
+                        "paid_at": rp.paid_at.isoformat() if rp.paid_at else None
+                    })
+
+        return Response({
+            "student": {
+                "id": student.id,
+                "full_name": student.full_name,
+                "phone": student.phone or "",
+                "parent_phone": student.parent_phone or "",
+                "address": student.address or "",
+                "notes": student.notes or "",
+                "status": student.status,
+                "status_display": student.get_status_display(),
+                "custom_fee": float(student.custom_fee) if student.custom_fee is not None else None,
+                "branch_name": student.branch.name if student.branch else ""
+            },
+            "target_group_id": target_group.id if target_group else None,
+            "all_active_groups": all_groups_info,
+            "attendance": attendance_stats,
+            "transactions": tx_list,
+            "receipts": receipts_list
+        })
+
+    @action(detail=False, methods=['post'], url_path='cashier-pay')
+    def cashier_pay(self, request):
+        """
+        Kassadan o'quvchi to'lovini qabul qilish.
+        Mavjud to'lov bo'lmasa, avtomatik yaratib, atomic tarzda apply_payment chaqiradi.
+        """
+        from django.db import transaction as db_transaction
+        from finance.services import confirm_student_payment
+        from finance.utils import normalize_month
+        from rest_framework.exceptions import PermissionDenied
+
+        payment_id = request.data.get('payment_id')
+        student_id = request.data.get('student_id')
+        group_id = request.data.get('group_id')
+        month_str = request.data.get('month')
+
+        if not payment_id and (not student_id or not group_id):
+            return Response(
+                {"detail": "To'lovni amalga oshirish uchun payment_id yoki student_id va group_id talab qilinadi."},
+                status=400
+            )
+
+        with db_transaction.atomic():
+            if payment_id:
+                payment = get_object_or_404(Payment, pk=payment_id)
+            else:
+                norm_month = normalize_month(month_str or timezone.localdate())
+                student = get_object_or_404(Student, pk=student_id)
+                group = get_object_or_404(Group, pk=group_id)
+
+                if student.status in ["low_income", "negotiated", "teacher_negotiated"] and student.custom_fee is not None:
+                    initial_fee = student.custom_fee
+                else:
+                    initial_fee = group.monthly_price or 0
+
+                payment, _ = Payment.objects.get_or_create(
+                    student=student,
+                    group=group,
+                    month=norm_month,
+                    defaults={
+                        'amount': initial_fee,
+                        'paid_amount': Decimal('0'),
+                        'is_paid': False,
+                        'is_partial': False
+                    }
+                )
+
+            # Filial ruxsatini tekshirish
+            _branch = (payment.group.branch if payment.group else None) or (payment.student.branch if payment.student else None)
+            if request.user.role == 'admin' and _branch:
+                allowed_branches = [request.user.branch_id] if request.user.branch_id else []
+                if hasattr(request.user, 'branch_accesses'):
+                    allowed_branches.extend(request.user.branch_accesses.values_list('branch_id', flat=True))
+                safe_branches = [int(b) for b in allowed_branches if b is not None]
+                if _branch.id not in safe_branches:
+                    raise PermissionDenied("Siz faqat o'zingizga biriktirilgan filial to'lovlarini qabul qila olasiz.")
+
+            is_custom = str(request.data.get('is_custom_amount', 'false')).lower() in ['true', '1', 'yes']
+            if payment.is_paid and not is_custom:
+                return Response({"detail": "Ushbu to'lov allaqachon to'liq amalga oshirilgan."}, status=400)
+
+            updated_payment = confirm_student_payment(request.user, payment, request.data)
+
+            msg = "To'lov muvaffaqiyatli qabul qilindi"
+            if updated_payment.is_partial and not updated_payment.is_paid:
+                msg = f"Bo'lib to'lov qabul qilindi. Qolgan qarz: {float(updated_payment.remaining_amount):,.0f} UZS"
+
+            return Response({
+                "status": "success",
+                "message": msg,
+                "data": PaymentSerializer(updated_payment).data
+            })
+
 class EmployeePaymentViewSet(viewsets.ModelViewSet):
     """Xodimlar maoshlarini boshqarish"""
     queryset = EmployeePayment.objects.select_related('employee', 'employee__branch', 'marked_by').all()
@@ -860,45 +1544,18 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
         if request.user.role != 'super_admin':
             return Response({"detail": "Faqat super admin tasdiqlay oladi"}, status=403)
             
-        # Yangi: Modal orqali kelgan bonus va ayirmalarni olish
         bonus = request.data.get('bonus', 0)
         deductions = request.data.get('deductions', 0)
         commission_basis = str(request.data.get('commission_basis', 'paid')).lower()
         if commission_basis not in ['paid', 'expected']:
             commission_basis = 'paid'
         
-        with transaction.atomic():
-            try:
-                # Oylik maoshni qayta hisoblaymiz (yangi tushumlar asosida)
-                if hasattr(payment.employee, 'staff_profile'):
-                    payment.recalculate_salary(commission_basis=commission_basis)
-            except Exception as e:
-                logger.error(f"Salary recalculation error during confirm: {e}")
-
-            # Bonus va ayirmalarni yangilash
-            payment.bonus = Decimal(str(bonus))
-            payment.deductions = Decimal(str(deductions))
-            
-            payment.is_paid = True
-            payment.paid_at = timezone.now()
-            payment.marked_by = request.user
-            payment.save()
-            
-            # ✅ Centralized Finance Ledger — duplicate yaratmaslik uchun get_or_create
-            from .models import FinanceTransaction
-            FinanceTransaction.objects.get_or_create(
-                related_id=f"EMP-{payment.id}",
-                defaults={
-                    'transaction_type': 'expense',
-                    'category': 'salary',
-                    'amount': payment.total_amount,
-                    'date': timezone.localdate(),
-                    'marked_by': request.user,
-                    'branch': payment.employee.branch,
-                    'title': f"Maosh: {payment.employee.get_full_name() or payment.employee.username}",
-                    'description': f"{payment.month.strftime('%Y-%m')} oyi uchun xizmat haqi",
-                }
-            )
+        payment.mark_as_paid(
+            super_admin_user=request.user,
+            bonus=bonus,
+            deductions=deductions,
+            commission_basis=commission_basis
+        )
             
         return Response({"status": "success", "data": EmployeePaymentSerializer(payment).data})
 
@@ -1038,8 +1695,17 @@ class FinanceTransactionViewSet(viewsets.ModelViewSet):
     search_fields = ['title', 'description', 'payer_name']
 
     def get_queryset(self):
-        # Moliya bo'limiga faqat super_admin kira oladi, shuning uchun barcha filiallarni ko'radi
+        user = self.request.user
         qs = self.queryset
+        if user.role == 'admin':
+            allowed_branches = [user.branch_id] if user.branch_id else []
+            if hasattr(user, 'branch_accesses'):
+                allowed_branches.extend(user.branch_accesses.values_list('branch_id', flat=True))
+            safe_branches = [int(b) for b in allowed_branches if b is not None]
+            qs = qs.filter(branch_id__in=safe_branches)
+        elif user.role != 'super_admin':
+            return FinanceTransaction.objects.none()
+
         if self.request.query_params.get('exclude_reversals') == 'true':
             qs = qs.exclude(record_type='reversal')
         return qs

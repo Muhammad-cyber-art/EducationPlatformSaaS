@@ -268,3 +268,108 @@ class FinanceAbsentStudentsEndpointTests(APITestCase):
         self.assertEqual(response.data['student']['id'], self.s1.id)
         self.assertIn('monthly_payments', response.data)
         self.assertIn('ledger_transactions', response.data)
+
+    def test_student_wallet_balance_reflects_payment_without_waiting_kassa_verify(self):
+        from finance.models import StudentFinanceProfile
+        # Create student and invoice
+        month = timezone.now().date().replace(day=1)
+        st = Student.objects.create(full_name="WalletTest", group=self.g1, branch=self.branch)
+        profile, _ = StudentFinanceProfile.objects.get_or_create(student=st)
+        p = Payment.objects.create(
+            student=st,
+            group=self.g1,
+            month=month,
+            amount=Decimal('200000')
+        )
+        # Initially billed 200,000, so balance is -200,000
+        self.assertEqual(profile.balance, Decimal('-200000'))
+
+        # Admin accepts payment in cash (unverified in central kassa yet)
+        p.apply_payment(self.admin, Decimal('200000'), method='cash')
+        p.refresh_from_db()
+        self.assertTrue(p.is_paid)
+        self.assertFalse(p.is_verified)
+
+        # Student's wallet balance MUST now be 0 (no debt!), even though is_verified is False
+        self.assertEqual(profile.total_paid_all_time, Decimal('200000'))
+        self.assertEqual(profile.balance, Decimal('0'))
+
+    def test_payment_update_creates_ledger_adjustment_preserving_history(self):
+        # Create and pay a payment
+        month = timezone.now().date().replace(day=1)
+        p = Payment.objects.create(
+            student=self.s1,
+            group=self.g1,
+            month=month,
+            amount=Decimal('100000')
+        )
+        p.apply_payment(self.admin, Decimal('100000'), method='cash')
+        p.refresh_from_db()
+        self.assertTrue(p.is_paid)
+
+        # Super admin edits payment amount from 100,000 to 120,000 via API
+        super_admin = User.objects.create_user(username='super_test_user', password='pw', role='super_admin')
+        self.client.force_authenticate(user=super_admin)
+        url = reverse('student-payment-detail', kwargs={'pk': p.pk})
+        response = self.client.patch(url, {'amount': '120000'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        p.refresh_from_db()
+        self.assertEqual(p.amount, Decimal('120000'))
+        self.assertEqual(p.paid_amount, Decimal('120000'))
+
+        # Check that original transaction was not mutated, and an ADJ transaction of +20,000 was created
+        txs = FinanceTransaction.objects.filter(student=self.s1, category='student_fee', status='completed')
+        total_tx_amount = sum(t.amount for t in txs)
+        self.assertEqual(total_tx_amount, Decimal('120000'))
+        self.assertTrue(any('-ADJ-' in t.related_id for t in txs))
+
+    def test_branch_cashier_desk_isolation_and_hierarchical_data(self):
+        b2 = Branch.objects.create(name="Samarkand")
+        admin_b1 = self.admin
+        self.client.force_authenticate(user=admin_b1)
+
+        # Admin of Branch 1 requesting Branch 2 desk MUST be 403 Forbidden
+        url = reverse('student-payment-cashier-desk')
+        resp = self.client.get(f"{url}?branch_id={b2.id}")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Admin of Branch 1 requesting their branch desk should succeed
+        resp2 = self.client.get(f"{url}?branch_id={self.branch.id}")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        data = resp2.json()
+        self.assertIn('branch', data)
+        self.assertIn('teachers', data)
+        self.assertIn('debtors', data)
+        self.assertIn('all_groups', data)
+        self.assertEqual(data['branch']['branch_id'], self.branch.id)
+
+    def test_multi_group_student_accounting_and_cashier_pay(self):
+        g2 = Group.objects.create(name="English G2", branch=self.branch, monthly_price=Decimal('300000'))
+        GroupEnrollment.objects.create(student=self.s1, group=g2, is_active=True)
+
+        self.client.force_authenticate(user=self.admin)
+        month_str = timezone.now().date().replace(day=1).strftime("%Y-%m-%d")
+
+        detail_url = reverse('student-payment-cashier-student-detail')
+        resp = self.client.get(f"{detail_url}?student_id={self.s1.id}&group_id={self.g1.id}")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        detail_data = resp.json()
+        self.assertGreaterEqual(len(detail_data['all_active_groups']), 2)
+
+        pay_url = reverse('student-payment-cashier-pay')
+        pay_resp = self.client.post(pay_url, {
+            'student_id': self.s1.id,
+            'group_id': g2.id,
+            'month': month_str,
+            'amount': '300000',
+            'payment_method': 'cash',
+            'is_receiptless': True,
+            'notes': 'Kassadan tolandi'
+        })
+        self.assertEqual(pay_resp.status_code, status.HTTP_200_OK)
+        tx = FinanceTransaction.objects.filter(student=self.s1, group=g2, status='completed').first()
+        self.assertIsNotNone(tx)
+        self.assertEqual(tx.amount, Decimal('300000'))
+        self.assertEqual(tx.payment_method, 'cash')
+        self.assertEqual(tx.branch, self.branch)

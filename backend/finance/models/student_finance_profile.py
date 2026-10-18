@@ -34,27 +34,22 @@ class StudentFinanceProfile(models.Model):
         from finance.models import FinanceTransaction
         # Barcha completed income (payment + reversal) tranzaksiyalarini yig'amiz.
         # Reversallar amount=-summa bo'lgani uchun yig'indidan avtomatik ayriladi.
+        # O'quvchi to'lagan pul darhol balansda ko'rinadi (super admin kassa tasdig'ini kutmasdan).
         res = FinanceTransaction.objects.filter(
             student=self.student,
             transaction_type='income',
             record_type__in=['payment', 'reversal'],
             status='completed',
-            is_verified=True
         ).aggregate(total=Sum('amount'))
         return max(res['total'] or Decimal('0'), Decimal('0'))
 
     @property
     def total_refunded(self):
         from finance.models import FinanceTransaction
-        # Refund record_type bilan va manfiy summa ekanligini hisobga olsak.
-        # Aslida user aytdi "summa (musbat = to'lov, manfiy = bekor qilish/refund)"
-        # Demak amount manfiy bo'ladi. Agar manfiy bo'lsa uni absolut olishimiz mumkin.
-        # Yoki agar database-da manfiy kiritilsa.
         res = FinanceTransaction.objects.filter(
             student=self.student,
             record_type='refund',
             status='completed',
-            is_verified=True
         ).aggregate(total=Sum('amount'))
         # summani musbat ko'rinishda qaytaramiz (agar u DB da manfiy bo'lsa)
         return abs(res['total'] or Decimal('0'))

@@ -146,11 +146,11 @@ export const useKassa = () => {
             const todayIncomes = incRes.data.results || incRes.data;
             
             const expRes = await api.get("/finance/transactions/", { params: { ...baseParams, transaction_type: 'expense', page_size: 1000 } });
-            const todayExpenses = (expRes.data.results || expRes.data).filter(t => t.category === 'owner_withdrawal' || t.category === 'other');
+            const todayExpenses = expRes.data.results || expRes.data;
 
             const totalToday = todayIncomes.reduce((sum, p) => p.status === 'cancelled' ? sum : sum + Number(p.amount), 0);
-            const totalVerified = todayIncomes.filter(p => p.payment_details?.is_verified && p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.amount), 0);
-            const totalWithdrawn = todayExpenses.reduce((sum, w) => sum + Number(w.amount), 0);
+            const totalVerified = todayIncomes.filter(p => (p.is_verified || p.payment_details?.is_verified) && p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.amount), 0);
+            const totalWithdrawn = todayExpenses.reduce((sum, w) => w.status === 'cancelled' ? sum : sum + Number(w.amount), 0);
 
             dispatch({ type: 'SET_TODAY_STATS', payload: { totalToday, totalVerified, totalWithdrawn } });
         } catch (err) {
@@ -208,7 +208,7 @@ export const useKassa = () => {
 
             const res = await api.get("/finance/transactions/", { params });
             const rawData = res.data.results || res.data;
-            const data = rawData.filter(t => t.category === 'owner_withdrawal' || t.category === 'other');
+            const data = (rawData || []).filter(t => t.status !== 'cancelled');
             const hasMore = res.data.next !== null && res.data.next !== undefined;
 
             dispatch({ 

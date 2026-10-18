@@ -17,6 +17,7 @@ import {
   DollarSign,
   UserPlus,
   TrendingDown,
+  Wallet,
 } from "lucide-react";
 import { get_user_info } from "../Authorized/getRole";
 import api from "../../tokenUpdater/updater";
@@ -48,6 +49,7 @@ export default function SideBar({ isOpen, onClose }) {
 
   const menuItems = [
     { name: "Asosiy", path: "/admin", icon: <LayoutDashboard size={20} /> },
+    { name: "Kassa", path: "/admin/kassa", icon: <Wallet size={20} /> },
     { name: "Guruhlar", path: "/admin/groups", icon: <Layers size={20} /> },
     { name: "Dars Jadvali", path: "/admin/timetable", icon: <CalendarDays size={20} /> },
     { name: "O'qituvchilar", path: "/admin/mentors", icon: <UserSquare2 size={20} /> },

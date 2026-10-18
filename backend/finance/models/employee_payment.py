@@ -205,58 +205,67 @@ class EmployeePayment(models.Model):
     def __str__(self):
         return f"{self.employee.get_full_name() or self.employee.username} - {self.month.strftime('%B %Y')}"
 
-    def mark_as_paid(self, super_admin_user):
-        """To'lovni tasdiqlashda summani qulflash (snapshot)"""
+    def mark_as_paid(self, super_admin_user, bonus=None, deductions=None, commission_basis="paid"):
+        """To'lovni tasdiqlashda summani qulflash (snapshot) va Ledgerga yozish"""
         from django.db import transaction
 
         with transaction.atomic():
-            if not self.is_paid:
-                # To'lanayotgan paytda oxirgi marta qayta hisoblab olish (ixtiyoriy, lekin aniqlik uchun yaxshi)
-                try:
-                    if hasattr(self.employee, "staff_profile"):
-                        st = self.employee.staff_profile.salary_type
-                        # Foiz — mentor va admin; o'quvchi soni — faqat mentor guruhlari bilan
-                        if st == "percentage" or (
-                            st == "student_count" and self.employee.role == "mentor"
-                        ):
-                            self.recalculate_salary()
-                except Exception as e:
-                    # Agar qayta hisoblashda xatolik bo'lsa, davom etamiz
-                    print(f"Recalculate error: {e}")
+            # Concurrency row-lock
+            locked = EmployeePayment.objects.select_for_update().get(pk=self.pk)
+            if locked.is_paid:
+                return locked
 
-                self.is_paid = True
-                self.paid_at = timezone.now()
-                self.marked_by = super_admin_user
-                self.save()
+            if bonus is not None:
+                self.bonus = Decimal(str(bonus))
+            if deductions is not None:
+                self.deductions = Decimal(str(deductions))
 
-                # ✅ Centralized Finance Ledger ga yozish
-                try:
-                    # Branch mavjudligini tekshirish
-                    if not self.employee.branch:
-                        print(
-                            f"Warning: Employee {self.employee.id} has no branch assigned"
-                        )
-                        return  # Transaction yaratmasdan chiqamiz
+            # To'lanayotgan paytda oxirgi marta qayta hisoblab olish
+            try:
+                if hasattr(self.employee, "staff_profile"):
+                    st = self.employee.staff_profile.salary_type
+                    if st == "percentage" or (
+                        st == "student_count" and self.employee.role == "mentor"
+                    ):
+                        self.recalculate_salary(commission_basis=commission_basis)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Salary recalculate error during mark_as_paid: {e}")
 
-                    from finance.models import FinanceTransaction
+            self.is_paid = True
+            self.paid_at = timezone.now()
+            self.marked_by = super_admin_user
+            self.save()
 
-                    FinanceTransaction.objects.get_or_create(
-                        related_id=f"EMP-{self.id}",
-                        defaults={
-                            "transaction_type": "expense",
-                            "category": "salary",
-                            "amount": self.total_amount,
-                            "date": self.paid_at.date(),
-                            "marked_by": super_admin_user,
-                            "branch": self.employee.branch,
-                            "title": f"Maosh: {self.employee.get_full_name() or self.employee.username}",
-                            "description": f"{self.month.strftime('%Y-%m')} oyi uchun xizmat haqi",
-                        },
-                    )
-                except Exception as e:
+            # ✅ Centralized Finance Ledger ga yozish
+            try:
+                if not self.employee.branch:
                     import logging
-                    logger = logging.getLogger(__name__)
-                    logger.exception(f"FinanceTransaction creation error for {self.employee.username}: {e}")
+                    logging.getLogger(__name__).warning(
+                        f"Warning: Employee {self.employee.id} has no branch assigned"
+                    )
+                    return self
+
+                from finance.models import FinanceTransaction
+
+                FinanceTransaction.objects.get_or_create(
+                    related_id=f"EMP-{self.id}",
+                    defaults={
+                        "transaction_type": "expense",
+                        "category": "salary",
+                        "amount": self.total_amount,
+                        "date": timezone.localdate(),
+                        "marked_by": super_admin_user,
+                        "branch": self.employee.branch,
+                        "title": f"Maosh: {self.employee.get_full_name() or self.employee.username}",
+                        "description": f"{self.month.strftime('%Y-%m')} oyi uchun xizmat haqi",
+                    },
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.exception(f"FinanceTransaction creation error for {self.employee.username}: {e}")
+            return self
 
     def recalculate_salary(self, commission_basis="paid"):
         """Maoshni StaffProfile bo'yicha qayta hisoblash"""

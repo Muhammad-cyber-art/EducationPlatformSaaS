@@ -256,7 +256,7 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                                         <td className="px-8 py-4">
                                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-[9px] font-black uppercase tracking-wider">
                                                 <CreditCard size={12} />
-                                                {w.category === 'owner_withdrawal' ? 'Avans / Pul Olish' : 'Boshqa Chiqim'}
+                                                {w.category_display || (w.category === 'owner_withdrawal' ? 'Avans / Pul Olish' : 'Chiqim')}
                                             </div>
                                         </td>
                                         <td className="px-8 py-4 text-[15px] font-black text-red-500 tabular-nums tracking-tight">{formatCurrency(w.amount)}</td>

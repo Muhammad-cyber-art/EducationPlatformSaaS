@@ -12,6 +12,7 @@ const AmountInput = ({
   className = '',
   name,
   showCurrency = true,
+  currencyPosition = 'right-3.5',
   allowDecimal = false,
   ...props
 }) => {
@@ -81,7 +82,7 @@ const AmountInput = ({
         inputMode={allowDecimal ? 'decimal' : 'numeric'} // Forces numeric/decimal keyboard on mobile
       />
       {showCurrency && displayValue && (
-        <span className="absolute right-12 top-1/2 -translate-y-1/2 text-[8px] font-black opacity-30 pointer-events-none capitalize">
+        <span className={`absolute ${currencyPosition} top-1/2 -translate-y-1/2 text-[9px] font-bold text-zinc-500 pointer-events-none uppercase tracking-wider select-none`}>
           UZS
         </span>
       )}

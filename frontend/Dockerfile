@@ -9,6 +9,9 @@ COPY . .
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 
+# Node.js xotira chegarasini (Heap limit) 2048MB ga oshirish (OOM xatosini oldini olish)
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
 RUN npm run build
 
 # Production stage

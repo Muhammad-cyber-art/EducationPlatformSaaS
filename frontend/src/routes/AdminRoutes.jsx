@@ -33,11 +33,17 @@ const TimetablePage = lazy(() => import("../components/GroupsComponent/Timetable
 const GroupAssignmentsPage = lazy(() =>
   import("../components/GroupsComponent/GroupAssignments/GroupAssignmentsPage")
 );
+const CashierDashboard = lazy(() =>
+  import("../components/adminComponents/Cashier/CashierDashboard")
+);
 
 
 export const AdminRoutes = (
  <Route path="/admin" element={<AdminPanel />}>
  <Route index element={<AdminPageFirst />} />
+
+ {/* Kassa (Cashier Point-of-Sale Desk) */}
+ <Route path="kassa" element={<CashierDashboard />} />
 
  {/* Timetable Section */}
  <Route path="timetable" element={<TimetablePage />} />
