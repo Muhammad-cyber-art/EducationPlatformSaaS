@@ -2146,12 +2146,48 @@ def offline_finance_bundle(request):
     if allowed_branches:
         tx_qs = tx_qs.filter(branch_id__in=allowed_branches)
 
-    # 1. Bugungi operatsiyalar
-    today_incomes_qs = tx_qs.filter(date=today, transaction_type='income', category='student_fee')
-    today_expenses_qs = tx_qs.filter(date=today, transaction_type='expense')
+    from groups.models import Group
+    from homework_attends.models import Attendance
+    from django.db.models import Count
 
-    today_incomes = FinanceTransactionSerializer(today_incomes_qs[:500], many=True).data
-    today_expenses = FinanceTransactionSerializer(today_expenses_qs[:500], many=True).data
+    # 1. Bugungi operatsiyalar
+    today_incomes_qs = list(tx_qs.filter(date=today, transaction_type='income', category='student_fee')[:300])
+    today_expenses_qs = list(tx_qs.filter(date=today, transaction_type='expense')[:300])
+
+    # 2. Joriy oydagi barcha daromadlar (incomes)
+    month_incomes_qs = list(tx_qs.filter(
+        date__gte=start_of_month,
+        date__lte=end_of_month,
+        transaction_type='income',
+        category='student_fee'
+    ).order_by('-date', '-id')[:500])
+
+    # 3. Joriy oydagi barcha xarajatlar (expenses)
+    month_expenses_qs = list(tx_qs.filter(
+        date__gte=start_of_month,
+        date__lte=end_of_month,
+        transaction_type='expense'
+    ).order_by('-date', '-id')[:500])
+
+    # Tranzaksiyalardagi to'lovlarni (Payment) bitta so'rov bilan cache qilish (N+1 oldini olish)
+    payment_ids = set()
+    for tx in (today_incomes_qs + month_incomes_qs):
+        if tx.category == 'student_fee' and tx.related_id and tx.related_id.startswith('STP-'):
+            parts = tx.related_id.split('-')
+            if len(parts) >= 2 and parts[1].isdigit():
+                payment_ids.add(int(parts[1]))
+
+    payments_cache = {}
+    if payment_ids:
+        for p in Payment.objects.filter(id__in=payment_ids).select_related('group'):
+            payments_cache[p.id] = p
+
+    tx_context = {'request': request, 'payments_cache': payments_cache}
+
+    today_incomes = FinanceTransactionSerializer(today_incomes_qs, many=True, context=tx_context).data
+    today_expenses = FinanceTransactionSerializer(today_expenses_qs, many=True, context=tx_context).data
+    month_incomes = FinanceTransactionSerializer(month_incomes_qs, many=True, context=tx_context).data
+    month_expenses = FinanceTransactionSerializer(month_expenses_qs, many=True, context=tx_context).data
 
     total_today = sum(Decimal(str(p['amount'])) for p in today_incomes if p.get('status') != 'cancelled')
     total_verified = sum(
@@ -2160,23 +2196,6 @@ def offline_finance_bundle(request):
     )
     total_withdrawn = sum(Decimal(str(w['amount'])) for w in today_expenses if w.get('status') != 'cancelled')
 
-    # 2. Joriy oydagi barcha daromadlar (incomes)
-    month_incomes_qs = tx_qs.filter(
-        date__gte=start_of_month,
-        date__lte=end_of_month,
-        transaction_type='income',
-        category='student_fee'
-    ).order_by('-date', '-id')[:1000]
-    month_incomes = FinanceTransactionSerializer(month_incomes_qs, many=True).data
-
-    # 3. Joriy oydagi barcha xarajatlar (expenses)
-    month_expenses_qs = tx_qs.filter(
-        date__gte=start_of_month,
-        date__lte=end_of_month,
-        transaction_type='expense'
-    ).order_by('-date', '-id')[:1000]
-    month_expenses = FinanceTransactionSerializer(month_expenses_qs, many=True).data
-
     # 4. Filiallar
     branch_qs = Branch.objects.filter(is_active=True)
     if allowed_branches:
@@ -2184,10 +2203,60 @@ def offline_finance_bundle(request):
     branches_data = [{'id': b.id, 'name': b.name} for b in branch_qs]
 
     # 5. O'quvchilarning oxirgi to'lovlari (student-payments)
-    payment_qs = Payment.objects.select_related('student', 'group').order_by('-created_at')
+    payment_qs = Payment.objects.select_related('student', 'group', 'marked_by').order_by('-created_at')
     if allowed_branches:
         payment_qs = payment_qs.filter(student__branch_id__in=allowed_branches)
-    student_payments = PaymentSerializer(payment_qs[:1000], many=True).data
+    recent_payments = list(payment_qs[:300])
+
+    # PaymentSerializer uchun lesson_dates va attendance keshini bitta bulk so'rovda tayyorlaymiz
+    group_months = set()
+    pay_group_ids = set()
+    for p in recent_payments:
+        if p.group_id and p.month:
+            group_months.add((p.group_id, p.month.year, p.month.month))
+            pay_group_ids.add(p.group_id)
+
+    lesson_dates_cache = {}
+    if pay_group_ids:
+        groups_map = {
+            g.id: g for g in Group.objects.filter(id__in=pay_group_ids).prefetch_related(
+                'special_lesson_days', 'canceled_lesson_days'
+            )
+        }
+        for gid, year, month in group_months:
+            group = groups_map.get(gid)
+            if group:
+                lesson_dates_cache[(gid, year, month)] = group.get_lesson_dates(year, month)
+            else:
+                lesson_dates_cache[(gid, year, month)] = []
+
+    # Davomatlarni bitta so'rovda yig'ish (attended_cache va absences_cache)
+    attended_cache = {}
+    absences_cache = {}
+    if pay_group_ids:
+        att_rows = Attendance.objects.filter(
+            group_id__in=pay_group_ids,
+            is_present=True,
+            marked_by__isnull=False
+        ).values('student_id', 'group_id', 'date__year', 'date__month').annotate(cnt=Count('id'))
+        for r in att_rows:
+            key = (r['student_id'], r['group_id'], r['date__year'], r['date__month'])
+            attended_cache[key] = r['cnt']
+
+        for p in recent_payments:
+            if p.group_id and p.month:
+                l_dates = lesson_dates_cache.get((p.group_id, p.month.year, p.month.month), [])
+                active_ld = [d for d in l_dates if d <= today]
+                present_c = attended_cache.get((p.student_id, p.group_id, p.month.year, p.month.month), 0)
+                absences_cache[(p.student_id, p.group_id, p.month.year, p.month.month)] = max(0, len(active_ld) - present_c)
+
+    pay_context = {
+        'request': request,
+        'lesson_dates_cache': lesson_dates_cache,
+        'attended_cache': attended_cache,
+        'absences_cache': absences_cache,
+    }
+    student_payments = PaymentSerializer(recent_payments, many=True, context=pay_context).data
 
     # 6. Har bir filial uchun Cashier Desk ma'lumotlari (Roster, O'quvchilar, Qarzdorlar, Guruhlar)
     from finance.services import build_cashier_desk_dict

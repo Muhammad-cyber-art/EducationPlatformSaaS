@@ -50,7 +50,7 @@ class FinanceOfflineService {
     this.notify('finance_prefetch_start', {});
 
     try {
-      const res = await api.get('/finance/offline-bundle/');
+      const res = await api.get('/finance/offline-bundle/', { timeout: 30000 });
       const data = res.data;
       if (!data) return { success: false, reason: 'empty_response' };
 

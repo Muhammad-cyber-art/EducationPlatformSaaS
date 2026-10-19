@@ -96,33 +96,35 @@ const AllPayments = () => {
     try {
       setLoading(true);
       const [branchRes, statsRes, trendsRes] = await Promise.all([
-        api.get(`/add_branch/branches/`),
-        api.get(`/finance/statistics/`, { params: { year: selectedYear, month: selectedMonth } }),
-        api.get(`/finance/statistics/monthly-branch-trends/`, { params: { year: selectedYear, month: selectedMonth, months_back: 12 } })
+        api.get(`/add_branch/branches/`, { timeout: 20000 }),
+        api.get(`/finance/statistics/`, { params: { year: selectedYear, month: selectedMonth }, timeout: 25000 }),
+        api.get(`/finance/statistics/monthly-branch-trends/`, { params: { year: selectedYear, month: selectedMonth, months_back: 12 }, timeout: 25000 })
       ]);
 
-      const branchesData = branchRes.data.results || branchRes.data;
-      const statsData = statsRes.data;
-      const trendsData = trendsRes.data;
+      const branchesData = branchRes.data?.results || branchRes.data || [];
+      const statsData = statsRes.data || {};
+      const trendsData = trendsRes.data || {};
 
       const statsMap = {};
-        statsData.branches?.forEach(b => {
-            statsMap[Number(b.id)] = b;
+      if (Array.isArray(statsData.branches)) {
+        statsData.branches.forEach(b => {
+          statsMap[Number(b.id)] = b;
         });
+      }
 
-        const mergedBranches = branchesData.map(b => ({
-            ...b,
-            finance: statsMap[Number(b.id)] || { income: 0, expense: 0, profit: 0 }
-        }));
+      const mergedBranches = Array.isArray(branchesData) ? branchesData.map(b => ({
+        ...b,
+        finance: statsMap[Number(b.id)] || { income: 0, expense: 0, profit: 0 }
+      })) : [];
       setBranches(mergedBranches);
       setStatistics(statsData);
 
       const normalized = normalizeTrendsForChart(trendsData, activeMetric);
-      setTrendData(normalized.data);
-      setTrendBranches(normalized.branchesList);
+      setTrendData(normalized.data || []);
+      setTrendBranches(normalized.branchesList || []);
     } catch (error) {
-      console.error("Fetch Data Error:", error);
-      toast.error("Ma'lumotlarni yuklashda xatolik.");
+      console.warn("Fetch Data Error:", error?.message || error);
+      toast.error("Ma'lumotlarni yuklashda xatolik yuz berdi.");
     } finally {
       setLoading(false);
     }

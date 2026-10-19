@@ -123,6 +123,11 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_absences_count(self, obj) -> int:
         try:
+            absences_cache = self.context.get('absences_cache')
+            if absences_cache is not None:
+                key = (obj.student_id, obj.group_id, obj.month.year, obj.month.month)
+                if key in absences_cache:
+                    return absences_cache[key]
             return obj.student.get_absences_count(
                 obj.month.year, obj.month.month, group=obj.group
             )
@@ -131,6 +136,12 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_attended_count(self, obj) -> int:
         try:
+            attended_cache = self.context.get('attended_cache')
+            if attended_cache is not None:
+                key = (obj.student_id, obj.group_id, obj.month.year, obj.month.month)
+                if key in attended_cache:
+                    return attended_cache[key]
+
             from django.utils import timezone
             from homework_attends.models import Attendance
 
@@ -1199,7 +1210,11 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
                 try:
                     payment_id = int(parts[1])
                     from finance.models import Payment
-                    payment = Payment.objects.filter(id=payment_id).first()
+                    payments_cache = self.context.get('payments_cache')
+                    if payments_cache is not None and payment_id in payments_cache:
+                        payment = payments_cache[payment_id]
+                    else:
+                        payment = Payment.objects.filter(id=payment_id).first()
                     request = self.context.get('request')
                     if payment:
                         receipt_url = None

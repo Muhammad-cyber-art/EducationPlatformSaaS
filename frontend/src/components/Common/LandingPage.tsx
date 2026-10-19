@@ -162,7 +162,7 @@ export function LandingPage() {
           </div>
           <Link
             to="/login"
-            className="bg-cta-gradient rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition-transform hover:scale-[1.04]"
+            className="rounded-full px-5 py-2.5 text-sm font-bold text-[#120f0d] bg-black/5 hover:bg-black/10 border border-black/10 shadow-sm transition-transform hover:scale-[1.04]"
           >
             Tizimga kirish
           </Link>
@@ -216,7 +216,7 @@ export function LandingPage() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.96 }}
                     transition={{ type: "spring", stiffness: 400, damping: 12 }}
-                    className="bg-cta-gradient inline-flex items-center gap-2 rounded-full px-7 py-4 text-sm font-semibold text-white shadow-float"
+                    className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-bold text-[#120f0d] bg-black/5 hover:bg-black/10 border border-black/10 shadow-sm"
                   >
                     Boshlash / Tizimga kirish
                     <ArrowRight className="h-4 w-4" />

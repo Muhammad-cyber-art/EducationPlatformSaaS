@@ -29,10 +29,10 @@ if (import.meta.env.DEV) {
 }
 
 // Asosiy api client (barcha so'rovlar shu orqali ketadi)
-// Offline-First tezligi: 8 soniya timeout (30 soniya kutib foydalanuvchini zeriktirmaslik uchun)
+// 15 soniya timeout: sekinroq tarmoq va analitika so'rovlarida asossiz timeout xatoliklarini oldini oladi
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 8000,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -41,7 +41,7 @@ const api = axios.create({
 // Alohida client refresh so'rovi uchun (interceptorlarga tushmasin)
 const refreshClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 8000,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
