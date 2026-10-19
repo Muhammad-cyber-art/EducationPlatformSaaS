@@ -52,11 +52,11 @@ export default function GroupRoster({
   // If no group is selected and not in debtors tab
   if (!isDebtorsTab && !selectedGroup) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8 bg-[var(--bg-panel)] border border-zinc-800/80 rounded-2xl shadow-xl text-center">
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-xl text-center">
         <div className="w-16 h-16 rounded-2xl bg-[var(--gold)]/10 border border-[var(--gold)]/20 flex items-center justify-center text-[var(--gold)] mb-4">
           <Layers size={32} />
         </div>
-        <h3 className="text-lg font-bold text-white mb-1">Guruh Tanlanmagan</h3>
+        <h3 className="text-lg font-bold text-[var(--text-primary)] mb-1">Guruh Tanlanmagan</h3>
         <p className="text-xs text-[var(--text-muted)] max-w-sm mb-4">
           Chap tarafdagi ro'yxatdan guruhni tanlang yoki "Qarzdorlar" bo'limiga o'ting.
         </p>
@@ -65,13 +65,13 @@ export default function GroupRoster({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-panel)] border border-zinc-800/80 rounded-2xl shadow-xl overflow-hidden backdrop-blur-md">
+    <div className="flex flex-col h-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-xl overflow-hidden backdrop-blur-md">
       {/* Column Header */}
-      <div className="p-4 border-b border-zinc-800/70 bg-[var(--bg-void)]/40">
+      <div className="p-4 border-b border-[var(--border-glass)] bg-[var(--bg-void)]/40">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-black text-white">
+              <h2 className="text-base sm:text-lg font-black text-[var(--text-primary)]">
                 {isDebtorsTab ? "Filial Qarzdorlari Ro'yxati" : selectedGroup.name}
               </h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--gold)]/15 text-[var(--gold)] border border-[var(--gold)]/25">
@@ -109,15 +109,15 @@ export default function GroupRoster({
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 mt-3 pt-3 border-t border-zinc-800/50">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 mt-3 pt-3 border-t border-[var(--border-glass)]">
           {!isDebtorsTab && (
-            <div className="flex items-center gap-1 bg-[var(--bg-void)] p-0.5 rounded-xl border border-zinc-800/60 w-full sm:w-auto">
+            <div className="flex items-center gap-1 bg-[var(--bg-void)] p-0.5 rounded-xl border border-[var(--border-glass)] w-full sm:w-auto">
               <button
                 onClick={() => setFilterMode('all')}
                 className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
                   filterMode === 'all'
                     ? 'bg-[var(--gold)] text-black'
-                    : 'text-[var(--text-secondary)] hover:text-white'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 Barchasi ({selectedGroup.students_count || 0})
@@ -127,7 +127,7 @@ export default function GroupRoster({
                 className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
                   filterMode === 'unpaid'
                     ? 'bg-rose-500 text-white'
-                    : 'text-[var(--text-secondary)] hover:text-white'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 Qarzdorlar ({selectedGroup.unpaid_count || 0})
@@ -137,7 +137,7 @@ export default function GroupRoster({
                 className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
                   filterMode === 'paid'
                     ? 'bg-emerald-500 text-white'
-                    : 'text-[var(--text-secondary)] hover:text-white'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 To'laganlar ({selectedGroup.paid_count || 0})
@@ -152,20 +152,20 @@ export default function GroupRoster({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="O'quvchi ismi yoki telefoni..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-[var(--bg-void)] border border-zinc-800 rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)] transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)] transition-colors"
             />
           </div>
         </div>
       </div>
 
       {/* Roster Table */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
+      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--border-glass)]">
         {filteredStudents.length === 0 ? (
           <div className="text-center py-12 text-xs text-[var(--text-muted)]">
             O'quvchilar topilmadi
           </div>
         ) : (
-          <div className="divide-y divide-zinc-800/40">
+          <div className="divide-y divide-[var(--border-glass)]">
             {filteredStudents.map((st) => {
               const isPaid = st.is_paid;
               const isPartial = st.is_partial;
@@ -175,7 +175,7 @@ export default function GroupRoster({
               return (
                 <div
                   key={`${st.student_id}-${st.group_id}`}
-                  className="p-3.5 sm:px-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors group/row"
+                  className="p-3.5 sm:px-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[var(--border-glass)]/20 transition-colors group/row"
                 >
                   {/* Student Details */}
                   <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -183,10 +183,10 @@ export default function GroupRoster({
                       onClick={() => onOpenDetails(st)}
                       className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer transition-transform hover:scale-105 ${
                         isPaid
-                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
                           : isPartial
-                          ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400'
-                          : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                          ? 'bg-amber-500/15 border border-amber-500/30 text-amber-500'
+                          : 'bg-rose-500/15 border border-rose-500/30 text-rose-500'
                       }`}
                     >
                       {st.student_name ? st.student_name.charAt(0).toUpperCase() : 'O'}
@@ -196,7 +196,7 @@ export default function GroupRoster({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span 
                           onClick={() => onOpenDetails(st)}
-                          className="font-bold text-sm text-white hover:text-[var(--gold)] cursor-pointer truncate transition-colors"
+                          className="font-bold text-sm text-[var(--text-primary)] hover:text-[var(--gold)] cursor-pointer truncate transition-colors"
                         >
                           {st.student_name}
                         </span>
@@ -204,17 +204,17 @@ export default function GroupRoster({
                         {st.status !== 'regular' && (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                             st.status === 'discount'
-                              ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                              ? 'bg-cyan-500/15 text-cyan-500 border border-cyan-500/30'
                               : st.status === 'negotiated'
-                              ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
-                              : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
+                              ? 'bg-purple-500/15 text-purple-500 border border-purple-500/30'
+                              : 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
                           }`}>
                             {st.status_display || st.status}
                           </span>
                         )}
 
                         {st.other_groups_count > 0 && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/20 font-medium">
                             +{st.other_groups_count} guruh
                           </span>
                         )}
@@ -234,7 +234,7 @@ export default function GroupRoster({
                           </span>
                         )}
                         {st.passed_lessons > 0 && (
-                          <span className="text-zinc-400">
+                          <span className="text-[var(--text-secondary)]">
                             Davomat: {st.present_count}/{st.passed_lessons}
                           </span>
                         )}
@@ -247,11 +247,11 @@ export default function GroupRoster({
                     <div className="text-right">
                       <div className="flex items-center gap-1.5 justify-end">
                         {hasDebt ? (
-                          <span className="text-xs sm:text-sm font-black text-rose-400 tabular-nums">
+                          <span className="text-xs sm:text-sm font-black text-rose-500 tabular-nums">
                             -{formatCurrency(remaining)}
                           </span>
                         ) : (
-                          <span className="text-xs sm:text-sm font-black text-emerald-400 flex items-center gap-1 tabular-nums">
+                          <span className="text-xs sm:text-sm font-black text-emerald-500 flex items-center gap-1 tabular-nums">
                             <CheckCircle2 size={13} />
                             To'langan
                           </span>
@@ -277,7 +277,7 @@ export default function GroupRoster({
                         <button
                           type="button"
                           onClick={() => onOpenRefund(st)}
-                          className="px-2.5 py-1.5 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-xl border border-zinc-800 active:scale-95 transition-all flex items-center gap-1"
+                          className="px-2.5 py-1.5 bg-[var(--bg-void)] hover:bg-[var(--gold)]/10 text-[var(--text-secondary)] hover:text-[var(--gold)] text-xs font-semibold rounded-xl border border-[var(--border-glass)] active:scale-95 transition-all flex items-center gap-1"
                           title="Bekor qilish yoki refund"
                         >
                           <RotateCcw size={12} />
@@ -288,7 +288,7 @@ export default function GroupRoster({
                       <button
                         type="button"
                         onClick={() => onOpenDetails(st)}
-                        className="p-1.5 bg-[var(--bg-void)] hover:bg-zinc-800 text-[var(--text-secondary)] hover:text-white rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors"
+                        className="p-1.5 bg-[var(--bg-void)] hover:bg-[var(--border-glass)]/50 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border-glass)] transition-colors"
                         title="Tafsilotlar"
                       >
                         <Eye size={15} />

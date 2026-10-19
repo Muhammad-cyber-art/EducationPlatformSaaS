@@ -129,8 +129,11 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
     queryFn: async () => {
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
       if (isOffline) {
-        const cached = await db.query_cache.get(`group-lesson-dates_${group_id}_${selectedMonth}_${selectedYear}`);
-        if (cached?.data) return cached.data;
+        const cached = (await db.query_cache.get(`group-lesson-dates_${group_id}_${selectedMonth}_${selectedYear}`)) ||
+                       (await db.query_cache.get(`group-lesson-dates_${Number(group_id)}_${selectedMonth}_${selectedYear}`));
+        if (cached?.data && Array.isArray(cached.data) && cached.data.length > 0) {
+          return cached.data;
+        }
       }
 
       try {
@@ -142,9 +145,54 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
         }).catch(() => {});
         return res.data;
       } catch (err) {
-        const cached = await db.query_cache.get(`group-lesson-dates_${group_id}_${selectedMonth}_${selectedYear}`);
-        if (cached?.data) return cached.data;
-        const todayStr = new Date().toISOString().split('T')[0];
+        const cached = (await db.query_cache.get(`group-lesson-dates_${group_id}_${selectedMonth}_${selectedYear}`)) ||
+                       (await db.query_cache.get(`group-lesson-dates_${Number(group_id)}_${selectedMonth}_${selectedYear}`));
+        if (cached?.data && Array.isArray(cached.data) && cached.data.length > 0) {
+          return cached.data;
+        }
+
+        // Oflayn rejimda dars kunlarini guruh jadvalidan avtomatik hisoblash (Oflayn generatsiya)
+        try {
+          const grp = (await db.groups.get(Number(group_id))) || (await db.groups.get(String(group_id)));
+          if (grp) {
+            const days = grp.days;
+            const customDays = Array.isArray(grp.custom_days) ? grp.custom_days.map(Number) : [];
+            const darsKunlari = (grp.dars_kunlari || '').toLowerCase();
+            const specialDates = new Set(grp.special_lesson_dates || []);
+            const canceledDates = new Set(grp.canceled_lesson_dates || []);
+            const startDate = grp.start_date || '';
+
+            const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+            const computedDates = [];
+            for (let day = 1; day <= daysInMonth; day++) {
+              const dStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              if (startDate && dStr < startDate) continue;
+              if (canceledDates.has(dStr)) continue;
+              if (specialDates.has(dStr)) {
+                computedDates.push(dStr);
+                continue;
+              }
+              const dow = new Date(selectedYear, selectedMonth - 1, day).getDay();
+              if (dow === 0) continue;
+              let isMatch = false;
+              if (days === 'odd' || darsKunlari.includes('dush') || darsKunlari.includes('toq')) {
+                isMatch = [1, 3, 5].includes(dow);
+              } else if (days === 'even' || darsKunlari.includes('sesh') || darsKunlari.includes('juft')) {
+                isMatch = [2, 4, 6].includes(dow);
+              } else if (days === 'everyday' || darsKunlari.includes('har kun')) {
+                isMatch = [1, 2, 3, 4, 5, 6].includes(dow);
+              } else if (days === 'custom' && customDays.length > 0) {
+                isMatch = customDays.includes(dow);
+              }
+              if (isMatch) computedDates.push(dStr);
+            }
+            if (computedDates.length > 0) {
+              return computedDates.sort((a, b) => b.localeCompare(a));
+            }
+          }
+        } catch (_) {}
+
+        const todayStr = new Date().toLocaleDateString('sv-SE');
         return [todayStr];
       }
     },

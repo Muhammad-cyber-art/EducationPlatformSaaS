@@ -21,7 +21,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
           formData.append(key, data[key]);
         }
       });
-      return await api.patch(`groups/students/${student_id}/`, formData, {
+      return await api.patch(`/groups/students/${student_id}/`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
     },
@@ -46,8 +46,25 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
       is_full_amount,
       is_custom_amount,
     }) => {
+      const paymentPayload = {
+        student_id,
+        payment_id: id,
+        amount,
+        payment_method,
+        is_receiptless: receipt_image ? false : is_receiptless,
+        notes,
+        pay_full_month,
+        is_partial_payment,
+        is_full_amount,
+        ignore_refund,
+      };
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const { queueCashierPayment } = await import('../../../db/db');
+        return await queueCashierPayment(paymentPayload, queryClient);
+      }
+
       const formData = new FormData();
-      // amount: faqat 0 dan katta bo'lsa qo'shamiz
       if (amount !== undefined && amount !== null && String(amount) !== "") {
         formData.append("amount", String(amount));
       }
@@ -64,17 +81,25 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
         formData.append("pay_full_month", String(pay_full_month));
       if (is_partial_payment !== undefined)
         formData.append("is_partial_payment", String(is_partial_payment));
-      // is_full_amount — MAJBURIY: backend bu flag orqali is_paid=True belgilaydi
       formData.append("is_full_amount", String(is_full_amount === true));
-      // is_custom_amount — MAJBURIY: yo'q bo'lsa backend shartnoma narxini yozadi
       formData.append("is_custom_amount", String(is_custom_amount === true));
-      return await api.post(
-        `/finance/student-payments/${id}/confirm/`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        },
-      );
+
+      try {
+        return await api.post(
+          `/finance/student-payments/${id}/confirm/`,
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          },
+        );
+      } catch (err) {
+        const isNetworkErr = !err.response || err.code === 'ERR_NETWORK' || err.isOffline;
+        if (isNetworkErr) {
+          const { queueCashierPayment } = await import('../../../db/db');
+          return await queueCashierPayment(paymentPayload, queryClient);
+        }
+        throw err;
+      }
     },
     onSuccess: async (res) => {
       await Promise.all([
@@ -83,7 +108,11 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
         queryClient.invalidateQueries({ queryKey: ["student-history", student_id] }),
       ]);
       dispatch({ type: "TOGGLE_CONFIRM_PAYMENT", payload: false });
-      toast.success(res?.data?.message || "To'lov tasdiqlandi.");
+      if (res?.queued) {
+        toast.success("To'lov oflayn saqlandi! Internet tiklanganda serverga yuboriladi.", { icon: '💾' });
+      } else {
+        toast.success(res?.data?.message || "To'lov tasdiqlandi.");
+      }
     },
     onError: (err) => {
       const msg =
@@ -137,7 +166,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
 
   const unenrollMutation = useMutation({
     mutationFn: async (groupId) =>
-      await api.post(`groups/groups/${groupId}/unenroll-student/`, {
+      await api.post(`/groups/groups/${groupId}/unenroll-student/`, {
         student_id,
       }),
     onSuccess: (res) => {
@@ -154,7 +183,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
 
   const archiveMutation = useMutation({
     mutationFn: async (reason) =>
-      await api.delete(`groups/students/${student_id}/`, { data: { reason } }),
+      await api.delete(`/groups/students/${student_id}/`, { data: { reason } }),
     onSuccess: () => {
       toast.success("O'quvchi tizimdan butkul o'chirildi.");
       navigate(-1);
@@ -163,7 +192,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
 
   const mergeMutation = useMutation({
     mutationFn: async (duplicateId) =>
-      await api.post(`groups/students/${student_id}/merge/`, {
+      await api.post(`/groups/students/${student_id}/merge/`, {
         duplicate_id: duplicateId,
       }),
     onSuccess: async (res) => {
@@ -183,7 +212,7 @@ export const useStudentMutations = (student_id, dispatch, navigate) => {
   });
 
   const disconnectBotMutation = useMutation({
-    mutationFn: async () => await api.post(`groups/students/${student_id}/disconnect-bot/`),
+    mutationFn: async () => await api.post(`/groups/students/${student_id}/disconnect-bot/`),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["student"] });
       toast.success(res.data.message || "Botdan muvaffaqiyatli uzildi.");

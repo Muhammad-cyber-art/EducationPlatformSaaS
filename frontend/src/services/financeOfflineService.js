@@ -162,6 +162,80 @@ class FinanceOfflineService {
           }
         }
 
+        // 7. Filiallar Kassasi (Cashier Desk) — Guruhlar, O'quvchilar, Qarzdorlar va Roster
+        if (data.cashier_desks && typeof data.cashier_desks === 'object') {
+          for (const [branchId, deskData] of Object.entries(data.cashier_desks)) {
+            const bIdNum = Number(branchId);
+            const deskKey = `cashier-desk_${branchId}_${currentMonth}`;
+
+            await db.query_cache.put({
+              query_key: deskKey,
+              data: deskData,
+              updated_at: nowIso,
+            });
+
+            if (this.queryClient) {
+              this.queryClient.setQueryData(['cashier-desk', bIdNum, currentMonth], deskData);
+              this.queryClient.setQueryData(['cashier-desk', String(branchId), currentMonth], deskData);
+            }
+
+            // O'quvchilarning drill-down to'lov detallarini oflayn keshga tayyorlab qo'yish
+            if (deskData.rosters) {
+              for (const [groupId, roster] of Object.entries(deskData.rosters)) {
+                if (Array.isArray(roster.students)) {
+                  for (const st of roster.students) {
+                    const detailKey = `cashier-student-detail_${st.student_id}_${groupId}_${currentMonth}`;
+                    const detailData = {
+                      student: {
+                        id: st.student_id,
+                        full_name: st.student_name,
+                        phone: st.student_phone,
+                        parent_phone: st.parent_phone,
+                        status: st.status,
+                        status_display: st.status_display,
+                      },
+                      target_group: {
+                        id: st.group_id,
+                        name: st.group_name,
+                        monthly_price: st.expected_amount,
+                        remaining_amount: st.remaining_amount,
+                        paid_amount: st.paid_amount,
+                        is_paid: st.is_paid,
+                        is_partial: st.is_partial,
+                        payment_id: st.payment_id,
+                      },
+                      all_active_groups: [
+                        {
+                          group_id: st.group_id,
+                          group_name: st.group_name,
+                          monthly_price: st.expected_amount,
+                          remaining_amount: st.remaining_amount,
+                          paid_amount: st.paid_amount,
+                          is_paid: st.is_paid,
+                          payment_id: st.payment_id,
+                        },
+                        ...(st.other_groups || []).map((og) => ({
+                          group_id: og.group_id,
+                          group_name: og.group_name,
+                          monthly_price: og.monthly_price,
+                          remaining_amount: og.monthly_price,
+                          paid_amount: 0,
+                          is_paid: false,
+                        })),
+                      ],
+                    };
+                    await db.query_cache.put({
+                      query_key: detailKey,
+                      data: detailData,
+                      updated_at: nowIso,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
         await db.sync_meta.put({
           key: 'last_finance_prefetched_at',
           value: nowIso,

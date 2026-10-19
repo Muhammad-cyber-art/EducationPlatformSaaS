@@ -26,11 +26,34 @@ function reducer(state, action) {
       return {
         ...state,
         mentor: action.payload,
-        editData: action.payload,
+        editData: {
+          ...action.payload,
+          first_name: action.payload?.first_name || "",
+          last_name: action.payload?.last_name || "",
+          username: action.payload?.username || "",
+          phone_number: action.payload?.phone_number || "",
+          subject: action.payload?.subject || "",
+          password: "",
+        },
         mentorsGroup: action.payload.mentor_groups || [],
       };
-    case "UPDATE_EDIT_DATA": return { ...state, editData: { ...state.editData, ...action.payload } };
-    case "START_EDITING": return { ...state, isEditing: true, editData: { ...state.mentor } };
+    case "UPDATE_EDIT_FIELD":
+    case "UPDATE_EDIT_DATA":
+      return { ...state, editData: { ...state.editData, ...action.payload } };
+    case "START_EDITING":
+      return {
+        ...state,
+        isEditing: true,
+        editData: {
+          ...state.mentor,
+          first_name: state.mentor?.first_name || "",
+          last_name: state.mentor?.last_name || "",
+          username: state.mentor?.username || "",
+          phone_number: state.mentor?.phone_number || "",
+          subject: state.mentor?.subject || "",
+          password: "",
+        }
+      };
     case "TOGGLE_SHOW_PASSWORD": return { ...state, showPassword: !state.showPassword };
     case 'TOGGLE_PERM_MODAL': return { ...state, isPermModalOpen: action.payload };
     case 'SET_PERMISSIONS': return { ...state, permissions: action.payload };
@@ -109,13 +132,13 @@ export const useMentorProfile = () => {
   const handleUpdate = async () => {
     try {
       const payload = {
-        first_name: state.editData.first_name,
-        last_name: state.editData.last_name,
-        phone_number: state.editData.phone_number,
-        subject: state.editData.subject,
-        username: state.editData.username,
-        is_active: state.editData.is_active,
-        color: state.editData.color,
+        first_name: (state.editData.first_name || "").trim(),
+        last_name: (state.editData.last_name || "").trim(),
+        phone_number: (state.editData.phone_number || "").trim(),
+        subject: (state.editData.subject || "").trim(),
+        username: (state.editData.username || "").trim(),
+        is_active: state.editData.is_active !== undefined ? state.editData.is_active : true,
+        color: state.editData.color || "#ffffff",
         branch_id: state.mentor.branch_id ? Number(state.mentor.branch_id) : Number(currentBranchId),
       };
       if (state.editData.password) payload.password = state.editData.password;
@@ -123,9 +146,24 @@ export const useMentorProfile = () => {
       const res = await api.put(`/register/users/${realMentorId}/`, payload);
       dispatch({ type: "SET_FIELD", field: "mentor", value: res.data });
       dispatch({ type: "SET_FIELD", field: "isEditing", value: false });
+      queryClient.invalidateQueries(['mentor-details']);
       queryClient.invalidateQueries(['user-me']);
       toast.success("Profil yangilandi!");
-    } catch (err) { toast.error("Xatolik yuz berdi!"); }
+    } catch (err) {
+      let errorMsg = "Xatolik yuz berdi!";
+      if (err.response?.data) {
+        const d = err.response.data;
+        if (typeof d === "string") errorMsg = d;
+        else if (d.detail) errorMsg = d.detail;
+        else if (typeof d === "object") {
+          const firstKey = Object.keys(d)[0];
+          const firstVal = d[firstKey];
+          if (Array.isArray(firstVal)) errorMsg = `${firstKey}: ${firstVal[0]}`;
+          else if (typeof firstVal === "string") errorMsg = `${firstKey}: ${firstVal}`;
+        }
+      }
+      toast.error(errorMsg);
+    }
   };
 
   const permMutation = useMutation({

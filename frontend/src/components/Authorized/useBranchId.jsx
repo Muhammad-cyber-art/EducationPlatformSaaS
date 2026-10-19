@@ -83,6 +83,10 @@ export function useCurrentBranch() {
   useEffect(() => {
     if (finalBranchId) {
       dispatch(setBranch({ id: finalBranchId, name: finalBranchName }));
+      try {
+        localStorage.setItem("active_branch_id", String(finalBranchId));
+        localStorage.setItem("branch_id", String(finalBranchId));
+      } catch (_) {}
     }
   }, [finalBranchId, finalBranchName, dispatch]);
 

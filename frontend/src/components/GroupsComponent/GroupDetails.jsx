@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { useCurrentBranch } from "../Authorized/useBranchId";
 import { useGroupDetails } from "./GroupDetails/useGroupDetails";
 import { useAttendance } from "./GroupDetails/useAttendance";
+import { normalizeCustomDays, formatDaysDisplay } from "../../utils/scheduleUtils";
 
 // Sub-components
 import GroupHeader from "./GroupDetails/GroupHeader";
@@ -94,18 +95,73 @@ export default function GroupDetailPage() {
   // Business Logic Handlers
   const handleUpdate = async () => {
     try {
-      const mentor_id = editData.mentor_id || editData.mentor?.id;
+      const cleanCustomDays = normalizeCustomDays(
+        editData.custom_days,
+        editData.days || groupinfo?.days
+      );
+      const cleanPrice =
+        editData.monthly_price !== undefined &&
+        editData.monthly_price !== null &&
+        editData.monthly_price !== ""
+          ? String(editData.monthly_price).replace(/,/g, "").trim()
+          : "0";
+
+      const mentor_id =
+        editData.mentor_id !== undefined &&
+        editData.mentor_id !== null &&
+        editData.mentor_id !== ""
+          ? Number(editData.mentor_id)
+          : editData.mentor?.id
+          ? Number(editData.mentor.id)
+          : null;
+
+      const effectiveBranchId =
+        editData.branch_id ||
+        groupinfo?.branch?.id ||
+        groupinfo?.branch_id ||
+        branchID;
+
       const payload = {
-        ...editData,
-        mentor_id: mentor_id ? Number(mentor_id) : null,
-        branch_id: groupinfo.branch?.id || groupinfo.branch_id
+        name: (editData.name || groupinfo?.name || "").trim(),
+        subject: (editData.subject || "").trim(),
+        group_type: editData.group_type || "standard",
+        monthly_price: cleanPrice,
+        color: (editData.color || "#ffffff").trim(),
+        branch_id: effectiveBranchId ? Number(effectiveBranchId) : undefined,
+        mentor_id: mentor_id || null,
+        custom_days: cleanCustomDays,
+        dars_kunlari: formatDaysDisplay(cleanCustomDays, false),
+        dars_vaqti: (editData.dars_vaqti || "").trim(),
+        start_date: editData.start_date ? editData.start_date : null,
+        description: (editData.description || "").trim(),
       };
-      await api.put(`/groups/groups/${group_id}/`, payload);
-      queryClient.invalidateQueries(['group-detail', group_id]);
-      queryClient.invalidateQueries(['group-lesson-dates', group_id]);
+
+      await api.patch(`/groups/groups/${group_id}/`, payload);
+      queryClient.invalidateQueries(["group-detail", group_id]);
+      queryClient.invalidateQueries(["group-lesson-dates", group_id]);
+      queryClient.invalidateQueries(["groups"]);
       uiDispatch({ type: "SET_FIELD", field: "isEditing", value: false });
       toast.success("Muvaffaqiyatli saqlandi.");
-    } catch (err) { toast.error("Xatolik yuz berdi."); }
+    } catch (err) {
+      let errorMsg = "Xatolik yuz berdi.";
+      if (err.response?.data) {
+        const d = err.response.data;
+        if (typeof d === "string") {
+          errorMsg = d;
+        } else if (d.detail) {
+          errorMsg = d.detail;
+        } else if (typeof d === "object") {
+          const firstKey = Object.keys(d)[0];
+          const firstVal = d[firstKey];
+          if (Array.isArray(firstVal)) {
+            errorMsg = `${firstKey}: ${firstVal[0]}`;
+          } else if (typeof firstVal === "string") {
+            errorMsg = `${firstKey}: ${firstVal}`;
+          }
+        }
+      }
+      toast.error(errorMsg);
+    }
   };
 
   const handleRemoveMentor = async (mentorId) => {
@@ -256,8 +312,37 @@ export default function GroupDetailPage() {
     return pastDates.sort((a, b) => b.localeCompare(a)).slice(0, 3);
   }, [groupinfo?.last_3_lesson_dates, lessonDates, todayStr_actual]);
 
-  const isLessonDay = (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) ||
-    last3EditableDates.includes(selectedDate);
+  const isLessonDay = useMemo(() => {
+    if (!selectedDate) return false;
+    if (Array.isArray(groupinfo?.canceled_lesson_dates) && groupinfo.canceled_lesson_dates.includes(selectedDate)) return false;
+    if (Array.isArray(groupinfo?.special_lesson_dates) && groupinfo.special_lesson_dates.includes(selectedDate)) return true;
+    if (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) return true;
+    if (last3EditableDates.includes(selectedDate)) return true;
+
+    // Guruh jadvali bo'yicha oflayn tekshirish
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    if (!y || !m || !d) return false;
+    const dayOfWeek = new Date(y, m - 1, d).getDay();
+    if (dayOfWeek === 0) return false;
+
+    const days = groupinfo?.days;
+    const customDays = Array.isArray(groupinfo?.custom_days) ? groupinfo.custom_days.map(Number) : [];
+    const darsKunlari = (groupinfo?.dars_kunlari || '').toLowerCase();
+
+    if (days === 'odd' || darsKunlari.includes('dush') || darsKunlari.includes('toq')) {
+      return [1, 3, 5].includes(dayOfWeek);
+    }
+    if (days === 'even' || darsKunlari.includes('sesh') || darsKunlari.includes('juft')) {
+      return [2, 4, 6].includes(dayOfWeek);
+    }
+    if (days === 'everyday' || darsKunlari.includes('har kun')) {
+      return [1, 2, 3, 4, 5, 6].includes(dayOfWeek);
+    }
+    if (days === 'custom' && customDays.length > 0) {
+      return customDays.includes(dayOfWeek);
+    }
+    return false;
+  }, [selectedDate, groupinfo, lessonDates, last3EditableDates]);
 
   // Mentorlar va Adminlar uchun oxirgi 3 ta o'tilgan dars yoki bugungi dars davomatini tahrirlash huquqi
   const canEditAttendance = isLessonDay && permissions.canTakeAttendance && isGroupLogicActive && (

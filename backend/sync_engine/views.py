@@ -87,7 +87,79 @@ class SyncEngineAPIView(APIView):
                             applied_queue_ids.append(queue_id)
                         continue
 
-                    # Hozircha faqat 'leads' va 'attendance' entity qo'llab-quvvatlanadi
+                    # 2. CASHIER / STUDENT PAYMENT SINXRONIZATSIYASI
+                    if entity in ['cashier_payment', 'student_payment']:
+                        try:
+                            from decimal import Decimal
+                            from finance.models import Payment
+                            from groups.models import Student, Group
+                            from finance.services import confirm_student_payment
+                            from finance.utils import normalize_month
+
+                            payment_id = payload.get('payment_id')
+                            student_id = payload.get('student_id')
+                            group_id = payload.get('group_id')
+                            month_str = payload.get('month')
+
+                            if payment_id:
+                                payment = Payment.objects.filter(pk=payment_id).first()
+                            elif student_id and group_id:
+                                norm_month = normalize_month(month_str or timezone.localdate())
+                                student = Student.objects.filter(pk=student_id).first()
+                                group = Group.objects.filter(pk=group_id).first()
+                                if student and group:
+                                    if student.status in ["low_income", "negotiated", "teacher_negotiated"] and student.custom_fee is not None:
+                                        initial_fee = student.custom_fee
+                                    else:
+                                        initial_fee = group.monthly_price or 0
+
+                                    payment, _ = Payment.objects.get_or_create(
+                                        student=student,
+                                        group=group,
+                                        month=norm_month,
+                                        defaults={
+                                            'amount': initial_fee,
+                                            'paid_amount': Decimal('0'),
+                                            'is_paid': False,
+                                            'is_partial': False
+                                        }
+                                    )
+                                else:
+                                    payment = None
+                            else:
+                                payment = None
+
+                            if payment:
+                                confirm_student_payment(request.user, payment, payload)
+                                applied_queue_ids.append(queue_id)
+                            else:
+                                logger.warning(f"[SyncEngine] To'lov topilmadi: queue_id={queue_id}")
+                                applied_queue_ids.append(queue_id)
+                        except Exception as pay_err:
+                            logger.exception(f"[SyncEngine] To'lov sinxronlashda xato: {pay_err}")
+                            applied_queue_ids.append(queue_id)
+                        continue
+
+                    # 3. ADMIN EXPENSE SINXRONIZATSIYASI
+                    if entity == 'admin_expense':
+                        try:
+                            from decimal import Decimal
+                            from finance.models import AdminExpense
+                            AdminExpense.objects.create(
+                                title=payload.get('title') or "Chiqim",
+                                amount=Decimal(str(payload.get('amount') or 0)),
+                                description=payload.get('description', ''),
+                                date=payload.get('date') or timezone.localdate(),
+                                branch_id=payload.get('branch'),
+                                created_by=request.user
+                            )
+                            applied_queue_ids.append(queue_id)
+                        except Exception as exp_err:
+                            logger.exception(f"[SyncEngine] Chiqim sinxronlashda xato: {exp_err}")
+                            applied_queue_ids.append(queue_id)
+                        continue
+
+                    # Hozircha faqat 'leads', 'attendance', 'cashier_payment', 'admin_expense' qo'llab-quvvatlanadi
                     if entity != 'leads':
                         applied_queue_ids.append(queue_id)  # Noma'lum entity — ACK berib o'tamiz
                         continue

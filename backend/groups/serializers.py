@@ -852,6 +852,25 @@ class GroupSerializer(serializers.ModelSerializer):
         elif user.role == "super_admin":
             self.fields["mentor_id"].queryset = User.objects.filter(role="mentor")
 
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, "copy") else dict(data)
+        # 1. start_date bo'sh string bo'lsa None ga o'tkazish (DRF DateField "" ni qabul qilmaydi)
+        if data.get("start_date") == "":
+            data["start_date"] = None
+        # 2. color bo'sh bo'lsa default hex berish
+        if not data.get("color"):
+            data["color"] = "#ffffff"
+        # 3. monthly_price dagi vergullarni tozalash (masalan: "400,000" -> "400000")
+        if isinstance(data.get("monthly_price"), str):
+            data["monthly_price"] = data["monthly_price"].replace(",", "").strip()
+        # 4. custom_days bo'sh yoki None kelsa, fallback qilish
+        if "custom_days" in data and (data["custom_days"] is None or data["custom_days"] == []):
+            if self.instance:
+                data["custom_days"] = self.instance._get_effective_days()
+            else:
+                data["custom_days"] = [0, 2, 4]
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None

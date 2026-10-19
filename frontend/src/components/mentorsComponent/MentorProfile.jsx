@@ -155,7 +155,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                         <div className="relative">
                                             <input
                                                 className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl pl-4 pr-10 py-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-[var(--gold)]/50 transition-colors read-only:opacity-80"
-                                                value={isEditing ? editData.username : mentor.username}
+                                                value={isEditing ? (editData.username ?? "") : (mentor.username ?? "")}
                                                 onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { username: e.target.value } })}
                                                 readOnly={!isEditing}
                                             />
@@ -167,7 +167,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                         <div className="relative">
                                             <input
                                                 className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl pl-4 pr-10 py-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-[var(--gold)]/50 transition-colors read-only:opacity-80"
-                                                value={isEditing ? editData.phone_number : (mentor.phone_number || "Kiritilmagan")}
+                                                value={isEditing ? (editData.phone_number ?? "") : (mentor.phone_number || "Kiritilmagan")}
                                                 onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { phone_number: e.target.value } })}
                                                 readOnly={!isEditing}
                                             />
@@ -181,7 +181,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                                 <input
                                                     type={showPassword ? "text" : "password"}
                                                     className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl px-4 py-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-[var(--gold)]/50 transition-colors"
-                                                    value={editData.password || ""}
+                                                    value={editData.password ?? ""}
                                                     onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { password: e.target.value } })}
                                                     placeholder="••••••••"
                                                 />
@@ -219,7 +219,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                     <label className="text-[9px] font-bold text-[var(--text-muted)] ml-1">Ism</label>
                                     <input
                                         className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl px-4 py-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-[var(--gold)]/50 transition-colors read-only:opacity-80"
-                                        value={isEditing ? editData.first_name : mentor.first_name}
+                                        value={isEditing ? (editData.first_name ?? "") : (mentor.first_name ?? "")}
                                         onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { first_name: e.target.value } })}
                                         readOnly={!isEditing}
                                     />
@@ -228,7 +228,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                     <label className="text-[9px] font-bold text-[var(--text-muted)] ml-1">Familiya</label>
                                     <input
                                         className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl px-4 py-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-[var(--gold)]/50 transition-colors read-only:opacity-80"
-                                        value={isEditing ? editData.last_name : mentor.last_name}
+                                        value={isEditing ? (editData.last_name ?? "") : (mentor.last_name ?? "")}
                                         onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { last_name: e.target.value } })}
                                         readOnly={!isEditing}
                                     />
@@ -245,10 +245,19 @@ export default function MentorProfilePage({ viewMode = "all" }) {
 
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Mutaxassislik</h3>
-                                <div className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl px-5 py-4 flex items-center justify-between">
-                                    <span className="text-sm font-bold capitalize">{mentor.subject || "Mentor"}</span>
-                                    <ChevronRight size={16} className="text-[var(--text-muted)] rotate-90" />
-                                </div>
+                                {isEditing ? (
+                                    <input
+                                        className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl px-4 py-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-[var(--gold)]/50 transition-colors"
+                                        value={editData.subject ?? ""}
+                                        onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { subject: e.target.value } })}
+                                        placeholder="Fan / Mutaxassislik"
+                                    />
+                                ) : (
+                                    <div className="w-full bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl px-5 py-4 flex items-center justify-between">
+                                        <span className="text-sm font-bold capitalize">{mentor.subject || "Mentor"}</span>
+                                        <ChevronRight size={16} className="text-[var(--text-muted)] rotate-90" />
+                                    </div>
+                                )}
                             </div>
 
                         </div>

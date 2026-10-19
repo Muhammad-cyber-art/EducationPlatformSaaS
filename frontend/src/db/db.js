@@ -13,21 +13,13 @@ import Dexie from 'dexie';
  * - sync_queue: Serverga yuborilishi kerak bo'lgan mutatsiyalar navbati (Outbox)
  * - sync_meta: Sinxronizatsiya metama'lumotlari
  */
-export const db = new Dexie('EduPlatformCRM_v1');
+export const db = new Dexie('EduPlatformCRM_v2');
 
-// Sxema versiyasi 1 (eski o'rnatilgan brauzerlar bilan muvofiqlik uchun saqlanadi)
+// Barcha jadvallar 1-versiyada to'liq va bir vaqtda yaratiladi (Upgrade ziddiyatlari oldini oladi)
 db.version(1).stores({
   leads: '&id, name, phone, status, updated_at, is_deleted, [is_deleted+updated_at]',
-  sync_queue: '++queue_id, entity, action, created_at, status',
-  sync_meta: '&key, value',
-});
-
-// Sxema versiyasi 2: Asosiy ta'lim modullari
-db.version(2).stores({
-  leads: '&id, name, phone, status, updated_at, is_deleted, [is_deleted+updated_at]',
   groups: '&id, name, mentor_id, branch_id, updated_at',
-  students: '&id, full_name, phone, branch_id, [branch_id+is_active], updated_at',
-  // group_id va date bo'yicha tezkor kalit: "12_2026-10-18"
+  students: '&id, full_name, phone, group_id, branch_id, [branch_id+is_active], updated_at',
   attendance_drafts: '&key, group_id, date, updated_at',
   attendance_records: '++local_id, [group_id+date+student_id], group_id, date, student_id, is_present, updated_at',
   query_cache: '&query_key, data, updated_at',
@@ -35,10 +27,31 @@ db.version(2).stores({
   sync_meta: '&key, value',
 });
 
-// Sxema versiyasi 3: students jadvalida group_id bo'yicha indeks qo'shildi
-db.version(3).stores({
-  students: '&id, full_name, phone, group_id, branch_id, [branch_id+is_active], updated_at',
-});
+// Eski EduPlatformCRM_v1 bazasidan navbatdagi mutatsiyalarni xavfsiz ko'chirish
+if (typeof window !== 'undefined' && window.indexedDB) {
+  try {
+    const oldReq = window.indexedDB.open('EduPlatformCRM_v1');
+    oldReq.onsuccess = (e) => {
+      const oldDb = e.target.result;
+      if (oldDb.objectStoreNames.contains('sync_queue')) {
+        const tx = oldDb.transaction('sync_queue', 'readonly');
+        const store = tx.objectStore('sync_queue');
+        const getAllReq = store.getAll();
+        getAllReq.onsuccess = () => {
+          const items = getAllReq.result || [];
+          const pending = items.filter(it => it && it.status === 'pending');
+          if (pending.length > 0) {
+            db.sync_queue.bulkAdd(pending.map(({ queue_id, ...rest }) => rest)).catch(() => {});
+          }
+          oldDb.close();
+          try { window.indexedDB.deleteDatabase('EduPlatformCRM_v1'); } catch (_) {}
+        };
+      } else {
+        oldDb.close();
+      }
+    };
+  } catch (_) {}
+}
 
 // ==========================================
 // YORDAMCHI: DB ochilganda xatolarni ushlab qolish
@@ -213,6 +226,165 @@ export async function queueAttendanceConfirm(groupId, date, attendancesList, mar
     // 4. Qoralamani o'chirish
     await db.attendance_drafts.delete(`${groupId}_${date}`);
   });
+
+  return { success: true, queued: true };
+}
+
+// ==========================================
+// KASSA & TO'LOVLAR (FINANCE) OFFLAYN METODLARI
+// ==========================================
+
+/**
+ * Kassadan o'quvchi to'lovini oflayn qabul qilish:
+ * 1. db.sync_queue ga 'cashier_payment' qo'shadi
+ * 2. db.query_cache dagi `cashier-desk_${branch_id}_${month}` ni optimistik yangilaydi
+ * 3. TanStack Query cache ni darhol yangilab ekranda to'langan ko'rsatadi
+ */
+export async function queueCashierPayment(paymentPayload, queryClient = null) {
+  const nowIso = new Date().toISOString();
+  const queueItem = {
+    action: 'pay',
+    entity: 'cashier_payment',
+    data: paymentPayload,
+    created_at: nowIso,
+    status: 'pending',
+  };
+
+  await db.sync_queue.add(queueItem);
+
+  const { branch_id, student_id, group_id, month, amount, payment_method } = paymentPayload;
+  const numAmount = Number(amount || 0);
+  const curMonth = month ? String(month).substring(0, 7) : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+  if (branch_id) {
+    const deskKey = `cashier-desk_${branch_id}_${curMonth}`;
+    try {
+      const cachedDesk = await db.query_cache.get(deskKey);
+      if (cachedDesk?.data) {
+        const desk = JSON.parse(JSON.stringify(cachedDesk.data));
+
+        // 1. Filial kassa ko'rsatkichlari (Bugungi kirim va balans)
+        if (desk.branch) {
+          desk.branch.today_income = (desk.branch.today_income || 0) + numAmount;
+          desk.branch.today_balance = (desk.branch.today_balance || 0) + numAmount;
+          if (payment_method === 'cash') {
+            desk.branch.today_cash = (desk.branch.today_cash || 0) + numAmount;
+          } else {
+            desk.branch.today_card = (desk.branch.today_card || 0) + numAmount;
+          }
+        }
+
+        // 2. Filial umumiy xulosasi
+        if (desk.summary) {
+          desk.summary.total_collected_month = (desk.summary.total_collected_month || 0) + numAmount;
+          desk.summary.total_debt_amount = Math.max(0, (desk.summary.total_debt_amount || 0) - numAmount);
+        }
+
+        // 3. Guruh va O'quvchi kartasi
+        const grp = desk.rosters?.[group_id];
+        if (grp) {
+          grp.total_collected = (grp.total_collected || 0) + numAmount;
+          grp.total_debt = Math.max(0, (grp.total_debt || 0) - numAmount);
+
+          const st = grp.students?.find((s) => Number(s.student_id) === Number(student_id));
+          if (st) {
+            const oldRem = Number(st.remaining_amount || 0);
+            const newRem = Math.max(0, oldRem - numAmount);
+            st.paid_amount = (Number(st.paid_amount) || 0) + numAmount;
+            st.remaining_amount = newRem;
+            st.is_paid = newRem <= 0;
+            st.is_partial = newRem > 0 && st.paid_amount > 0;
+            st.payment_method = payment_method;
+            st.paid_at = nowIso;
+
+            if (st.is_paid) {
+              grp.paid_count = (grp.paid_count || 0) + 1;
+              grp.unpaid_count = Math.max(0, (grp.unpaid_count || 0) - 1);
+              if (desk.summary && typeof desk.summary.total_debtors === 'number') {
+                desk.summary.total_debtors = Math.max(0, desk.summary.total_debtors - 1);
+              }
+            }
+          }
+        }
+
+        // 4. Qarzdorlar ro'yxatidan yangilash / o'chirish
+        if (Array.isArray(desk.debtors)) {
+          const dIdx = desk.debtors.findIndex(
+            (d) => Number(d.student_id) === Number(student_id) && Number(d.group_id) === Number(group_id)
+          );
+          if (dIdx !== -1) {
+            const rem = Math.max(0, Number(desk.debtors[dIdx].remaining_amount || 0) - numAmount);
+            if (rem <= 0) {
+              desk.debtors.splice(dIdx, 1);
+            } else {
+              desk.debtors[dIdx].remaining_amount = rem;
+              desk.debtors[dIdx].paid_amount = (Number(desk.debtors[dIdx].paid_amount) || 0) + numAmount;
+            }
+          }
+        }
+
+        await db.query_cache.put({
+          query_key: deskKey,
+          data: desk,
+          updated_at: nowIso,
+        });
+
+        if (queryClient) {
+          queryClient.setQueryData(['cashier-desk', Number(branch_id), curMonth], desk);
+          queryClient.setQueryData(['cashier-desk', String(branch_id), curMonth], desk);
+        }
+      }
+    } catch (e) {
+      console.warn('[DB] queueCashierPayment optimistic update error:', e);
+    }
+  }
+
+  return { success: true, queued: true };
+}
+
+/**
+ * Kassadan operatsion chiqim kiritish (Oflayn):
+ * 1. db.sync_queue ga 'admin_expense' qo'shadi
+ * 2. cashier-desk dagi bugungi chiqim va balansni kamaytiradi
+ */
+export async function queueAdminExpense(expensePayload, queryClient = null) {
+  const nowIso = new Date().toISOString();
+  await db.sync_queue.add({
+    action: 'create',
+    entity: 'admin_expense',
+    data: expensePayload,
+    created_at: nowIso,
+    status: 'pending',
+  });
+
+  const { branch, amount } = expensePayload;
+  const numAmount = Number(amount || 0);
+  const curMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+  if (branch) {
+    const deskKey = `cashier-desk_${branch}_${curMonth}`;
+    try {
+      const cachedDesk = await db.query_cache.get(deskKey);
+      if (cachedDesk?.data) {
+        const desk = JSON.parse(JSON.stringify(cachedDesk.data));
+        if (desk.branch) {
+          desk.branch.today_expense = (desk.branch.today_expense || 0) + numAmount;
+          desk.branch.today_balance = (desk.branch.today_balance || 0) - numAmount;
+        }
+        await db.query_cache.put({
+          query_key: deskKey,
+          data: desk,
+          updated_at: nowIso,
+        });
+        if (queryClient) {
+          queryClient.setQueryData(['cashier-desk', Number(branch), curMonth], desk);
+          queryClient.setQueryData(['cashier-desk', String(branch), curMonth], desk);
+        }
+      }
+    } catch (e) {
+      console.warn('[DB] queueAdminExpense optimistic update error:', e);
+    }
+  }
 
   return { success: true, queued: true };
 }

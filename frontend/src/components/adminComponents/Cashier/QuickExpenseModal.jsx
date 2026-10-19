@@ -4,7 +4,11 @@ import api from '../../../tokenUpdater/updater';
 import toast from 'react-hot-toast';
 import AmountInput from '../../Common/AmountInput';
 
+import { useQueryClient } from '@tanstack/react-query';
+import { queueAdminExpense } from '../../../db/db';
+
 export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpenseAdded }) {
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -25,15 +29,38 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
       return;
     }
 
+    const payload = {
+      title: title.trim(),
+      amount: numAmount,
+      description: description.trim(),
+      date,
+      branch: branchId
+    };
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        setSubmitting(true);
+        await queueAdminExpense(payload, queryClient);
+        toast.success("Chiqim oflayn saqlandi! Internet tiklanganda serverga yuboriladi.", {
+          icon: '💾',
+          duration: 4000
+        });
+        setTitle('');
+        setAmount('');
+        setDescription('');
+        onExpenseAdded();
+        onClose();
+      } catch (_) {
+        toast.error("Chiqimni saqlashda xatolik yuz berdi");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     try {
       setSubmitting(true);
-      await api.post('/finance/admin-expenses/', {
-        title: title.trim(),
-        amount: numAmount,
-        description: description.trim(),
-        date,
-        branch: branchId
-      });
+      await api.post('/finance/admin-expenses/', payload);
       toast.success("Kassadan chiqim muvaffaqiyatli saqlandi!");
       setTitle('');
       setAmount('');
@@ -41,8 +68,21 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
       onExpenseAdded();
       onClose();
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.detail || "Chiqim kiritishda xatolik yuz berdi");
+      const isNetworkErr = !err.response || err.code === 'ERR_NETWORK' || err.isOffline;
+      if (isNetworkErr) {
+        await queueAdminExpense(payload, queryClient);
+        toast.success("Tarmoq uzildi. Chiqim oflayn saqlandi va internet tiklanganda serverga yuboriladi.", {
+          icon: '💾',
+          duration: 4000
+        });
+        setTitle('');
+        setAmount('');
+        setDescription('');
+        onExpenseAdded();
+        onClose();
+      } else {
+        toast.error(err.response?.data?.detail || "Chiqim kiritishda xatolik yuz berdi");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -50,10 +90,10 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-md bg-[var(--bg-panel)] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden p-6 relative">
+      <div className="w-full max-w-md bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-2xl overflow-hidden p-6 relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-[var(--text-muted)] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+          className="absolute top-4 right-4 p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--border-glass)]/30 transition-colors"
         >
           <X size={20} />
         </button>
@@ -81,7 +121,7 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
                 placeholder="Masalan: Kantselyariya, tozalash vositalari..."
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 text-sm bg-[var(--bg-void)] border border-zinc-800 rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] transition-colors"
+                className="w-full pl-9 pr-3 py-2.5 text-sm bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)] transition-colors"
               />
             </div>
           </div>
@@ -97,7 +137,7 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
                 placeholder="0"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full pl-9 pr-14 py-2.5 text-sm font-semibold bg-[var(--bg-void)] border border-zinc-800 rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-rose-500 transition-colors"
+                className="w-full pl-9 pr-14 py-2.5 text-sm font-semibold bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-rose-500 transition-colors"
               />
             </div>
           </div>
@@ -112,7 +152,7 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 text-sm bg-[var(--bg-void)] border border-zinc-800 rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] transition-colors"
+                className="w-full pl-9 pr-3 py-2.5 text-sm bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] transition-colors"
               />
             </div>
           </div>
@@ -126,7 +166,7 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
               placeholder="Sabab yoki tafsilot..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-3 text-sm bg-[var(--bg-void)] border border-zinc-800 rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] transition-colors resize-none"
+              className="w-full p-3 text-sm bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)] transition-colors resize-none"
             />
           </div>
 
@@ -135,7 +175,7 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-4 py-2.5 text-xs font-semibold text-[var(--text-muted)] hover:text-white rounded-xl hover:bg-white/5 transition-colors"
+              className="px-4 py-2.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-xl hover:bg-[var(--border-glass)]/30 transition-colors"
             >
               Bekor qilish
             </button>

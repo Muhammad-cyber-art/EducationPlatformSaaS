@@ -82,8 +82,16 @@ class AttendanceOfflineService {
       // Guruhlarni branch_id bo'yicha guruhlab to'playmiz (keyinchalik groups-list cache uchun)
       const groupsByBranch = new Map(); // key: branch_id (Number), value: [group_detail, ...]
 
-      // IndexedDB ga atomik tarzda yozish
-      await db.transaction('rw', [db.groups, db.students, db.attendance_records, db.query_cache, db.sync_meta], async () => {
+      // DB ochiqligini kafolatlash
+      if (!db.isOpen()) {
+        try {
+          await db.open();
+        } catch (openErr) {
+          console.warn('[AttendanceOfflineService] db.open warning:', openErr);
+        }
+      }
+
+      const saveAllBundleData = async () => {
         for (const item of bundle) {
           const groupId = Number(item.group_id);
 
@@ -265,7 +273,21 @@ class AttendanceOfflineService {
           key: 'last_attendance_prefetched_at',
           value: nowIso,
         });
-      });
+      };
+
+      // IndexedDB ga xavfsiz yozish: tranzaksiya bilan yoki to'g'ridan-to'g'ri (fallback)
+      try {
+        await db.transaction('rw', [db.groups, db.students, db.attendance_records, db.query_cache, db.sync_meta, db.sync_queue], async () => {
+          await saveAllBundleData();
+        });
+      } catch (txErr) {
+        console.warn('[AttendanceOfflineService] Transaction write error, falling back to direct puts:', txErr?.message);
+        try {
+          await saveAllBundleData();
+        } catch (fbErr) {
+          console.warn('[AttendanceOfflineService] Direct save fallback error:', fbErr?.message);
+        }
+      }
 
       // Transaction tugagandan keyin guruhlar ro'yxatini TanStack Query cache ga joylash.
       // Bu — GroupsPage oflayn holatda guruhlarni ko'rsatishi uchun eng muhim qadam.
@@ -297,25 +319,38 @@ class AttendanceOfflineService {
 
       // 5. Kassa va to'lov ma'lumotlarini (Cashier Desk) lokal keshga olish
       try {
-        const storedBranch = localStorage.getItem('active_branch_id') || localStorage.getItem('branch_id');
+        const { get_user_info } = await import('../components/Authorized/getRole');
+        const userInfo = get_user_info();
+        const storedBranch = localStorage.getItem('active_branch_id') || localStorage.getItem('branch_id') || userInfo?.branch_id;
+        const branchIds = new Set();
+        if (storedBranch) branchIds.add(String(storedBranch));
+        if (userInfo?.branch_id) branchIds.add(String(userInfo.branch_id));
+        if (Array.isArray(userInfo?.accessible_branches)) {
+          userInfo.accessible_branches.forEach((b) => {
+            if (b.branch_id) branchIds.add(String(b.branch_id));
+          });
+        }
+
         const now = new Date();
         const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        if (storedBranch) {
-          const cashRes = await api.get('/finance/student-payments/cashier-desk/', {
-            params: { branch_id: storedBranch, month: curMonth },
-            timeout: 8000,
-          });
-          if (cashRes.data) {
-            await db.query_cache.put({
-              query_key: `cashier-desk_${storedBranch}_${curMonth}`,
-              data: cashRes.data,
-              updated_at: nowIso,
+        for (const bId of branchIds) {
+          try {
+            const cashRes = await api.get('/finance/student-payments/cashier-desk/', {
+              params: { branch_id: bId, month: curMonth },
+              timeout: 8000,
             });
-            if (this.queryClient) {
-              this.queryClient.setQueryData(['cashier-desk', Number(storedBranch), curMonth], cashRes.data);
-              this.queryClient.setQueryData(['cashier-desk', String(storedBranch), curMonth], cashRes.data);
+            if (cashRes.data) {
+              await db.query_cache.put({
+                query_key: `cashier-desk_${bId}_${curMonth}`,
+                data: cashRes.data,
+                updated_at: nowIso,
+              });
+              if (this.queryClient) {
+                this.queryClient.setQueryData(['cashier-desk', Number(bId), curMonth], cashRes.data);
+                this.queryClient.setQueryData(['cashier-desk', String(bId), curMonth], cashRes.data);
+              }
             }
-          }
+          } catch (_) {}
         }
       } catch (cashErr) {
         console.warn('[AttendanceOfflineService] Cashier prefetch skipped:', cashErr?.message);

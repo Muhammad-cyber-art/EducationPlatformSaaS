@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { UserPlus, Send, MoreVertical, Edit3, UserRoundPlus, Activity, Target, Trash2, Check, ArrowRightLeft, FolderKanban } from "lucide-react";
 import GoBackButton from "../../sendback";
 import SyncStatusBadge from "../../SyncStatusBadge";
+import { normalizeCustomDays } from "../../../utils/scheduleUtils";
 
 const GroupHeader = ({
   isEditing,
@@ -231,7 +232,21 @@ const GroupHeader = ({
           {/* Desktop menu (without Send) */}
           <div className="hidden sm:block">
             {canEditGroup && (
-              <button onClick={() => uiDispatch({ type: "START_EDITING", payload: { ...groupinfo, mentor_id: groupinfo.mentor?.id } })} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--text-primary)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all">
+              <button
+                onClick={() =>
+                  uiDispatch({
+                    type: "START_EDITING",
+                    payload: {
+                      ...groupinfo,
+                      mentor_id: groupinfo.mentor?.id || groupinfo.mentor_id || "",
+                      custom_days: normalizeCustomDays(groupinfo.custom_days, groupinfo.days),
+                      start_date: groupinfo.start_date || "",
+                      color: groupinfo.color || "#ffffff",
+                    },
+                  })
+                }
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--text-primary)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all"
+              >
                 <Edit3 size={14} className="text-[var(--gold)]" /> Guruhni tahrirlash
               </button>
             )}
@@ -272,7 +287,21 @@ const GroupHeader = ({
               </button>
             )}
             {canEditGroup && (
-              <button onClick={() => uiDispatch({ type: "START_EDITING", payload: { ...groupinfo, mentor_id: groupinfo.mentor?.id } })} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--text-primary)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all">
+              <button
+                onClick={() =>
+                  uiDispatch({
+                    type: "START_EDITING",
+                    payload: {
+                      ...groupinfo,
+                      mentor_id: groupinfo.mentor?.id || groupinfo.mentor_id || "",
+                      custom_days: normalizeCustomDays(groupinfo.custom_days, groupinfo.days),
+                      start_date: groupinfo.start_date || "",
+                      color: groupinfo.color || "#ffffff",
+                    },
+                  })
+                }
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--text-primary)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all"
+              >
                 <Edit3 size={14} className="text-[var(--gold)]" /> Guruhni tahrirlash
               </button>
             )}

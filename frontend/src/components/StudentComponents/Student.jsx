@@ -104,7 +104,7 @@ function reducer(state, action) {
 }
 
 export default function StudentProfilePage() {
-  const { student_id } = useParams();
+  const { student_id, group_id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const branchID = useCurrentBranch();
@@ -138,10 +138,19 @@ export default function StudentProfilePage() {
   } = mutations;
 
   // Derived Data
-  const groups = useMemo(
-    () => studentData?.groups || [],
-    [studentData?.groups],
-  );
+  const groups = useMemo(() => {
+    if (studentData?.groups && Array.isArray(studentData.groups) && studentData.groups.length > 0) {
+      return studentData.groups;
+    }
+    if (studentData?.group && typeof studentData.group === "object" && studentData.group.id) {
+      return [studentData.group];
+    }
+    if (group_id && branchGroups && Array.isArray(branchGroups)) {
+      const match = branchGroups.find((g) => String(g.id) === String(group_id));
+      if (match) return [match];
+    }
+    return [];
+  }, [studentData?.groups, studentData?.group, group_id, branchGroups]);
   const primaryGroup = useMemo(() => groups[0] || {}, [groups]);
   const paymentsArray = useMemo(
     () => (Array.isArray(paymentsAllGroups) ? paymentsAllGroups : []),
@@ -412,7 +421,7 @@ export default function StudentProfilePage() {
             <StudentAttendanceHeatmap
               studentId={student_id}
               studentName={studentData?.full_name}
-              studentGroups={studentData?.groups || []}
+              studentGroups={groups}
             />
           </div>
         </div>

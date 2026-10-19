@@ -124,6 +124,8 @@ class Payment(models.Model):
     @property
     def remaining_amount(self):
         """Qolgan qarz summasi"""
+        if self.is_paid:
+            return Decimal('0')
         expected = Decimal(str(self.amount or 0))
         paid = Decimal(str(self.paid_amount or 0))
         return max(Decimal('0'), expected - paid)
@@ -158,7 +160,8 @@ class Payment(models.Model):
         with db_transaction.atomic():
             if self.pk:
                 locked = Payment.objects.select_for_update().get(pk=self.pk)
-                self.amount = locked.amount
+                if self.amount is None:
+                    self.amount = locked.amount
                 self.paid_amount = locked.paid_amount
                 self.is_paid = locked.is_paid
                 self.is_partial = locked.is_partial
@@ -212,6 +215,7 @@ class Payment(models.Model):
                 if is_full_amount and self.paid_amount > 0:
                     self.is_paid = True
                     self.is_partial = False
+                    self.amount = self.paid_amount
                 elif expected == 0 and self.paid_amount > 0:
                     self.is_paid = False
                     self.is_partial = True

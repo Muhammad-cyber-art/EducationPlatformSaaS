@@ -137,6 +137,18 @@ class SyncManager {
     if (applied_queue_ids.length > 0) {
       const idsToDelete = applied_queue_ids.map(Number);
       await db.sync_queue.bulkDelete(idsToDelete);
+
+      // Agar kassa/to'lovlar sinxronlangan bo'lsa, moliya keshini serverdan yangilab olamiz
+      const hasFinanceSync = queueItems.some(
+        (it) => it.entity === 'cashier_payment' || it.entity === 'admin_expense' || it.entity === 'student_payment'
+      );
+      if (hasFinanceSync) {
+        import('./financeOfflineService')
+          .then(({ financeOfflineService }) => {
+            financeOfflineService.prefetchFinanceBundle().catch(() => {});
+          })
+          .catch(() => {});
+      }
     }
 
     this.notify('push_success', { pushedCount: applied_queue_ids.length });

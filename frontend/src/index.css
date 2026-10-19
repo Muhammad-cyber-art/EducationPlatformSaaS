@@ -129,7 +129,8 @@
 }
 
 /* Light theme default text color for plain text-white elements */
-[data-theme='light'] [class*='text-white'] {
+[data-theme='light'] .text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] [class~='text-white']:not([class*='hover:']):not([class*='bg-']) {
   color: #4a3d31;
 }
 
@@ -160,29 +161,62 @@
 [data-theme='light'] button[class*='bg-zinc']:not([class*='hover:']):not([class*='/']) *,
 [data-theme='light'] button[class*='bg-[#']:not([class*='hover:']):not([class*='/']),
 [data-theme='light'] button[class*='bg-[#']:not([class*='hover:']):not([class*='/']) *,
-[data-theme='light'] [class*='bg-red-6'] [class*='text-white'],
-[data-theme='light'] [class*='bg-red-7'] [class*='text-white'],
-[data-theme='light'] [class*='bg-red-8'] [class*='text-white'],
-[data-theme='light'] [class*='bg-red-9'] [class*='text-white'],
-[data-theme='light'] [class*='bg-emerald-6'] [class*='text-white'],
-[data-theme='light'] [class*='bg-emerald-7'] [class*='text-white'],
-[data-theme='light'] [class*='bg-green-6'] [class*='text-white'],
-[data-theme='light'] [class*='bg-green-7'] [class*='text-white'],
-[data-theme='light'] [class*='bg-blue-6'] [class*='text-white'],
-[data-theme='light'] [class*='bg-blue-7'] [class*='text-white'],
-[data-theme='light'] [class*='bg-black'] [class*='text-white'],
-[data-theme='light'] [class*='bg-zinc-8'] [class*='text-white'],
-[data-theme='light'] [class*='bg-zinc-9'] [class*='text-white'],
+[data-theme='light'] [class*='bg-red-6'] .text-white,
+[data-theme='light'] [class*='bg-red-6'] [class~='text-white'],
+[data-theme='light'] [class*='bg-red-7'] .text-white,
+[data-theme='light'] [class*='bg-red-7'] [class~='text-white'],
+[data-theme='light'] [class*='bg-red-8'] .text-white,
+[data-theme='light'] [class*='bg-red-8'] [class~='text-white'],
+[data-theme='light'] [class*='bg-red-9'] .text-white,
+[data-theme='light'] [class*='bg-red-9'] [class~='text-white'],
+[data-theme='light'] [class*='bg-emerald-6'] .text-white,
+[data-theme='light'] [class*='bg-emerald-6'] [class~='text-white'],
+[data-theme='light'] [class*='bg-emerald-7'] .text-white,
+[data-theme='light'] [class*='bg-emerald-7'] [class~='text-white'],
+[data-theme='light'] [class*='bg-green-6'] .text-white,
+[data-theme='light'] [class*='bg-green-6'] [class~='text-white'],
+[data-theme='light'] [class*='bg-green-7'] .text-white,
+[data-theme='light'] [class*='bg-green-7'] [class~='text-white'],
+[data-theme='light'] [class*='bg-blue-6'] .text-white,
+[data-theme='light'] [class*='bg-blue-6'] [class~='text-white'],
+[data-theme='light'] [class*='bg-blue-7'] .text-white,
+[data-theme='light'] [class*='bg-blue-7'] [class~='text-white'],
+[data-theme='light'] [class*='bg-black']:not([class*='/']) .text-white,
+[data-theme='light'] [class*='bg-black']:not([class*='/']) [class~='text-white'],
+[data-theme='light'] [class*='bg-zinc-8']:not([class*='/']) .text-white,
+[data-theme='light'] [class*='bg-zinc-8']:not([class*='/']) [class~='text-white'],
+[data-theme='light'] [class*='bg-zinc-9']:not([class*='/']) .text-white,
+[data-theme='light'] [class*='bg-zinc-9']:not([class*='/']) [class~='text-white'],
 [data-theme='light'] [class*='bg-[#16a34a]'],
 [data-theme='light'] [class*='bg-[#16a34a]'] *,
 [data-theme='light'] [class*='bg-[#991b1b]'],
 [data-theme='light'] [class*='bg-[#991b1b]'] *,
-[data-theme='light'] [class*='bg-[#0a0a0a]'] [class*='text-white'],
-[data-theme='light'] [class*='bg-[#080808]'] [class*='text-white'],
-[data-theme='light'] [class*='bg-[#000000]'] [class*='text-white'],
+[data-theme='light'] [class*='bg-[#0a0a0a]']:not([class*='/']) .text-white,
+[data-theme='light'] [class*='bg-[#0a0a0a]']:not([class*='/']) [class~='text-white'],
+[data-theme='light'] [class*='bg-[#080808]']:not([class*='/']) .text-white,
+[data-theme='light'] [class*='bg-[#080808]']:not([class*='/']) [class~='text-white'],
+[data-theme='light'] [class*='bg-[#000000]']:not([class*='/']) .text-white,
+[data-theme='light'] [class*='bg-[#000000]']:not([class*='/']) [class~='text-white'],
 [data-theme='light'] .dark-tooltip,
 [data-theme='light'] .dark-tooltip * {
   color: #ffffff !important;
+}
+
+/* Danger / Cancel Action Buttons styling */
+[data-theme='light'] .btn-danger-action {
+  background-color: #fff1f2 !important;
+  border-color: rgba(244, 63, 94, 0.3) !important;
+  color: #e11d48 !important;
+}
+[data-theme='light'] .btn-danger-action:hover {
+  background-color: #e11d48 !important;
+  border-color: #e11d48 !important;
+  color: #ffffff !important;
+}
+[data-theme='light'] .btn-danger-action svg,
+[data-theme='light'] .btn-danger-action span {
+  color: inherit !important;
+  stroke: currentColor !important;
 }
 
 [data-theme='light'] [class*='bg-[#16a34a]'] svg,

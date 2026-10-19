@@ -48,6 +48,14 @@ export default function CashierDashboard() {
   } = useQuery({
     queryKey: ['cashier-desk', currentBranchId, selectedMonth],
     queryFn: async () => {
+      // 1. Agar oflayn bo'lsa, tarmoq so'rovini kutmasdan darhol keshdan o'qiymiz (0ms delay)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await db.query_cache.get(`cashier-desk_${currentBranchId}_${selectedMonth}`);
+        if (cached?.data) {
+          return cached.data;
+        }
+      }
+
       try {
         const res = await api.get('/finance/student-payments/cashier-desk/', {
           params: {
@@ -122,25 +130,31 @@ export default function CashierDashboard() {
     <div className="flex flex-col h-[calc(100vh-4rem)] p-3 sm:p-5 space-y-4 max-w-[1700px] mx-auto animate-in fade-in duration-300">
       
       {/* TOP HEADER & LIVE CASH REGISTER (BranchCashDesk) */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-5 bg-[var(--bg-panel)]/50 border border-zinc-800/80 rounded-2xl shadow-xl backdrop-blur-xl relative overflow-hidden group">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-5 bg-[var(--bg-panel)]/50 border border-[var(--border-glass)] rounded-2xl shadow-xl backdrop-blur-xl relative overflow-hidden group">
         <div className="flex items-center gap-3.5 sm:gap-5">
-          <div className="w-11 h-11 rounded-2xl bg-[var(--gold)]/10 border border-zinc-800 flex items-center justify-center text-[var(--gold)] shrink-0 shadow-lg shadow-[var(--gold)]/5">
+          <div className="w-11 h-11 rounded-2xl bg-[var(--gold)]/10 border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] shrink-0 shadow-lg shadow-[var(--gold)]/5">
             <Wallet size={24} />
           </div>
 
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">
+              <h1 className="text-lg sm:text-2xl font-black text-[var(--text-primary)] tracking-tight">
                 Filial Kassasi (POS Desk)
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--gold)]/15 text-[var(--gold)] border border-zinc-800 flex items-center gap-1">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--gold)]/15 text-[var(--gold)] border border-[var(--border-glass)] flex items-center gap-1">
                 <Building2 size={12} />
                 {currentBranchName || branchDesk.branch_name || "Filial"}
               </span>
+              {typeof navigator !== 'undefined' && !navigator.onLine && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1.5 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Oflayn Rejim (Lokal Baza)
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-[var(--text-muted)] font-medium flex items-center gap-2 mt-0.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Kunlik o'quvchi to'lovlarini tezkor qabul qilish va kassa monitoringi
+              <span className={`inline-block w-2 h-2 rounded-full ${typeof navigator !== 'undefined' && !navigator.onLine ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+              {typeof navigator !== 'undefined' && !navigator.onLine ? "Internet aloqasi yo'q — ma'lumotlar qurilmadagi bazadan ko'rsatilmoqda" : "Kunlik o'quvchi to'lovlarini tezkor qabul qilish va kassa monitoringi"}
             </p>
           </div>
         </div>
@@ -148,11 +162,11 @@ export default function CashierDashboard() {
         {/* Live Cash Register Metrics */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Today Inflow */}
-          <div className="px-3.5 py-2 bg-[var(--bg-void)] border border-zinc-800/60 rounded-xl flex flex-col justify-center min-w-[130px]">
+          <div className="px-3.5 py-2 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl flex flex-col justify-center min-w-[130px]">
             <span className="text-[9px] font-black text-[var(--gold)] uppercase tracking-wider flex items-center gap-1">
               <PlusCircle size={10} /> Bugungi Kirim
             </span>
-            <span className="text-sm sm:text-base font-black text-white tabular-nums">
+            <span className="text-sm sm:text-base font-black text-[var(--text-primary)] tabular-nums">
               {formatCurrency(branchDesk.today_income)}
             </span>
             <span className="text-[9px] text-[var(--text-muted)] mt-0.5">
@@ -161,27 +175,27 @@ export default function CashierDashboard() {
           </div>
 
           {/* Today Outflow */}
-          <div className="px-3.5 py-2 bg-rose-500/5 border border-zinc-800/60 rounded-xl flex flex-col justify-center min-w-[110px]">
-            <span className="text-[9px] font-black text-rose-400 uppercase tracking-wider flex items-center gap-1">
+          <div className="px-3.5 py-2 bg-rose-500/5 border border-[var(--border-glass)] rounded-xl flex flex-col justify-center min-w-[110px]">
+            <span className="text-[9px] font-black text-rose-500 uppercase tracking-wider flex items-center gap-1">
               <TrendingDown size={10} /> Chiqim
             </span>
-            <span className="text-sm sm:text-base font-black text-rose-400 tabular-nums">
+            <span className="text-sm sm:text-base font-black text-rose-500 tabular-nums">
               {formatCurrency(branchDesk.today_expense)}
             </span>
-            <span className="text-[9px] text-zinc-500 mt-0.5">
+            <span className="text-[9px] text-[var(--text-muted)] mt-0.5">
               Operatsion harajat
             </span>
           </div>
 
           {/* Cash Drawer Balance */}
-          <div className="px-3.5 py-2 bg-emerald-500/5 border border-zinc-800/60 rounded-xl flex flex-col justify-center min-w-[120px]">
-            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+          <div className="px-3.5 py-2 bg-emerald-500/5 border border-[var(--border-glass)] rounded-xl flex flex-col justify-center min-w-[120px]">
+            <span className="text-[9px] font-black text-emerald-500 uppercase tracking-wider flex items-center gap-1">
               <DollarSign size={10} /> Kassa Qoldig'i
             </span>
-            <span className="text-sm sm:text-base font-black text-emerald-400 tabular-nums">
+            <span className="text-sm sm:text-base font-black text-emerald-500 tabular-nums">
               {formatCurrency(branchDesk.today_balance)}
             </span>
-            <span className="text-[9px] text-zinc-500 mt-0.5">
+            <span className="text-[9px] text-[var(--text-muted)] mt-0.5">
               Net kassa balansi
             </span>
           </div>
@@ -193,13 +207,13 @@ export default function CashierDashboard() {
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 text-xs font-bold bg-[var(--bg-void)] border border-zinc-800 rounded-xl text-white focus:outline-none focus:border-[var(--gold)] cursor-pointer"
+                className="px-3 py-2 text-xs font-bold bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] cursor-pointer"
               />
             </div>
 
             <button
               onClick={() => setIsExpenseModalOpen(true)}
-              className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-zinc-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+              className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-[var(--border-glass)] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
             >
               <TrendingDown size={14} />
               <span className="hidden sm:inline">Chiqim</span>
@@ -208,7 +222,7 @@ export default function CashierDashboard() {
             <button
               onClick={() => refetch()}
               disabled={isFetching}
-              className="p-2 bg-[var(--bg-void)] hover:bg-white/5 border border-zinc-800 rounded-xl text-[var(--text-secondary)] hover:text-white transition-colors active:scale-95"
+              className="p-2 bg-[var(--bg-void)] hover:bg-[var(--border-glass)]/30 border border-[var(--border-glass)] rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors active:scale-95"
               title="Yangilash"
             >
               <RefreshCw size={16} className={isFetching ? "animate-spin text-[var(--gold)]" : ""} />
@@ -253,6 +267,7 @@ export default function CashierDashboard() {
         isOpen={!!selectedStudentForDrawer}
         onClose={() => setSelectedStudentForDrawer(null)}
         student={selectedStudentForDrawer}
+        branchId={currentBranchId}
         month={selectedMonth}
         onPaymentSuccess={handlePaymentSuccess}
         formatCurrency={formatCurrency}

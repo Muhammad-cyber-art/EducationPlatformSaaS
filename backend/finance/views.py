@@ -731,297 +731,12 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
         search_query = request.query_params.get('search', '').strip().lower()
 
-        # 3. Filial Kassa Qoldig'i (BranchCashDesk: Bugungi Kirim, Chiqim va Balans)
-        today_incomes = FinanceTransaction.objects.filter(
-            branch_id=target_branch_id,
-            date=today,
-            transaction_type='income',
-            status='completed'
-        ).aggregate(
-            total=Sum('amount'),
-            cash=Sum('amount', filter=Q(payment_method='cash')),
-            card=Sum('amount', filter=Q(payment_method__in=['click', 'payme', 'card']))
-        )
-        today_expenses = FinanceTransaction.objects.filter(
-            branch_id=target_branch_id,
-            date=today,
-            transaction_type='expense',
-            status='completed'
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        admin_exp_today = AdminExpense.objects.filter(
-            branch_id=target_branch_id,
-            date=today
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        from finance.services import build_cashier_desk_dict
+        data = build_cashier_desk_dict(target_branch_id, month_date, today, search_query)
+        if not data:
+            return Response({"detail": "Filial mavjud emas."}, status=status.HTTP_404_NOT_FOUND)
 
-        tot_inc = today_incomes['total'] or Decimal('0')
-        cash_inc = today_incomes['cash'] or Decimal('0')
-        card_inc = today_incomes['card'] or Decimal('0')
-        tot_exp = today_expenses + admin_exp_today
-
-        branch_desk_stats = {
-            "branch_id": branch.id,
-            "branch_name": branch.name,
-            "today_date": str(today),
-            "month": month_date.strftime("%Y-%m"),
-            "today_income": float(tot_inc),
-            "today_cash": float(cash_inc),
-            "today_card": float(card_inc),
-            "today_expense": float(tot_exp),
-            "today_balance": float(tot_inc - tot_exp),
-        }
-
-        # 4. Guruhlarni yig'ish (Single query)
-        groups_qs = Group.objects.filter(
-            branch_id=target_branch_id,
-            is_faol=True,
-            is_archived=False
-        ).select_related('mentor', 'branch').prefetch_related('special_lesson_days', 'canceled_lesson_days')
-
-        group_ids = list(groups_qs.values_list('id', flat=True))
-
-        # 5. Dars kunlarini hisoblash (O'tilgan darslar)
-        group_lesson_counts = {}
-        for g in groups_qs:
-            dates = g.get_lesson_dates(month_date.year, month_date.month)
-            passed = [d for d in dates if d <= today]
-            group_lesson_counts[g.id] = (len(dates), len(passed))
-
-        # 6. Faol enrollmentlar (Bir so'rovda barcha o'quvchilar)
-        enrollments = list(GroupEnrollment.objects.filter(
-            group_id__in=group_ids,
-            is_active=True
-        ).select_related('student', 'group', 'group__mentor').order_by('student__full_name'))
-
-        student_ids = list(set(e.student_id for e in enrollments if e.student_id))
-
-        # 7. Multi-Group Accounting: Har bir o'quvchining BOSHQA qatnashayotgan guruhlari
-        student_other_groups_map = {}
-        if student_ids:
-            all_active_enrollments = GroupEnrollment.objects.filter(
-                student_id__in=student_ids,
-                is_active=True
-            ).select_related('group', 'group__mentor', 'group__branch')
-            for enr in all_active_enrollments:
-                student_other_groups_map.setdefault(enr.student_id, []).append({
-                    "group_id": enr.group_id,
-                    "group_name": enr.group.name if enr.group else "",
-                    "branch_id": enr.group.branch_id if enr.group else None,
-                    "branch_name": enr.group.branch.name if (enr.group and enr.group.branch) else "",
-                    "mentor_name": enr.group.mentor.get_full_name() if (enr.group and enr.group.mentor) else "Biriktirilmagan",
-                    "monthly_price": float(enr.group.monthly_price or 0) if enr.group else 0
-                })
-
-        # 8. O'quvchilarning joriy oydagi to'lovlari (Payment)
-        payments_qs = Payment.objects.filter(
-            group_id__in=group_ids,
-            month=month_date
-        ).select_related('student', 'group', 'marked_by')
-        payment_map = {(p.student_id, p.group_id): p for p in payments_qs}
-
-        # 9. Davomatlar (Bir so'rovda o'quvchining kelgan kunlari soni)
-        attendance_rows = Attendance.objects.filter(
-            group_id__in=group_ids,
-            date__year=month_date.year,
-            date__month=month_date.month,
-            is_present=True,
-            marked_by__isnull=False
-        ).values('group_id', 'student_id').annotate(present_cnt=Count('id'))
-        attendance_map = {(r['group_id'], r['student_id']): r['present_cnt'] for r in attendance_rows}
-
-        # 10. Guruhlar va O'quvchilar ierarxiyasini yig'ish
-        group_rosters = {}
-        debtors_list = []
-        all_branch_debt = Decimal('0')
-        all_branch_collected = Decimal('0')
-
-        # Dastlab bo'sh struktura
-        for g in groups_qs:
-            group_rosters[g.id] = {
-                "id": g.id,
-                "name": g.name,
-                "monthly_price": float(g.monthly_price or 0),
-                "mentor_id": g.mentor_id,
-                "mentor_name": g.mentor.get_full_name() or g.mentor.username if g.mentor else "Biriktirilmagan",
-                "days": g.dars_kunlari or ", ".join([["Du", "Se", "Chor", "Pay", "Ju", "Shan", "Yak"][d] for d in g._get_effective_days()]),
-                "time": g.dars_vaqti or "",
-                "total_lessons": group_lesson_counts.get(g.id, (0, 0))[0],
-                "passed_lessons": group_lesson_counts.get(g.id, (0, 0))[1],
-                "students_count": 0,
-                "paid_count": 0,
-                "partial_count": 0,
-                "unpaid_count": 0,
-                "total_debt": 0.0,
-                "total_collected": 0.0,
-                "students": []
-            }
-
-        for enr in enrollments:
-            student = enr.student
-            group = enr.group
-            if not student or not group:
-                continue
-
-            gid = group.id
-            total_l, passed_l = group_lesson_counts.get(gid, (0, 0))
-            present_c = attendance_map.get((gid, student.id), 0)
-            absences = max(0, passed_l - present_c)
-
-            # Shartnoma summasini aniqlash
-            if student.status == 'teacher_negotiated':
-                base_fee = Decimal('0')
-            elif student.status in ['low_income', 'negotiated'] and student.custom_fee is not None:
-                base_fee = Decimal(str(student.custom_fee))
-            elif student.status == 'discount':
-                if total_l > 0:
-                    daily_fee = Decimal(str(group.monthly_price or 0)) / Decimal(str(total_l))
-                    base_fee = (daily_fee * Decimal(str(present_c))).quantize(Decimal('100'))
-                else:
-                    base_fee = Decimal('0')
-            else:
-                base_fee = Decimal(str(group.monthly_price or 0))
-
-            # Mavjud to'lovni tekshirish
-            pmt = payment_map.get((student.id, gid))
-            if pmt:
-                pmt_id = pmt.id
-                expected_amt = Decimal(str(pmt.amount if pmt.amount is not None else base_fee))
-                paid_amt = Decimal(str(pmt.paid_amount or 0))
-                remaining_amt = pmt.remaining_amount
-                is_paid = pmt.is_paid
-                is_partial = pmt.is_partial
-                pmt_method = pmt.payment_method
-                paid_at = pmt.paid_at.isoformat() if pmt.paid_at else None
-            else:
-                pmt_id = None
-                expected_amt = base_fee
-                paid_amt = Decimal('0')
-                if student.status == 'teacher_negotiated':
-                    remaining_amt = Decimal('0')
-                    is_paid = True
-                else:
-                    remaining_amt = base_fee
-                    is_paid = False
-                is_partial = False
-                pmt_method = None
-                paid_at = None
-
-            # Boshqa guruhlar ro'yxati (o'zidan tashqari)
-            other_grps = [og for og in student_other_groups_map.get(student.id, []) if og['group_id'] != gid]
-
-            student_data = {
-                "student_id": student.id,
-                "student_name": student.full_name,
-                "student_phone": student.phone or "",
-                "parent_phone": student.parent_phone or "",
-                "status": student.status,
-                "status_display": student.get_status_display(),
-                "custom_fee": float(student.custom_fee) if student.custom_fee is not None else None,
-                "group_id": gid,
-                "group_name": group.name,
-                "mentor_name": group.mentor.get_full_name() if group.mentor else "Biriktirilmagan",
-                "payment_id": pmt_id,
-                "expected_amount": float(expected_amt),
-                "paid_amount": float(paid_amt),
-                "remaining_amount": float(remaining_amt),
-                "is_paid": is_paid,
-                "is_partial": is_partial,
-                "payment_method": pmt_method,
-                "paid_at": paid_at,
-                "present_count": present_c,
-                "absences_count": absences,
-                "passed_lessons": passed_l,
-                "total_lessons": total_l,
-                "other_groups_count": len(other_grps),
-                "other_groups": other_grps
-            }
-
-            # Search filter (agar qidiruv bo'lsa)
-            if search_query:
-                s_name = (student.full_name or '').lower()
-                s_phone = (student.phone or '').lower()
-                g_name = (group.name or '').lower()
-                if search_query not in s_name and search_query not in s_phone and search_query not in g_name:
-                    continue
-
-            # Guruh agregatlari
-            g_item = group_rosters[gid]
-            g_item["students_count"] += 1
-            g_item["total_debt"] += float(remaining_amt)
-            g_item["total_collected"] += float(paid_amt)
-            all_branch_debt += remaining_amt
-            all_branch_collected += paid_amt
-
-            if is_paid:
-                g_item["paid_count"] += 1
-            elif is_partial:
-                g_item["partial_count"] += 1
-                g_item["unpaid_count"] += 1
-            else:
-                g_item["unpaid_count"] += 1
-
-            g_item["students"].append(student_data)
-
-            # Qarzdorlar ro'yxatiga qo'shish (Debtors List)
-            if remaining_amt > 0 and student.status != 'teacher_negotiated':
-                debtors_list.append(student_data)
-
-        # Qarzdorlarni summa bo'yicha kamayish tartibida saralash
-        debtors_list.sort(key=lambda d: d["remaining_amount"], reverse=True)
-
-        # 11. O'qituvchilar (Teachers) ierarxiyasi
-        teachers_dict = {}
-        all_groups_list = []
-
-        for gid, grp in group_rosters.items():
-            all_groups_list.append({
-                "id": grp["id"],
-                "name": grp["name"],
-                "monthly_price": grp["monthly_price"],
-                "mentor_id": grp["mentor_id"],
-                "mentor_name": grp["mentor_name"],
-                "days": grp["days"],
-                "time": grp["time"],
-                "students_count": grp["students_count"],
-                "paid_count": grp["paid_count"],
-                "unpaid_count": grp["unpaid_count"],
-                "total_debt": grp["total_debt"],
-                "total_collected": grp["total_collected"],
-            })
-
-            m_id = grp["mentor_id"] or 0
-            if m_id not in teachers_dict:
-                teachers_dict[m_id] = {
-                    "id": m_id,
-                    "name": grp["mentor_name"],
-                    "groups_count": 0,
-                    "active_students_count": 0,
-                    "debtors_count": 0,
-                    "total_debt": 0.0,
-                    "groups": []
-                }
-            t_entry = teachers_dict[m_id]
-            t_entry["groups_count"] += 1
-            t_entry["active_students_count"] += grp["students_count"]
-            t_entry["debtors_count"] += grp["unpaid_count"]
-            t_entry["total_debt"] += grp["total_debt"]
-            t_entry["groups"].append(grp)
-
-        teachers_list = sorted(list(teachers_dict.values()), key=lambda t: t["name"])
-
-        return Response({
-            "branch": branch_desk_stats,
-            "teachers": teachers_list,
-            "all_groups": sorted(all_groups_list, key=lambda g: g["name"]),
-            "debtors": debtors_list,
-            "rosters": group_rosters,
-            "summary": {
-                "total_groups": len(group_ids),
-                "total_students": len(student_ids),
-                "total_debtors": len(debtors_list),
-                "total_debt_amount": float(all_branch_debt),
-                "total_collected_month": float(all_branch_collected),
-            }
-        })
+        return Response(data)
 
     @action(detail=False, methods=['get'], url_path='cashier-student-detail')
     def cashier_student_detail(self, request):
@@ -2474,6 +2189,15 @@ def offline_finance_bundle(request):
         payment_qs = payment_qs.filter(student__branch_id__in=allowed_branches)
     student_payments = PaymentSerializer(payment_qs[:1000], many=True).data
 
+    # 6. Har bir filial uchun Cashier Desk ma'lumotlari (Roster, O'quvchilar, Qarzdorlar, Guruhlar)
+    from finance.services import build_cashier_desk_dict
+    cashier_desks = {}
+    target_branch_ids = allowed_branches if allowed_branches else [b.id for b in branch_qs]
+    for b_id in target_branch_ids:
+        desk_data = build_cashier_desk_dict(b_id, start_of_month, today)
+        if desk_data:
+            cashier_desks[str(b_id)] = desk_data
+
     return Response({
         'current_date': str(today),
         'current_month': current_month_str,
@@ -2488,5 +2212,6 @@ def offline_finance_bundle(request):
         'month_expenses': month_expenses,
         'branches': branches_data,
         'student_payments': student_payments,
+        'cashier_desks': cashier_desks,
     })
 

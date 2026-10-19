@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Users, Check, RotateCw, Search, Lock, Plus, Info, CheckCircle2, Trash2, X, UserMinus, Loader2, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -62,12 +62,44 @@ const AttendanceSection = ({
   }, [isMobileMenuOpen]);
 
   // Use groupinfo's built-in special and canceled dates
-  const specialDates = groupinfo.special_lesson_dates || [];
-  const canceledDates = groupinfo.canceled_lesson_dates || [];
+  const specialDates = groupinfo?.special_lesson_dates || [];
+  const canceledDates = groupinfo?.canceled_lesson_dates || [];
 
   const isSpecialDay = specialDates.includes(selectedDate);
   const isCanceledDay = canceledDates.includes(selectedDate);
-  const isLessonDay = lessonDates.includes(selectedDate);
+
+  // Dars kuni ekanligini mukammal aniqlash (lessonDates, maxsus kunlar, oxirgi 3 ta dars va haftalik jadval)
+  const isLessonDay = useMemo(() => {
+    if (!selectedDate) return false;
+    if (canceledDates.includes(selectedDate)) return false;
+    if (specialDates.includes(selectedDate)) return true;
+    if (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) return true;
+    if (Array.isArray(groupinfo?.last_3_lesson_dates) && groupinfo.last_3_lesson_dates.includes(selectedDate)) return true;
+
+    // Guruh jadvali bo'yicha oflayn tekshirish
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    if (!y || !m || !d) return false;
+    const dayOfWeek = new Date(y, m - 1, d).getDay(); // 0 = Yakshanba, 1 = Dushanba, ..., 6 = Shanba
+    if (dayOfWeek === 0) return false;
+
+    const days = groupinfo?.days;
+    const customDays = Array.isArray(groupinfo?.custom_days) ? groupinfo.custom_days.map(Number) : [];
+    const darsKunlari = (groupinfo?.dars_kunlari || '').toLowerCase();
+
+    if (days === 'odd' || darsKunlari.includes('dush') || darsKunlari.includes('toq')) {
+      return [1, 3, 5].includes(dayOfWeek);
+    }
+    if (days === 'even' || darsKunlari.includes('sesh') || darsKunlari.includes('juft')) {
+      return [2, 4, 6].includes(dayOfWeek);
+    }
+    if (days === 'everyday' || darsKunlari.includes('har kun')) {
+      return [1, 2, 3, 4, 5, 6].includes(dayOfWeek);
+    }
+    if (days === 'custom' && customDays.length > 0) {
+      return customDays.includes(dayOfWeek);
+    }
+    return false;
+  }, [selectedDate, canceledDates, specialDates, lessonDates, groupinfo]);
 
   // Close mobile menu when clicking outside
   useEffect(() => {

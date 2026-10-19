@@ -29,7 +29,7 @@ class SyncMutationItemSerializer(serializers.Serializer):
     Klient outbox navbatidagi bitta o'zgarish amali
     """
     queue_id = serializers.CharField(max_length=128, help_text="Mijoz DBsidagi navbat identifikatori")
-    action = serializers.ChoiceField(choices=['create', 'update', 'delete', 'confirm'])
+    action = serializers.ChoiceField(choices=['create', 'update', 'delete', 'confirm', 'pay'])
     entity = serializers.CharField(max_length=64)
     data = serializers.DictField(help_text="Obyektning o'zgargan maydonlari")
     client_timestamp = serializers.DateTimeField(required=False)

@@ -8,14 +8,19 @@ import api from '../../../tokenUpdater/updater';
 import toast from 'react-hot-toast';
 import AmountInput from '../../Common/AmountInput';
 
+import { useQueryClient } from '@tanstack/react-query';
+import { db, queueCashierPayment } from '../../../db/db';
+
 export default function StudentDetailDrawer({
   isOpen,
   onClose,
   student,
+  branchId,
   month,
   onPaymentSuccess,
   formatCurrency
 }) {
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [detailData, setDetailData] = useState(null);
   
@@ -38,6 +43,72 @@ export default function StudentDetailDrawer({
     setLoading(true);
     setActivePaymentGroupId(student.group_id);
 
+    const fallbackToLocal = async () => {
+      const cacheKey = `cashier-student-detail_${student.student_id}_${student.group_id}_${month}`;
+      try {
+        const cached = await db.query_cache.get(cacheKey);
+        if (cached?.data && isMounted) {
+          setDetailData(cached.data);
+          const targetGrp = cached.data.all_active_groups?.find(g => g.group_id === student.group_id);
+          if (targetGrp) {
+            setPayAmount(String(targetGrp.remaining_amount || ''));
+          }
+          return;
+        }
+      } catch (_) {}
+
+      // Fallback 2: student prop dagi ma'lumotlar bilan drawer ni to'ldirish
+      if (isMounted) {
+        const syntheticDetail = {
+          student: {
+            id: student.student_id,
+            full_name: student.student_name,
+            phone: student.student_phone,
+            parent_phone: student.parent_phone,
+            status: student.status,
+            status_display: student.status_display,
+          },
+          target_group: {
+            id: student.group_id,
+            name: student.group_name,
+            monthly_price: student.expected_amount,
+            remaining_amount: student.remaining_amount,
+            paid_amount: student.paid_amount,
+            is_paid: student.is_paid,
+            payment_id: student.payment_id
+          },
+          all_active_groups: [
+            {
+              group_id: student.group_id,
+              group_name: student.group_name,
+              monthly_price: student.expected_amount,
+              remaining_amount: student.remaining_amount,
+              paid_amount: student.paid_amount,
+              is_paid: student.is_paid,
+              payment_id: student.payment_id
+            },
+            ...(student.other_groups || []).map(og => ({
+              group_id: og.group_id,
+              group_name: og.group_name,
+              monthly_price: og.monthly_price,
+              remaining_amount: og.monthly_price,
+              paid_amount: 0,
+              is_paid: false
+            }))
+          ]
+        };
+        setDetailData(syntheticDetail);
+        setPayAmount(String(student.remaining_amount || student.expected_amount || ''));
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      fallbackToLocal().finally(() => {
+        if (isMounted) setLoading(false);
+      });
+      return () => { isMounted = false; };
+    }
+
     api.get('/finance/student-payments/cashier-student-detail/', {
       params: {
         student_id: student.student_id,
@@ -47,6 +118,11 @@ export default function StudentDetailDrawer({
     }).then(res => {
       if (isMounted) {
         setDetailData(res.data);
+        db.query_cache.put({
+          query_key: `cashier-student-detail_${student.student_id}_${student.group_id}_${month}`,
+          data: res.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
         // Find target group payment to set initial pay amount
         const targetGrp = res.data.all_active_groups?.find(g => g.group_id === student.group_id);
         if (targetGrp) {
@@ -54,8 +130,7 @@ export default function StudentDetailDrawer({
         }
       }
     }).catch(err => {
-      console.error("Error fetching student cashier detail:", err);
-      toast.error("O'quvchi ma'lumotlarini yuklashda xatolik");
+      fallbackToLocal();
     }).finally(() => {
       if (isMounted) setLoading(false);
     });
@@ -81,7 +156,7 @@ export default function StudentDetailDrawer({
     setPayAmount(String(grp.remaining_amount || grp.monthly_price || ''));
   };
 
-  // Submit Payment
+  // Submit Payment (Online + Offline-First)
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     const amountVal = parseFloat(payAmount);
@@ -90,6 +165,47 @@ export default function StudentDetailDrawer({
       return;
     }
 
+    const effectiveBranchId = branchId || student.branch_id || activeGroup.branch_id;
+    const targetMonthlyPrice = Number(activeGroup.monthly_price || activeGroup.expected_amount || 0);
+    const isPayingFull = targetMonthlyPrice > 0 && amountVal >= targetMonthlyPrice;
+
+    const paymentPayload = {
+      branch_id: effectiveBranchId,
+      student_id: student.student_id,
+      group_id: activeGroup.group_id,
+      payment_id: activeGroup.payment_id || null,
+      month: month ? `${month}-01` : '',
+      amount: amountVal,
+      payment_method: payMethod,
+      method: payMethod,
+      pay_full_month: isPayingFull,
+      ignore_refund: isPayingFull,
+      is_full_amount: isPayingFull,
+      is_partial_payment: !isPayingFull,
+      is_receiptless: true,
+      notes: notes.trim(),
+    };
+
+    // OFFLAYN REJIM: Tarmoq yo'q bo'lsa darhol lokal bazaga yozamiz
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        setSubmitting(true);
+        await queueCashierPayment(paymentPayload, queryClient);
+        toast.success("To'lov oflayn qabul qilindi! Internet paydo bo'lganda serverga yuboriladi.", {
+          icon: '💾',
+          duration: 4000
+        });
+        onPaymentSuccess();
+        onClose();
+      } catch (err) {
+        toast.error("Oflayn to'lovni saqlashda xatolik");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // ONLAYN: Serverga yuborish
     try {
       setSubmitting(true);
       const formData = new FormData();
@@ -102,6 +218,15 @@ export default function StudentDetailDrawer({
       formData.append('amount', amountVal);
       formData.append('payment_method', payMethod);
       formData.append('method', payMethod);
+
+      if (isPayingFull) {
+        formData.append('pay_full_month', 'true');
+        formData.append('ignore_refund', 'true');
+        formData.append('is_full_amount', 'true');
+      } else if (targetMonthlyPrice > 0 && amountVal < targetMonthlyPrice) {
+        formData.append('is_partial_payment', 'true');
+      }
+
       const effectiveReceiptless = receiptImage ? false : isReceiptless;
       formData.append('is_receiptless', effectiveReceiptless ? 'true' : 'false');
       formData.append('notes', notes.trim());
@@ -118,8 +243,20 @@ export default function StudentDetailDrawer({
       onPaymentSuccess();
       onClose();
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.detail || err.response?.data?.error || "To'lovni qabul qilishda xatolik yuz berdi");
+      const isNetworkErr = !err.response || err.code === 'ERR_NETWORK' || err.isOffline;
+      if (isNetworkErr) {
+        // Tarmoq kutilmaganda uzilib qolsa — oflayn qabul qilish
+        await queueCashierPayment(paymentPayload, queryClient);
+        toast.success("Tarmoq uzildi. To'lov oflayn saqlandi va internet tiklanganda serverga yuboriladi.", {
+          icon: '💾',
+          duration: 4000
+        });
+        onPaymentSuccess();
+        onClose();
+      } else {
+        console.error(err);
+        toast.error(err.response?.data?.detail || err.response?.data?.error || "To'lovni qabul qilishda xatolik yuz berdi");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -153,16 +290,16 @@ export default function StudentDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
-      <div className="w-full max-w-xl bg-[var(--bg-panel)] border-l border-zinc-800 h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-300">
+      <div className="w-full max-w-xl bg-[var(--bg-panel)] border-l border-[var(--border-glass)] h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-300">
         
         {/* Drawer Header */}
-        <div className="p-4 sm:p-5 border-b border-zinc-800/80 bg-[var(--bg-void)]/60 flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-[var(--border-glass)] bg-[var(--bg-void)]/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/20 flex items-center justify-center text-[var(--gold)] font-bold">
               {student.student_name ? student.student_name.charAt(0).toUpperCase() : 'O'}
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-white truncate max-w-xs sm:max-w-md">
+              <h3 className="text-base sm:text-lg font-black text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
                 {student.student_name}
               </h3>
               <p className="text-xs text-[var(--text-muted)] flex items-center gap-2">
@@ -174,14 +311,14 @@ export default function StudentDetailDrawer({
 
           <button
             onClick={onClose}
-            className="p-2 text-[var(--text-muted)] hover:text-white rounded-xl hover:bg-white/5 transition-colors"
+            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-xl hover:bg-[var(--border-glass)]/30 transition-colors"
           >
             <X size={20} />
           </button>
         </div>
 
         {/* Drawer Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 scrollbar-thin scrollbar-thumb-zinc-800">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 scrollbar-thin scrollbar-thumb-[var(--border-glass)]">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-[var(--gold)]">
               <Loader2 size={32} className="animate-spin" />
@@ -212,17 +349,17 @@ export default function StudentDetailDrawer({
                         className={`p-3 rounded-xl border cursor-pointer transition-all ${
                           isSelectedForPay
                             ? 'bg-[var(--gold)]/10 border-[var(--gold)]/60 shadow-md shadow-[var(--gold)]/5'
-                            : 'bg-[var(--bg-void)] border-zinc-800/80 hover:border-zinc-700'
+                            : 'bg-[var(--bg-void)] border-[var(--border-glass)] hover:border-[var(--gold)]/40'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-1 mb-1">
-                          <h5 className="text-xs font-bold text-white truncate">{grp.group_name}</h5>
+                          <h5 className="text-xs font-bold text-[var(--text-primary)] truncate">{grp.group_name}</h5>
                           {grp.is_paid ? (
-                            <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-0.5">
+                            <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-0.5">
                               <CheckCircle2 size={11} /> To'langan
                             </span>
                           ) : (
-                            <span className="text-[10px] text-rose-400 font-bold tabular-nums">
+                            <span className="text-[10px] text-rose-500 font-bold tabular-nums">
                               -{formatCurrency(grp.remaining_amount)}
                             </span>
                           )}
@@ -232,9 +369,9 @@ export default function StudentDetailDrawer({
                           {grp.mentor_name} · {grp.branch_name || ""}
                         </p>
 
-                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-800/60 text-[10px]">
+                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-[var(--border-glass)] text-[10px]">
                           <span className="text-[var(--text-secondary)]">Oylik narx:</span>
-                          <span className="text-white font-semibold">{formatCurrency(grp.monthly_price)}</span>
+                          <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(grp.monthly_price)}</span>
                         </div>
                       </div>
                     );
@@ -244,13 +381,13 @@ export default function StudentDetailDrawer({
 
               {/* SECTION 2: Attendance Summary */}
               {detailData?.attendance && (
-                <div className="p-3.5 bg-[var(--bg-void)]/60 border border-zinc-800/80 rounded-xl">
+                <div className="p-3.5 bg-[var(--bg-void)]/60 border border-[var(--border-glass)] rounded-xl">
                   <div className="flex items-center justify-between text-xs font-bold text-[var(--text-secondary)] mb-2">
                     <span className="flex items-center gap-1.5">
                       <Clock size={13} className="text-[var(--gold)]" />
                       Davomat Xulosasi ({activeGroup.group_name})
                     </span>
-                    <span className="text-[11px] text-emerald-400 font-semibold">
+                    <span className="text-[11px] text-emerald-500 font-semibold">
                       {detailData.attendance.passed_lessons > 0 
                         ? Math.round((detailData.attendance.present_count / detailData.attendance.passed_lessons) * 100) + "% qatnashish"
                         : "Darslar boshlanmagan"}
@@ -258,15 +395,15 @@ export default function StudentDetailDrawer({
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2 bg-[var(--bg-panel)] rounded-lg border border-zinc-800/60">
+                    <div className="p-2 bg-[var(--bg-panel)] rounded-lg border border-[var(--border-glass)]">
                       <p className="text-[10px] text-[var(--text-muted)]">O'tilgan dars</p>
-                      <p className="text-sm font-bold text-white mt-0.5">{detailData.attendance.passed_lessons}</p>
+                      <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">{detailData.attendance.passed_lessons}</p>
                     </div>
-                    <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
+                    <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-500">
                       <p className="text-[10px] opacity-80">Kelgan</p>
                       <p className="text-sm font-bold mt-0.5">{detailData.attendance.present_count}</p>
                     </div>
-                    <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 text-rose-400">
+                    <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 text-rose-500">
                       <p className="text-[10px] opacity-80">Qoldirgan</p>
                       <p className="text-sm font-bold mt-0.5">{detailData.attendance.absences}</p>
                     </div>
@@ -275,16 +412,16 @@ export default function StudentDetailDrawer({
               )}
 
               {/* SECTION 3: Point-of-Sale Payment Form */}
-              <div className="p-4 bg-[var(--bg-void)] border border-zinc-800/80 rounded-2xl shadow-lg relative overflow-hidden">
+              <div className="p-4 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-2xl shadow-lg relative overflow-hidden">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <CreditCard size={16} className="text-[var(--gold)]" />
-                    <h4 className="text-sm font-bold text-white">
+                    <h4 className="text-sm font-bold text-[var(--text-primary)]">
                       Tezkor To'lov Qabul Qilish: <span className="text-[var(--gold)]">{activeGroup.group_name}</span>
                     </h4>
                   </div>
                   <span className="text-xs text-[var(--text-muted)] tabular-nums">
-                    Qarz: <strong className="text-rose-400">{formatCurrency(activeGroup.remaining_amount || 0)}</strong>
+                    Qarz: <strong className="text-rose-500">{formatCurrency(activeGroup.remaining_amount || 0)}</strong>
                   </span>
                 </div>
 
@@ -301,7 +438,7 @@ export default function StudentDetailDrawer({
                         placeholder="Summani kiriting..."
                         value={payAmount}
                         onChange={(e) => setPayAmount(e.target.value)}
-                        className="w-full pl-9 pr-14 py-2 text-sm font-bold bg-[var(--bg-panel)] border border-zinc-800 rounded-xl text-white focus:outline-none focus:border-[var(--gold)]"
+                        className="w-full pl-9 pr-14 py-2 text-sm font-bold bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)]"
                       />
                     </div>
 
@@ -317,14 +454,14 @@ export default function StudentDetailDrawer({
                       <button
                         type="button"
                         onClick={() => setPayAmount(String(activeGroup.monthly_price || ''))}
-                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-900 text-zinc-300 border border-zinc-800 hover:bg-zinc-800 transition-colors"
+                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:bg-[var(--gold)]/10 hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-colors"
                       >
                         To'liq oylik ({formatCurrency(activeGroup.monthly_price || 0)})
                       </button>
                       <button
                         type="button"
                         onClick={() => setPayAmount(String(Math.round((activeGroup.monthly_price || 0) / 2)))}
-                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-900 text-zinc-300 border border-zinc-800 hover:bg-zinc-800 transition-colors"
+                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:bg-[var(--gold)]/10 hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-colors"
                       >
                         50%
                       </button>
@@ -358,7 +495,7 @@ export default function StudentDetailDrawer({
                           className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${
                             payMethod === m.id
                               ? 'bg-[var(--gold)] text-black shadow-md'
-                              : 'bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-zinc-800 hover:text-white'
+                              : 'bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40'
                           }`}
                         >
                           {m.label}
@@ -374,7 +511,7 @@ export default function StudentDetailDrawer({
                         type="checkbox"
                         checked={isReceiptless}
                         onChange={(e) => setIsReceiptless(e.target.checked)}
-                        className="w-4 h-4 rounded text-[var(--gold)] focus:ring-0 bg-[var(--bg-panel)] border-zinc-800"
+                        className="w-4 h-4 rounded text-[var(--gold)] focus:ring-0 bg-[var(--bg-panel)] border-[var(--border-glass)]"
                       />
                       <span>Cheksiz to'lov (kvitansiyasiz)</span>
                     </label>
@@ -394,12 +531,12 @@ export default function StudentDetailDrawer({
                   </div>
 
                   {receiptImage && !isReceiptless && (
-                    <div className="flex items-center justify-between text-[11px] text-emerald-400 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+                    <div className="flex items-center justify-between text-[11px] text-emerald-500 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
                       <span className="truncate">Chek tanlandi: {receiptImage.name}</span>
                       <button
                         type="button"
                         onClick={() => setReceiptImage(null)}
-                        className="ml-2 text-rose-400 hover:text-rose-300 font-bold"
+                        className="ml-2 text-rose-500 hover:text-rose-400 font-bold"
                       >
                         ✕
                       </button>
@@ -412,7 +549,7 @@ export default function StudentDetailDrawer({
                       placeholder="Izoh (ixtiyoriy)..."
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-[var(--bg-panel)] border border-zinc-800 rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)]"
+                      className="w-full px-3 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] placeholder:text-[var(--text-muted)]"
                     />
                   </div>
 
@@ -434,10 +571,14 @@ export default function StudentDetailDrawer({
                     type="button"
                     disabled={cancelling}
                     onClick={handleCancelPayment}
-                    className="w-full py-2.5 px-4 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
+                    className="w-full py-2.5 px-4 btn-danger-action dark:bg-rose-500/10 dark:hover:bg-rose-600 dark:text-rose-400 dark:hover:text-white dark:border-rose-500/30 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm group cursor-pointer"
                     title="To'lovni butunlay bekor qilish va kassadan o'chirish"
                   >
-                    {cancelling ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    {cancelling ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={14} className="shrink-0" />
+                    )}
                     <span>To'lovni Bekor Qilish</span>
                   </button>
                 </div>
@@ -451,7 +592,7 @@ export default function StudentDetailDrawer({
                 </h4>
 
                 {detailData?.transactions?.length === 0 ? (
-                  <p className="text-xs text-[var(--text-muted)] text-center py-4 bg-[var(--bg-void)] rounded-xl border border-zinc-800/70">
+                  <p className="text-xs text-[var(--text-muted)] text-center py-4 bg-[var(--bg-void)] rounded-xl border border-[var(--border-glass)]">
                     Tranzaksiyalar mavjud emas
                   </p>
                 ) : (
@@ -459,11 +600,11 @@ export default function StudentDetailDrawer({
                     {detailData?.transactions?.map((tx) => (
                       <div
                         key={tx.id}
-                        className="p-2.5 bg-[var(--bg-void)] border border-zinc-800/70 rounded-xl flex items-center justify-between text-xs"
+                        className="p-2.5 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl flex items-center justify-between text-xs"
                       >
                         <div>
-                          <div className="flex items-center gap-1.5 font-bold text-white">
-                            <span className={tx.transaction_type === 'income' ? 'text-emerald-400' : 'text-rose-400'}>
+                          <div className="flex items-center gap-1.5 font-bold text-[var(--text-primary)]">
+                            <span className={tx.transaction_type === 'income' ? 'text-emerald-500' : 'text-rose-500'}>
                               {tx.transaction_type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                             </span>
                             <span className="text-[10px] text-[var(--text-muted)] font-normal">
@@ -477,8 +618,8 @@ export default function StudentDetailDrawer({
 
                         <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                           tx.status === 'completed'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-zinc-800 text-zinc-400'
+                            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                            : 'bg-[var(--bg-panel)] text-[var(--text-muted)] border border-[var(--border-glass)]'
                         }`}>
                           {tx.status}
                         </span>

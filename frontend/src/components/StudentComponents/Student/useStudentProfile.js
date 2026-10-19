@@ -45,7 +45,7 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
     enabled: !!student_id && (!!userData.id || !!user_info?.user_id),
     queryFn: async () => {
       try {
-        const res = await api.get(`groups/nested_students/${student_id}`);
+        const res = await api.get(`/groups/nested_students/${student_id}/`);
         const data = res.data;
         if (data && data.id) {
           try {
@@ -111,6 +111,11 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
         try {
           const localSt = await db.students.get(Number(student_id));
           if (localSt) {
+            const fallbackGroup = localSt.group || (localSt.group_id ? { id: localSt.group_id, name: localSt.group_name || "Guruh" } : null);
+            const fallbackGroups = Array.isArray(localSt.groups) && localSt.groups.length > 0
+              ? localSt.groups
+              : (fallbackGroup ? [fallbackGroup] : []);
+
             const fallbackData = {
               id: localSt.id,
               full_name: localSt.full_name,
@@ -120,9 +125,10 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
               address: localSt.address || "",
               notes: localSt.notes || "",
               birth_date: localSt.birth_date || "",
+              joined_at: localSt.joined_at || localSt.created_at || null,
               status: localSt.status || "regular",
-              group: localSt.group || (localSt.group_id ? { id: localSt.group_id } : null),
-              groups: localSt.groups || (localSt.group_id ? [{ id: localSt.group_id }] : []),
+              group: fallbackGroup,
+              groups: fallbackGroups,
               finance_profile: localSt.finance_profile || null,
             };
             if (dispatch) {
