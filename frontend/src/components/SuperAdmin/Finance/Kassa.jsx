@@ -179,7 +179,7 @@ const Kassa = () => {
                 <div className="flex items-center gap-6 relative z-10">
                     <button
                         onClick={() => navigate(-1)}
-                        className="w-14 h-14 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--gold)]/20 rounded-[1.25rem] text-[var(--gold)] hover:border-[var(--gold)] hover:bg-[var(--gold)] hover:text-black hover:scale-110 active:scale-95 transition-all duration-300 shadow-lg"
+                        className="w-14 h-14 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--gold)]/20 rounded-[1.25rem] text-[var(--gold)] hover:border-[var(--gold)] hover:bg-[var(--gold)] hover:text-white hover:scale-110 active:scale-95 transition-all duration-300 shadow-lg"
                     >
                         <ArrowLeft size={24} strokeWidth={2.5} />
                     </button>
@@ -299,7 +299,7 @@ const Kassa = () => {
 
                     <button 
                         onClick={() => setFilters({ ...filters, date: new Date().toISOString().split('T')[0] })}
-                        className={`px-4 h-12 flex items-center justify-center border rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${filters.date === new Date().toISOString().split('T')[0] ? 'bg-[var(--gold)] text-black border-[var(--gold)]' : 'bg-white/5 text-[var(--gold)] border-[var(--gold)]/20 hover:bg-white/10'}`}
+                        className={`px-4 h-12 flex items-center justify-center border rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${filters.date === new Date().toISOString().split('T')[0] ? 'bg-[var(--gold)] text-white border-[var(--gold)]' : 'bg-white/5 text-[var(--gold)] border-[var(--gold)]/20 hover:bg-white/10'}`}
                     >
                         Bugun
                     </button>
@@ -310,7 +310,7 @@ const Kassa = () => {
             <div className="flex items-center gap-2 p-1.5 bg-[var(--bg-panel)]/30 border border-[#2a2a2a] rounded-[1.25rem] w-full sm:w-fit overflow-x-auto no-scrollbar">
                 <button 
                     onClick={() => setActiveTab("incomes")}
-                    className={`flex-1 sm:flex-none whitespace-nowrap px-6 xl:px-10 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'incomes' ? 'bg-[var(--gold)] text-black shadow-[0_8px_20px_rgba(184,134,11,0.3)] scale-105 z-10' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`}
+                    className={`flex-1 sm:flex-none whitespace-nowrap px-6 xl:px-10 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'incomes' ? 'bg-[var(--gold)] text-white shadow-[0_8px_20px_rgba(184,134,11,0.3)] scale-105 z-10' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`}
                 >
                     <PlusCircle size={14} />
                     Tushumlar <span className="opacity-50 text-[8px]">({payments.length})</span>
@@ -401,7 +401,7 @@ const Kassa = () => {
                                                         <button onClick={() => handleVerify(p.payment_details.original_payment_id)} className="w-11 h-11 flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-lg active:scale-90"><CheckCircle2 size={18} /></button>
                                                     )}
                                                     {p.payment_details?.receipt_image && <button onClick={() => window.open(p.payment_details.receipt_image, '_blank')} className="w-11 h-11 flex items-center justify-center bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-xl hover:bg-blue-500 hover:text-white transition-all shadow-lg active:scale-90"><ImageIcon size={18} /></button>}
-                                                    <button onClick={() => { setSelectedPayment(p); setShowDetailModal(true); }} className="w-11 h-11 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-xl hover:bg-[var(--gold)] hover:text-black transition-all shadow-lg active:scale-90"><FileText size={18} /></button>
+                                                    <button onClick={() => { setSelectedPayment(p); setShowDetailModal(true); }} className="w-11 h-11 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-xl hover:bg-[var(--gold)] hover:text-white transition-all shadow-lg active:scale-90"><FileText size={18} /></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -700,11 +700,13 @@ const Kassa = () => {
                             <button onClick={() => setShowDetailModal(false)} className="w-10 h-10 flex items-center justify-center bg-white/5 text-gray-400 hover:text-white rounded-xl transition-all"><X size={20} /></button>
                         </div>
                         <div className="p-8 space-y-6 text-white">
-                            <div className="grid grid-cols-2 gap-6 font-bold text-sm">
+                            <div className="grid grid-cols-2 gap-6 font-bold text-sm bg-white/5 p-4 rounded-xl border border-white/5">
                                 <div><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">O'quvchi</p>{selectedPayment.student_name}</div>
-                                <div className="text-right"><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Guruh</p><span className="text-[var(--gold)]">{selectedPayment.payment_details?.group_name || 'Guruhsiz'}</span></div>
-                                <div><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">To'langan Summa</p>{formatCurrency(selectedPayment.amount)}</div>
-                                <div className="text-right"><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Metod</p>{selectedPayment.payment_details?.payment_method_display || 'Noma\'lum'}</div>
+                                <div className="text-right"><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Guruh</p><span className="text-[var(--gold)]">{selectedPayment.payment_details?.group_name || selectedPayment.group_name || 'Guruhsiz'}</span></div>
+                                <div><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">To'lov Oyi (Davr)</p><span className="text-white">{selectedPayment.payment_details?.month || "Joriy oy"}</span></div>
+                                <div className="text-right"><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">To'langan Summa</p><span className="text-emerald-400 font-black">{formatCurrency(selectedPayment.amount)}</span></div>
+                                <div><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Metod</p>{selectedPayment.payment_details?.payment_method_display || 'Noma\'lum'}</div>
+                                <div className="text-right"><p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Qabul qildi</p>{selectedPayment.marked_by_name || "Tizim"}</div>
                                 {/* Refund ma'lumoti */}
                                 {selectedPayment.payment_details?.refund_amount > 0 && !selectedPayment.payment_details?.refund_ignored && (
                                     <>
@@ -729,7 +731,37 @@ const Kassa = () => {
                                     </div>
                                 )}
                             </div>
-                            {selectedPayment.notes && <div className="p-4 bg-white/5 rounded-xl text-xs italic text-gray-400">"{selectedPayment.notes}"</div>}
+
+                            {/* Guruh va Davomat tafsilotlari */}
+                            <div className="p-4 bg-[var(--gold)]/10 border border-[var(--gold)]/25 rounded-2xl space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-[var(--gold)] uppercase font-black tracking-widest flex items-center gap-1.5">
+                                        <FileText size={13} />
+                                        Guruh va Davomat
+                                    </span>
+                                    {selectedPayment.payment_details?.attendance_info?.attendance_str && (
+                                        <span className="text-xs font-black text-emerald-400 bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/25">
+                                            Davomat: {selectedPayment.payment_details.attendance_info.attendance_str}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-white">
+                                    Guruh: <strong className="text-[var(--gold)]">{selectedPayment.payment_details?.group_name || selectedPayment.group_name || 'Guruhsiz'}</strong>
+                                    {selectedPayment.payment_details?.month ? ` • Davr: ${selectedPayment.payment_details.month}` : ''}
+                                </p>
+                            </div>
+
+                            {(selectedPayment.notes || selectedPayment.payment_details?.notes || selectedPayment.description) && (
+                                <div className="p-3.5 bg-[var(--bg-panel)] border border-white/10 rounded-xl space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest flex items-center gap-1.5">
+                                        <FileText size={13} />
+                                        To'lov izohi
+                                    </p>
+                                    <p className="text-xs text-white font-medium leading-relaxed whitespace-pre-wrap">
+                                        {selectedPayment.notes || selectedPayment.payment_details?.notes || selectedPayment.description}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                         <div className="p-6 bg-white/[0.02] border-t border-[#2a2a2a] flex gap-3">
                             {get_user_info()?.role === 'super_admin' && !selectedPayment.payment_details?.is_verified && selectedPayment.payment_details?.original_payment_id && (

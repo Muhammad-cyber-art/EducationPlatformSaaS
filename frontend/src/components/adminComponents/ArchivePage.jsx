@@ -116,7 +116,7 @@ export default function ArchivePage() {
 
             {/* Left Info Section */}
             <div className="flex items-center gap-4 px-4 py-2 sm:border-r sm:border-white/10 sm:pr-6">
-              <div className="w-10 h-10 rounded-xl bg-[var(--gold)] flex items-center justify-center text-black font-black text-lg shadow-[0_0_15px_rgba(184,134,11,0.3)]">
+              <div className="w-10 h-10 rounded-xl bg-[var(--gold)] flex items-center justify-center text-white font-black text-lg shadow-[0_0_15px_rgba(184,134,11,0.3)]">
                 {markedCount}
               </div>
               <div className="text-left">

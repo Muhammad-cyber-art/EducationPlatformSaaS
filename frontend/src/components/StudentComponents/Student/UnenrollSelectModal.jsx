@@ -176,10 +176,10 @@ export default function UnenrollSelectModal({
                                         <button
                                             key={group.id}
                                             onClick={() => handleUnenrollClick(group)}
-                                            className="flex items-center justify-between p-4 bg-[var(--bg-void)]/30 hover:bg-[var(--gold)] hover:text-black border border-[var(--border-glass)] hover:border-[var(--gold)]/30 rounded-2xl transition-all group/btn text-left"
+                                            className="flex items-center justify-between p-4 bg-[var(--bg-void)]/30 hover:bg-[var(--gold)] hover:text-white border border-[var(--border-glass)] hover:border-[var(--gold)]/30 rounded-2xl transition-all group/btn text-left"
                                         >
                                             <div className="flex items-center gap-3.5 min-w-0">
-                                                <div className="w-9 h-9 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] group-hover/btn:bg-black/10 group-hover/btn:text-black shrink-0">
+                                                <div className="w-9 h-9 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] group-hover/btn:bg-white/10 group-hover/btn:text-white shrink-0">
                                                     <GraduationCap size={18} />
                                                 </div>
                                                 <div className="min-w-0">
@@ -187,7 +187,7 @@ export default function UnenrollSelectModal({
                                                     <p className="text-[8px] font-black uppercase tracking-widest opacity-60 mt-0.5">{group.subject || "Kurs"}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-1 bg-red-500/10 border border-red-500/20 text-red-500 group-hover/btn:bg-black/15 group-hover/btn:border-black/20 group-hover/btn:text-black px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all">
+                                            <div className="flex items-center gap-1 bg-red-500/10 border border-red-500/20 text-red-500 group-hover/btn:bg-white/15 group-hover/btn:border-white/20 group-hover/btn:text-white px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all">
                                                 Chiqarish <LogOut size={10} />
                                             </div>
                                         </button>

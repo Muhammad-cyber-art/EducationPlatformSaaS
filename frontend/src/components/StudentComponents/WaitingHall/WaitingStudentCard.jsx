@@ -47,7 +47,7 @@ const WaitingStudentCard = ({ student, onDelete, onAssignClick }) => {
             <div className="flex items-center gap-1 shrink-0 ml-1">
                 <button
                     onClick={() => onAssignClick(student)}
-                    className="w-7 h-7 rounded-md bg-[var(--gold-dim)] text-[var(--gold)] flex items-center justify-center hover:bg-[var(--gold)] hover:text-black transition-all"
+                    className="w-7 h-7 rounded-md bg-[var(--gold-dim)] text-[var(--gold)] flex items-center justify-center hover:bg-[var(--gold)] hover:text-white transition-all"
                     title="Guruhga biriktirish"
                 >
                     <UserCheck size={12} />

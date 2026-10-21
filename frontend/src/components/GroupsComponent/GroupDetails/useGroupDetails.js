@@ -237,6 +237,7 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
     canSendMessage: isAdmin || isSuperAdmin || isMentor,
     canTakeAttendance: isAdmin || isSuperAdmin || isGroupMentor,
     canSeeHomework: isAdmin || isSuperAdmin || isGroupMentor,
+    hasFullAttendance: isSuperAdmin || (isAdmin && perms.full_attendance === true),
     isSuperAdmin,
     isAdmin,
     isMentor,

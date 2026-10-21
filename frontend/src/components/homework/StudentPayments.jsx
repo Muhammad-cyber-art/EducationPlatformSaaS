@@ -35,7 +35,7 @@ const StudentPayments = () => {
  <p className="text-[9px] font-black text-[var(--text-secondary)] capitalize tracking-[0.3em] opacity-40">Moliyaviy Yozuvlar</p>
  </div>
  </div>
- <button className="flex items-center gap-2.5 px-5 py-2.5 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black rounded-xl transition-all text-[11px] font-black capitalize tracking-widest shadow-xl shadow-[var(--gold)]/20 active:scale-95 group overflow-hidden relative">
+ <button className="flex items-center gap-2.5 px-5 py-2.5 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white rounded-xl transition-all text-[11px] font-black capitalize tracking-widest shadow-xl shadow-[var(--gold)]/20 active:scale-95 group overflow-hidden relative">
  <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
  <span className="relative z-10">+ To‘lov</span>
  </button>

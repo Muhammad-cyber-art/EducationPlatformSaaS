@@ -353,7 +353,7 @@ const AttendanceSection = ({
             {canEditAttendance && (
               <button
                 onClick={() => handleConfirmAttendance(isLessonDay)}
-                className="flex items-center justify-center px-4 h-10 bg-[var(--gold)] text-black rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
+                className="flex items-center justify-center px-4 h-10 bg-[var(--gold)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
                 title="Tayyor"
               >
                 <Check size={18} strokeWidth={3} /> <span className="ml-2">Tayyor</span>
@@ -375,7 +375,7 @@ const AttendanceSection = ({
           {canEditAttendance && (
             <button
               onClick={() => handleConfirmAttendance(isLessonDay)}
-              className="hidden sm:flex items-center justify-center px-6 h-11 bg-[var(--gold)] text-black rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
+              className="hidden sm:flex items-center justify-center px-6 h-11 bg-[var(--gold)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
               title="Tayyor"
             >
               <Check size={20} strokeWidth={3} /> <span className="ml-2">Tayyor</span>
@@ -545,7 +545,7 @@ const AttendanceSection = ({
             onClick={() => uiDispatch({ type: "SET_FIELD", field: "selectedDate", value: date })}
             className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg transition-all border whitespace-nowrap min-w-[55px] sm:min-w-[65px]
              ${selectedDate === date
-                ? "bg-[var(--gold)] text-black border-transparent shadow-[var(--gold-glow)] scale-105"
+                ? "bg-[var(--gold)] text-white border-transparent shadow-[var(--gold-glow)] scale-105"
                 : "bg-[var(--bg-void)]/40 text-[var(--text-secondary)] border-[var(--border-glass)] hover:border-[var(--gold)]/20"}`}
           >
             <span className="text-[7px] font-black capitalize tracking-wider opacity-60 leading-none mb-0.5">{date.split('-')[2]}</span>
@@ -589,7 +589,7 @@ const AttendanceSection = ({
                   }}
                   className="cursor-pointer flex items-center justify-center w-full h-full"
                 >
-                  <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedCount === filteredStudents.length && filteredStudents.length > 0 ? 'bg-[var(--gold)] border-[var(--gold)] text-black shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--border-glass)] border bg-transparent text-transparent hover:border-[var(--gold)]/50'}`}>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedCount === filteredStudents.length && filteredStudents.length > 0 ? 'bg-[var(--gold)] border-[var(--gold)] text-white shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--border-glass)] border bg-transparent text-transparent hover:border-[var(--gold)]/50'}`}>
                     {markedCount === filteredStudents.length && filteredStudents.length > 0 && <Check size={12} strokeWidth={3} />}
                   </div>
                 </div>

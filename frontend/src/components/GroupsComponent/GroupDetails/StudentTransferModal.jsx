@@ -146,7 +146,7 @@ const StudentTransferModal = ({ isOpen, onClose, student, currentGroupId, curren
                         }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedGroupId === g.id ? 'bg-[var(--gold)] text-black' : 'bg-[var(--gold-dim)] text-[var(--gold)]'
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedGroupId === g.id ? 'bg-[var(--gold)] text-white' : 'bg-[var(--gold-dim)] text-[var(--gold)]'
                           }`}>
                           <Users size={16} />
                         </div>

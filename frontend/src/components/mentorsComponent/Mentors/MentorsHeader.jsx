@@ -29,7 +29,7 @@ const MentorsHeader = ({
             onClick={() => setViewMode('grid')}
             className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
               viewMode === 'grid'
-                ? 'bg-[var(--gold)] text-black shadow-sm font-bold'
+                ? 'bg-[var(--gold)] text-white shadow-sm font-bold'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title="Grid View"
@@ -40,7 +40,7 @@ const MentorsHeader = ({
             onClick={() => setViewMode('list')}
             className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
               viewMode === 'list'
-                ? 'bg-[var(--gold)] text-black shadow-sm font-bold'
+                ? 'bg-[var(--gold)] text-white shadow-sm font-bold'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title="List View"

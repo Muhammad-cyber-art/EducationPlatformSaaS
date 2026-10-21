@@ -129,7 +129,7 @@ export default function MentorsPage() {
  {canCreateMentor && (
  <button
  onClick={() => navigate(`add-mentor?branch=${effectiveBranchId}`)}
- className="lg:hidden fixed bottom-24 right-8 w-16 h-16 bg-[var(--gold)] text-black rounded-2xl shadow-[0_15px_40px_rgba(184,134,11,0.5)] flex items-center justify-center z-[110] active:scale-90 transition-transform"
+ className="lg:hidden fixed bottom-24 right-8 w-16 h-16 bg-[var(--gold)] text-white rounded-2xl shadow-[0_15px_40px_rgba(184,134,11,0.5)] flex items-center justify-center z-[110] active:scale-90 transition-transform"
  >
  <UserPlus size={28} />
  </button>

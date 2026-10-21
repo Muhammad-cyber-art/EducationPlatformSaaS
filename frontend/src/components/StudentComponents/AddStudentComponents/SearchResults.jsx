@@ -61,7 +61,7 @@ const SearchResults = ({ results, phone, fullName, enrollmentToggles, setEnrollm
               <button
                 type="button"
                 onClick={() => handleEnrollExisting(student.id)}
-                className={`px-4 py-2 rounded-lg text-[10px] font-black capitalize hover:scale-105 active:scale-95 transition-all flex items-center gap-2 ${isPhoneExact ? 'bg-amber-500 text-black' : 'bg-[var(--gold)] text-black'}`}
+                className={`px-4 py-2 rounded-lg text-[10px] font-black capitalize hover:scale-105 active:scale-95 transition-all flex items-center gap-2 ${isPhoneExact ? 'bg-amber-500 text-white' : 'bg-[var(--gold)] text-white'}`}
               >
                 <CheckCircle2 size={14} /> Biriktirish
               </button>

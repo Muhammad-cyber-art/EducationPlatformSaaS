@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useInView } from "react-intersection-observer";
 import {
     User, Banknote, Smartphone, CheckCircle2, ShieldCheck,
-    FileText, Image as ImageIcon, TrendingDown, CreditCard
+    FileText, Image as ImageIcon, TrendingDown, CreditCard, BookOpen
 } from "lucide-react";
 import { formatCurrency } from "./useKassa";
 
@@ -172,8 +172,16 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                                     {isSuperAdmin && !p.payment_details?.is_verified && (
                                                         <button onClick={() => onVerify(p.payment_details?.original_payment_id || p.id)} className="w-9 h-9 flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-90"><CheckCircle2 size={16} /></button>
                                                     )}
-                                                    {p.payment_details?.receipt_image && <button onClick={() => onReceipt(p.payment_details.receipt_image)} className="w-9 h-9 flex items-center justify-center bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-xl hover:bg-blue-500 hover:text-white transition-all shadow-sm active:scale-90"><ImageIcon size={16} /></button>}
-                                                    <button onClick={() => onDetail(p)} className="w-9 h-9 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-xl hover:bg-[var(--gold)] hover:text-black transition-all shadow-sm active:scale-90"><FileText size={16} /></button>
+                                                    {p.payment_details?.receipt_image && (
+                                                        <button
+                                                            onClick={() => onReceipt(p.payment_details.receipt_image, p)}
+                                                            title="To'lov cheki va izohni ko'rish"
+                                                            className="w-9 h-9 flex items-center justify-center bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-xl hover:bg-blue-500 hover:text-white transition-all shadow-sm active:scale-90"
+                                                        >
+                                                            <ImageIcon size={16} />
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => onDetail(p)} className="w-9 h-9 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-xl hover:bg-[var(--gold)] hover:text-white transition-all shadow-sm active:scale-90"><FileText size={16} /></button>
                                                 </div>
                                             )}
                                         </td>
@@ -332,7 +340,13 @@ const MobileIncomeCard = ({ item, isSuperAdmin, onVerify, onDetail, onReceipt })
                             <button onClick={() => onVerify(item.payment_details?.original_payment_id || item.id)} className="w-10 h-10 flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg active:scale-90 transition-all"><CheckCircle2 size={18} /></button>
                         )}
                         {item.payment_details?.receipt_image && (
-                            <button onClick={() => onReceipt(item.payment_details.receipt_image)} className="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-lg active:scale-90 transition-all"><ImageIcon size={18} /></button>
+                            <button
+                                onClick={() => onReceipt(item.payment_details.receipt_image, item)}
+                                title="To'lov cheki va izohni ko'rish"
+                                className="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-lg active:scale-90 transition-all"
+                            >
+                                <ImageIcon size={18} />
+                            </button>
                         )}
                         <button onClick={() => onDetail(item)} className="w-10 h-10 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-lg active:scale-90 transition-all"><FileText size={18} /></button>
                     </>
@@ -363,6 +377,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
     const data = activeTab === 'incomes' ? payments : withdrawals;
     const hasMoreData = activeTab === 'incomes' ? hasMorePayments : hasMoreWithdrawals;
     const [receiptViewerUrl, setReceiptViewerUrl] = React.useState(null);
+    const [receiptViewerPayment, setReceiptViewerPayment] = React.useState(null);
 
     const { ref, inView } = useInView({ threshold: 0 });
 
@@ -372,7 +387,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
         }
     }, [inView, loadMore]);
 
-    const onReceipt = (url) => {
+    const onReceipt = (url, payment = null) => {
         if (!url) return;
         let finalUrl = url;
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -390,6 +405,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
             }
         }
         setReceiptViewerUrl(finalUrl);
+        setReceiptViewerPayment(payment);
     };
 
     return (
@@ -470,13 +486,13 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
             {receiptViewerUrl && typeof document !== 'undefined' && createPortal(
                 <div
                     className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
-                    onClick={() => setReceiptViewerUrl(null)}
+                    onClick={() => { setReceiptViewerUrl(null); setReceiptViewerPayment(null); }}
                 >
-                    <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
+                    <div className="relative max-w-4xl max-h-[92vh] w-full flex flex-col items-center justify-center overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="w-full flex items-center justify-between pb-3 text-white">
                             <span className="text-sm font-bold flex items-center gap-2">
                                 <ImageIcon size={18} className="text-[var(--gold)]" />
-                                To'lov cheki
+                                To'lov cheki va tafsilotlari
                             </span>
                             <div className="flex items-center gap-2">
                                 <a
@@ -488,7 +504,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                     <span>Yangi oynada ochish</span>
                                 </a>
                                 <button
-                                    onClick={() => setReceiptViewerUrl(null)}
+                                    onClick={() => { setReceiptViewerUrl(null); setReceiptViewerPayment(null); }}
                                     className="w-8 h-8 flex items-center justify-center bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all border border-white/10"
                                 >
                                     ✕
@@ -499,7 +515,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                             <img
                                 src={receiptViewerUrl}
                                 alt="Chek rasmi"
-                                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl"
+                                className="max-w-full max-h-[58vh] object-contain rounded-xl shadow-2xl"
                                 onError={(e) => {
                                     e.target.style.display = 'none';
                                     const fallback = e.target.nextElementSibling;
@@ -518,6 +534,79 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                 </a>
                             </div>
                         </div>
+
+                        {receiptViewerPayment && (
+                            <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-[var(--gold)]/20 rounded-2xl shadow-xl space-y-3 animate-in fade-in duration-150">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                                    <div>
+                                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider font-bold">O'quvchi</p>
+                                        <p className="font-bold text-white truncate">{receiptViewerPayment.student_name || "Noma'lum"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Guruh</p>
+                                        <p className="font-bold text-[var(--gold)] truncate">{receiptViewerPayment.payment_details?.group_name || receiptViewerPayment.group_name || "Guruhsiz"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider font-bold">To'langan Summa</p>
+                                        <p className="font-bold text-emerald-400">{formatCurrency(receiptViewerPayment.amount)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Qabul qildi</p>
+                                        <p className="font-bold text-white truncate">{receiptViewerPayment.marked_by_name || "Tizim"}</p>
+                                    </div>
+                                </div>
+
+                                {(() => {
+                                    const rawNote = (receiptViewerPayment.notes || receiptViewerPayment.payment_details?.notes || receiptViewerPayment.description || "").trim();
+                                    if (!rawNote) return null;
+
+                                    const groupName = receiptViewerPayment.payment_details?.group_name || receiptViewerPayment.group_name || "Guruhsiz";
+                                    const month = receiptViewerPayment.payment_details?.month;
+                                    const attMatch = rawNote.match(/davomat:\s*(\d+\s*\/\s*\d+(?:\s*dars)?(?:\s*\([^)]*\))?)/i);
+                                    const attendanceStr = receiptViewerPayment.payment_details?.attendance_info?.attendance_str || (attMatch ? attMatch[1] : null);
+
+                                    let customNote = rawNote
+                                        .replace(/guruh:\s*[^|\n]+(?:\||$)/gi, '')
+                                        .replace(/(?:davr|oy):\s*\d{4}-\d{2}(?:\||$)/gi, '')
+                                        .replace(/davomat:\s*\d+\s*\/\s*\d+(?:\s*dars)?(?:\s*\([^)]*\))?(?:\||$)/gi, '')
+                                        .replace(/bo'lib to'lov(?:\||$)/gi, '')
+                                        .replace(/custom to'lov(?:\||$)/gi, '')
+                                        .replace(/cheksiz(?:\s*to'lov)?(?:\||$)/gi, '')
+                                        .replace(/\|+/g, ' ')
+                                        .trim();
+
+                                    if (customNote.startsWith(groupName) || customNote.includes("UZS. Usul:") || customNote === groupName) {
+                                        customNote = "";
+                                    }
+
+                                    return (
+                                        <div className="p-3.5 bg-[var(--gold)]/10 border border-[var(--gold)]/20 rounded-xl space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase text-[var(--gold)] tracking-widest flex items-center gap-1.5">
+                                                    <FileText size={13} />
+                                                    Guruh va Davomat ma'lumotlari:
+                                                </span>
+                                                {attendanceStr && (
+                                                    <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                                                        <CheckCircle2 size={12} />
+                                                        Davomat: {attendanceStr}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-white font-medium leading-relaxed">
+                                                Guruh: <strong className="text-[var(--gold)]">{groupName}</strong> {month ? `• Davr: ${month}` : ''}
+                                            </p>
+                                            {customNote ? (
+                                                <div className="pt-1.5 border-t border-[var(--gold)]/15">
+                                                    <span className="text-[9px] uppercase font-bold text-[var(--text-muted)] block">Admin izohi:</span>
+                                                    <p className="text-xs text-white font-medium whitespace-pre-wrap">{customNote}</p>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
                     </div>
                 </div>,
                 document.body

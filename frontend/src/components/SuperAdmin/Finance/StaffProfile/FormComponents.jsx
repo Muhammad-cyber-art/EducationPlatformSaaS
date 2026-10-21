@@ -14,7 +14,7 @@ export const RoleSelector = ({ selectedRole, setSelectedRole, loading }) => (
                     type="button"
                     onClick={() => setSelectedRole(role)}
                     disabled={loading}
-                    className={`rounded-xl px-4 py-3 text-[11px] font-black capitalize tracking-widest transition-all ${selectedRole === role ? 'bg-[var(--gold)] text-black shadow-[0_0_20px_rgba(184,134,11,0.3)] scale-[1.02]' : 'bg-[var(--bg-panel)] border border-[#2a2a2a] text-[var(--text-secondary)] hover:border-[var(--gold)]/50'}`}
+                    className={`rounded-xl px-4 py-3 text-[11px] font-black capitalize tracking-widest transition-all ${selectedRole === role ? 'bg-[var(--gold)] text-white shadow-[0_0_20px_rgba(184,134,11,0.3)] scale-[1.02]' : 'bg-[var(--bg-panel)] border border-[#2a2a2a] text-[var(--text-secondary)] hover:border-[var(--gold)]/50'}`}
                 >
                     {role === 'admin' ? 'Admin' : 'Mentor'}
                 </button>

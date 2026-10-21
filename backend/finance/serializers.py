@@ -1156,6 +1156,7 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
         source="get_category_display", read_only=True
     )
     payment_details = serializers.SerializerMethodField()
+    notes = serializers.SerializerMethodField()
 
     class Meta:
         model = FinanceTransaction
@@ -1181,6 +1182,7 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
             "payment_method",
             "title",
             "description",
+            "notes",
             "related_id",
             "created_at",
             "payment_details",
@@ -1202,6 +1204,34 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
             return obj.cancelled_by.get_full_name() or obj.cancelled_by.username
         return None
 
+    def get_notes(self, obj) -> str:
+        if obj.category == 'student_fee' and obj.related_id and obj.related_id.startswith('STP-'):
+            parts = obj.related_id.split('-')
+            if len(parts) >= 2:
+                try:
+                    payment_id = int(parts[1])
+                    from finance.models import Payment
+                    payments_cache = self.context.get('payments_cache')
+                    if payments_cache is not None and payment_id in payments_cache:
+                        payment = payments_cache[payment_id]
+                    else:
+                        payment = Payment.objects.filter(id=payment_id).first()
+                    if payment and payment.notes:
+                        if "Guruh:" in payment.notes:
+                            return payment.notes
+                        group_name = obj.group_name or payment.group_name or (payment.group.name if payment.group else "")
+                        month_str = payment.month.strftime('%Y-%m') if payment.month else ""
+                        parts_prefix = []
+                        if group_name:
+                            parts_prefix.append(f"Guruh: {group_name}")
+                        if month_str:
+                            parts_prefix.append(f"Davr: {month_str}")
+                        if parts_prefix:
+                            return f"{' | '.join(parts_prefix)} | {payment.notes}"
+                        return payment.notes
+                except Exception:
+                    pass
+        return obj.description or ""
 
     def get_payment_details(self, obj):
         if obj.category == 'student_fee' and obj.related_id and obj.related_id.startswith('STP-'):
@@ -1226,19 +1256,66 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
 
                         method = payment.payment_method or obj.payment_method or 'cash'
                         method_display = payment.get_payment_method_display() if payment.payment_method else (dict(Payment.PAYMENT_METHODS).get(method, "Naqd (Cash)"))
+                        group_name = obj.group_name or payment.group_name or (payment.group.name if payment.group else None)
+                        month_str = payment.month.strftime('%Y-%m') if payment.month else None
+
+                        # Aniq davomat ma'lumotlarini hisoblash
+                        attendance_info = None
+                        if payment.group and payment.month and payment.student:
+                            try:
+                                p_group = payment.group
+                                p_month = payment.month
+                                p_student = payment.student
+                                l_dates = p_group.get_lesson_dates(p_month.year, p_month.month)
+                                enrollment = p_student.enrollments.filter(group=p_group).first()
+                                joined_d = enrollment.joined_at.date() if (enrollment and enrollment.joined_at) else (p_student.joined_at.date() if p_student.joined_at else None)
+                                s_dates = list(l_dates)
+                                if joined_d:
+                                    s_dates = [d for d in s_dates if d >= joined_d]
+                                if enrollment and enrollment.left_at:
+                                    s_dates = [d for d in s_dates if d <= enrollment.left_at.date()]
+                                
+                                from django.utils import timezone
+                                eff_date = payment.paid_at.date() if payment.paid_at else timezone.localdate()
+                                passed_d = [d for d in s_dates if d <= eff_date]
+                                
+                                from homework_attends.models import Attendance
+                                p_count = Attendance.objects.filter(
+                                    student=p_student,
+                                    group=p_group,
+                                    date__year=p_month.year,
+                                    date__month=p_month.month,
+                                    date__in=s_dates,
+                                    is_present=True,
+                                    marked_by__isnull=False,
+                                ).count()
+
+                                attendance_info = {
+                                    'group_name': p_group.name,
+                                    'month': p_month.strftime('%Y-%m'),
+                                    'present_count': p_count,
+                                    'total_lessons': len(s_dates),
+                                    'group_total_lessons': len(l_dates),
+                                    'passed_lessons': len(passed_d),
+                                    'attendance_str': f"{p_count}/{len(s_dates)} dars"
+                                }
+                            except Exception:
+                                pass
 
                         return {
                             'original_payment_id': payment.id,
                             'is_verified': payment.is_verified,
                             'receipt_image': receipt_url,
-                            'month': payment.month.strftime('%Y-%m') if payment.month else None,
+                            'month': month_str,
                             'payment_method': method,
                             'payment_method_display': method_display,
                             'refund_amount': float(payment.refund_amount) if payment.refund_amount else 0,
                             'refund_ignored': payment.refund_ignored,
                             'is_partial': payment.is_partial,
                             'is_receiptless': payment.is_receiptless,
-                            'group_name': obj.group_name or payment.group_name or (payment.group.name if payment.group else None)
+                            'notes': payment.notes or "",
+                            'group_name': group_name,
+                            'attendance_info': attendance_info
                         }
                     else:
                         # Fallback for deleted students where Payment was hard-deleted by migration 0013
@@ -1254,6 +1331,7 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
                             'refund_ignored': False,
                             'is_partial': False,
                             'is_receiptless': False,
+                            'notes': obj.description or "",
                             'group_name': obj.group_name
                         }
                 except Exception as e:

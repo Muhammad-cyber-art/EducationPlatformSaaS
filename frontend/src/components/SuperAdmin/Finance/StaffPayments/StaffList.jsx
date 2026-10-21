@@ -96,7 +96,7 @@ const StaffList = ({
                                     <ActionBtn icon={<Mail size={12} className="sm:w-3.5 sm:h-3.5" />} />
                                     <ActionBtn icon={<Phone size={12} className="sm:w-3.5 sm:h-3.5" />} />
                                     <div className="w-px h-5 sm:h-6 bg-[var(--border-glass)] mx-1 sm:mx-2" />
-                                    <div className="p-2 sm:p-2.5 bg-[var(--gold-dim)] rounded-xl text-[var(--gold)] group-hover/row:bg-[var(--gold)] group-hover/row:text-black transition-all">
+                                    <div className="p-2 sm:p-2.5 bg-[var(--gold-dim)] rounded-xl text-[var(--gold)] group-hover/row:bg-[var(--gold)] group-hover/row:text-white transition-all">
                                         <ChevronRight size={16} className="sm:w-4.5 sm:h-4.5" />
                                     </div>
                                 </div>

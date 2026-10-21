@@ -202,7 +202,7 @@ const AdminProfile = () => {
                                     <button 
                                         onClick={() => updateMutation.mutate(editForm)}
                                         disabled={updateMutation.isPending}
-                                        className="flex-1 bg-[var(--gold)] text-black font-black text-[11px] uppercase tracking-widest py-3.5 rounded-xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(184,134,11,0.3)]"
+                                        className="flex-1 bg-[var(--gold)] text-white font-black text-[11px] uppercase tracking-widest py-3.5 rounded-xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(184,134,11,0.3)]"
                                     >
                                         {updateMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Saqlash
                                     </button>
@@ -259,7 +259,7 @@ const AdminProfile = () => {
                                     className="w-full bg-[var(--bg-panel)] border border-[var(--gold)]/30 rounded-2xl p-5 flex items-center justify-between group hover:bg-[var(--gold)]/5 transition-all active:scale-95 shadow-xl"
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl bg-[var(--gold)] text-black flex items-center justify-center shadow-[0_0_15px_rgba(184,134,11,0.3)]">
+                                        <div className="w-10 h-10 rounded-xl bg-[var(--gold)] text-white flex items-center justify-center shadow-[0_0_15px_rgba(184,134,11,0.3)]">
                                             <CreditCard size={20} />
                                         </div>
                                         <div className="text-left">
@@ -283,7 +283,7 @@ const AdminProfile = () => {
                                 <button 
                                     onClick={() => permMutation.mutate(permissions)}
                                     disabled={permMutation.isPending}
-                                    className="px-4 py-1.5 bg-[var(--gold)]/10 text-[var(--gold)] hover:bg-[var(--gold)] hover:text-black rounded-lg text-[9px] font-black uppercase tracking-widest border border-[var(--gold)]/20 transition-all flex items-center gap-1.5 shadow-lg shadow-[var(--gold)]/10 active:scale-95"
+                                    className="px-4 py-1.5 bg-[var(--gold)]/10 text-[var(--gold)] hover:bg-[var(--gold)] hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest border border-[var(--gold)]/20 transition-all flex items-center gap-1.5 shadow-lg shadow-[var(--gold)]/10 active:scale-95"
                                 >
                                     {permMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Saqlash
                                 </button>
@@ -296,7 +296,12 @@ const AdminProfile = () => {
                                 const canEdit = user_info?.role === 'super_admin';
                                 return (
                                     <div key={key} className="flex items-center justify-between py-2 border-b border-[var(--border-glass)] last:border-0 group">
-                                        <span className="text-[11px] font-bold text-[var(--text-primary)] tracking-wide">{PERMISSION_LABELS[key]}</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[11px] font-bold text-[var(--text-primary)] tracking-wide">{PERMISSION_LABELS[key]}</span>
+                                            {key === 'full_attendance' && (
+                                                <span className="text-[9px] text-[var(--text-muted)] mt-0.5">Oxirgi 1 oylik davomatni tahrirlash huquqi</span>
+                                            )}
+                                        </div>
                                         <button
                                             onClick={() => canEdit && dispatch({ type: 'TOGGLE_PERMISSION_KEY', key })}
                                             disabled={!canEdit}

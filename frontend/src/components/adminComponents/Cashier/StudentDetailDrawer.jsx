@@ -494,7 +494,7 @@ export default function StudentDetailDrawer({
                           }}
                           className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${
                             payMethod === m.id
-                              ? 'bg-[var(--gold)] text-black shadow-md'
+                              ? 'bg-[var(--gold)] text-white shadow-md'
                               : 'bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40'
                           }`}
                         >
@@ -556,7 +556,7 @@ export default function StudentDetailDrawer({
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full py-2.5 px-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black font-black text-xs rounded-xl shadow-lg shadow-[var(--gold)]/10 active:scale-98 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 px-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white font-black text-xs rounded-xl shadow-lg shadow-[var(--gold)]/10 active:scale-98 transition-all flex items-center justify-center gap-2"
                   >
                     {submitting ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
                     <span>To'lovni Tasdiqlash va Kassaga Yozish</span>

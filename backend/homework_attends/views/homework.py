@@ -43,6 +43,23 @@ class HomeworkViewSet(ModelViewSet):
             queryset = Homework.objects.filter(group_id__in=group_ids)
 
         if group_id:
+            # 2 oydan (60 kundan) oshgan eski vazifalarni ushbu guruh uchun avtomatik tozalash
+            try:
+                from datetime import timedelta
+                from django.utils import timezone
+                cutoff_date = timezone.now() - timedelta(days=60)
+                old_hws = Homework.objects.filter(group_id=group_id, created_at__lt=cutoff_date)
+                if old_hws.exists():
+                    for old_hw in old_hws:
+                        try:
+                            archive_homework(old_hw, user=None)
+                        except Exception:
+                            pass
+                    old_hws.delete()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error("Failed to auto-clean 2-month old homeworks: %s", e)
+
             queryset = queryset.filter(group_id=group_id)
 
         if self.action == 'list':
@@ -54,6 +71,12 @@ class HomeworkViewSet(ModelViewSet):
             queryset = queryset.prefetch_related('submissions__student')
 
         return queryset.select_related('group', 'mentor').distinct()
+
+    def paginate_queryset(self, queryset):
+        # Guruh topshiriqlari so'ralganda 50 ta limit cheklovini olib tashlash (barcha faol vazifalarni ko'rsatish)
+        if self.request.query_params.get('group_id') or self.request.query_params.get('group'):
+            return None
+        return super().paginate_queryset(queryset)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -77,7 +100,11 @@ class HomeworkViewSet(ModelViewSet):
         create_homework_with_submissions(serializer, user, group)
 
     def perform_destroy(self, instance):
-        archive_homework(instance, self.request.user)
+        try:
+            archive_homework(instance, self.request.user)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to archive homework %s before deletion: %s", instance.id, e, exc_info=True)
         instance.delete()
 
     @action(detail=True, methods=['patch'])

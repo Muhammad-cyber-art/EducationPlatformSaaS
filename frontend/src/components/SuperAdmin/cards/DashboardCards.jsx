@@ -78,7 +78,7 @@ export const BroadcastSection = ({ message, setMessage, isGlobal, setIsGlobal, o
                     <button
                         onClick={onSend}
                         disabled={loading || !message.trim()}
-                        className="lux-btn !h-8 !px-4 !bg-[var(--gold)] !text-black !border-none !rounded-md shadow-[0_0_20px_rgba(184,134,11,0.3)] hover:shadow-[0_0_30px_rgba(184,134,11,0.5)] transition-all flex items-center gap-1.5 relative overflow-hidden group/btn"
+                        className="lux-btn !h-8 !px-4 !bg-[var(--gold)] !text-white !border-none !rounded-md shadow-[0_0_20px_rgba(184,134,11,0.3)] hover:shadow-[0_0_30px_rgba(184,134,11,0.5)] transition-all flex items-center gap-1.5 relative overflow-hidden group/btn"
                     >
                         <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
                         {loading ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg> : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>}

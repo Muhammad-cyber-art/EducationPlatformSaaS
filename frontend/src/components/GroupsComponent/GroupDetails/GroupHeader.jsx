@@ -163,7 +163,7 @@ const GroupHeader = ({
                 {canAddStudent && (
                   <button
                     onClick={() => navigate(`add_student/?branch=${branchID}`)}
-                    className="flex items-center justify-center gap-2 h-10 px-6 bg-[var(--gold)] text-black rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 h-10 px-6 bg-[var(--gold)] text-white rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
                     title="O'quvchi qo'shish"
                   >
                     <UserPlus size={16} />
@@ -195,7 +195,7 @@ const GroupHeader = ({
                 {canAddStudent && (
                   <button
                     onClick={() => navigate(`add_student/?branch=${branchID}`)}
-                    className="flex items-center justify-center gap-2 h-10 w-10 bg-[var(--gold)] text-black rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 h-10 w-10 bg-[var(--gold)] text-white rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
                     title="O'quvchi qo'shish"
                   >
                     <UserPlus size={16} />

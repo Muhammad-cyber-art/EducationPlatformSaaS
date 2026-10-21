@@ -124,7 +124,7 @@ const GroupSidebar = ({
                         title="Topshiriqlar bo'limi: Uy vazifalar, Mock testlar va Tarix"
                     >
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-[var(--gold)] text-black flex items-center justify-center shadow-md shadow-[var(--gold-glow)] group-hover:scale-110 transition-transform duration-300 shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-[var(--gold)] text-white flex items-center justify-center shadow-md shadow-[var(--gold-glow)] group-hover:scale-110 transition-transform duration-300 shrink-0">
                                 <FolderKanban size={20} />
                             </div>
                             <div className="text-left">

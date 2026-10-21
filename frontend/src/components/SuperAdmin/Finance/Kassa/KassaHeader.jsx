@@ -11,7 +11,7 @@ const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWi
             <div className="flex items-center gap-4 sm:gap-6">
                 <button
                     onClick={() => navigate(-1)}
-                    className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--gold)]/20 rounded-xl text-[var(--gold)] hover:border-[var(--gold)] hover:bg-[var(--gold)] hover:text-black hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shrink-0"
+                    className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--gold)]/20 rounded-xl text-[var(--gold)] hover:border-[var(--gold)] hover:bg-[var(--gold)] hover:text-white hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shrink-0"
                 >
                     <ArrowLeft size={20} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.5} />
                 </button>

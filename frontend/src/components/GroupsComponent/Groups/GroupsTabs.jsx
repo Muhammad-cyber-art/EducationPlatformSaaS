@@ -20,7 +20,7 @@ const GroupsTabs = ({ activeTab, setTab, dispatch }) => {
             onClick={() => dispatch(setTab(tab.id))}
             className={`flex items-center gap-2 h-9 px-3.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap border shrink-0
             ${isActive
-              ? "bg-[var(--gold)] text-black border-transparent shadow-[0_2px_12px_rgba(184,134,11,0.25)] font-bold"
+              ? "bg-[var(--gold)] text-white border-transparent shadow-[0_2px_12px_rgba(184,134,11,0.25)] font-bold"
               : "bg-[var(--bg-panel)]/50 text-[var(--text-secondary)] border-[var(--border-glass)] hover:border-[var(--gold)]/40 hover:text-[var(--text-primary)]"}`}
           >
             <Icon size={14} />

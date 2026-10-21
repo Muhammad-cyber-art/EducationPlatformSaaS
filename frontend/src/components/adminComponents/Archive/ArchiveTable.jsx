@@ -103,7 +103,7 @@ const ArchiveTable = ({
                   )}
                 </td>
                 <td className="px-8 py-5 text-right space-x-3">
-                  <button onClick={() => onRestore(item.id)} className="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-500 text-[9px] font-black capitalize tracking-widest hover:bg-emerald-500 hover:text-black transition-all border border-emerald-500/20">
+                  <button onClick={() => onRestore(item.id)} className="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-500 text-[9px] font-black capitalize tracking-widest hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20">
                     <RotateCcw size={12} className="inline mr-2" /> Tiklash
                   </button>
                   <button onClick={() => onDelete(item.id)} className="p-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20">
@@ -121,7 +121,7 @@ const ArchiveTable = ({
           <button
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
-            className="px-8 py-3 rounded-xl bg-[var(--gold-dim)] text-[var(--gold)] text-[10px] font-black capitalize tracking-widest hover:bg-[var(--gold)] hover:text-black transition-all border border-[var(--gold)]/20 disabled:opacity-50"
+            className="px-8 py-3 rounded-xl bg-[var(--gold-dim)] text-[var(--gold)] text-[10px] font-black capitalize tracking-widest hover:bg-[var(--gold)] hover:text-white transition-all border border-[var(--gold)]/20 disabled:opacity-50"
           >
             {isFetchingNextPage ? <Loader2 className="animate-spin inline mr-2" size={12} /> : "Yana yuklash"}
           </button>

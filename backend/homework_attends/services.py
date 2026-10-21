@@ -212,8 +212,14 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
         if to_update:
             Attendance.objects.bulk_update(to_update, ['is_present', 'marked_by'])
         if to_create:
-            created_objs = Attendance.objects.bulk_create(to_create, ignore_conflicts=True)
-            updated_ids.extend([obj.id for obj in created_objs if getattr(obj, 'id', None)])
+            Attendance.objects.bulk_create(to_create, ignore_conflicts=True)
+            # ignore_conflicts=True bo'lganda Django PK larni to'ldirmaydi, shuning uchun ID larni bazadan so'raymiz
+            created_ids = list(Attendance.objects.filter(
+                group=group,
+                date=requested_date,
+                student_id__in=[obj.student_id for obj in to_create]
+            ).values_list('id', flat=True))
+            updated_ids.extend(created_ids)
 
         # Qo'shimcha: To'lov va maoshni qayta hisoblash (bulk uchun)
         if processed_student_ids:
@@ -230,41 +236,33 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             
             transaction.on_commit(trigger_finance_recalc)
 
-    # Xabarnomalarni yuborishni fonda bajaramiz (API tez qaytishi uchun)
-    import threading
+    # Xabarnomalarni yuborish (Celery orqali asinxron, muvaffaqiyatsiz bo'lsa fallback fonda)
     from django.db import connection
-
     schema_name = getattr(connection, 'schema_name', None)
-
-    def background_notifications(ids, active_schema=None):
-        try:
-            from telegram_bot.tasks import send_attendance_notifications_task
-            send_attendance_notifications_task.delay(ids, schema_name=active_schema)
-        except Exception:
-            try:
-                def _send():
-                    from telegram_bot.signals import send_attendance_notification
-                    atts = Attendance.objects.filter(id__in=ids)
-                    for a in atts:
-                        try:
-                            send_attendance_notification(a, async_send=False)
-                        except Exception:
-                            pass
-
-                if active_schema:
-                    from tenants.utils import tenant_schema_context
-                    with tenant_schema_context(active_schema):
-                        _send()
-                else:
-                    _send()
-            except Exception:
-                pass
 
     if updated_ids:
         from django.utils import timezone
         today = timezone.localdate()
         if requested_date == today:
-            threading.Thread(target=background_notifications, args=(updated_ids, schema_name)).start()
+            try:
+                from telegram_bot.tasks import send_attendance_notifications_task
+                send_attendance_notifications_task.delay(updated_ids, schema_name=schema_name)
+            except Exception:
+                import threading
+
+                def _fallback_send():
+                    try:
+                        from telegram_bot.signals import send_attendance_notification
+                        atts = Attendance.objects.filter(id__in=updated_ids)
+                        for a in atts:
+                            try:
+                                send_attendance_notification(a, async_send=False)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_fallback_send, daemon=True).start()
 
     # Guruhda faol yoki shu kuni davomati bo'lgan studentlarning davomatini qaytaramiz
     visible_ids = valid_student_ids | processed_student_ids | set(existing_attendances.values_list('student_id', flat=True))
@@ -382,6 +380,20 @@ def archive_homework(instance, user):
     submission_rate = (full / total * 100) if total > 0 else 0
     quality_rate = ((full + (half * 0.5)) / total * 100) if total > 0 else 0
     
+    students_data = []
+    for sub in submissions:
+        student_name = "Noma'lum"
+        if sub.student and getattr(sub.student, 'full_name', None):
+            student_name = sub.student.full_name
+        elif getattr(sub, 'student_full_name', None):
+            student_name = sub.student_full_name
+
+        students_data.append({
+            "name": student_name,
+            "status": sub.get_status_display(),
+            "date": sub.submitted_at.strftime('%Y-%m-%d %H:%M') if sub.submitted_at else None
+        })
+
     stats = {
         "total_students": total,
         "full_submissions": full,
@@ -389,29 +401,34 @@ def archive_homework(instance, user):
         "not_submitted": not_sub,
         "submission_rate": round(submission_rate, 2),
         "quality_rate": round(quality_rate, 2),
-        "students_data": [
-            {
-                "name": sub.student.full_name,
-                "status": sub.get_status_display(),
-                "date": sub.submitted_at.strftime('%Y-%m-%d %H:%M') if sub.submitted_at else None
-            }
-            for sub in submissions
-        ]
+        "students_data": students_data
     }
     
+    archived_by_user = user if (user and getattr(user, 'is_authenticated', False)) else None
+
+    mentor_name = "Noma'lum"
+    if instance.mentor:
+        if hasattr(instance.mentor, 'get_full_name') and instance.mentor.get_full_name():
+            mentor_name = instance.mentor.get_full_name()
+        elif getattr(instance.mentor, 'username', None):
+            mentor_name = instance.mentor.username
+
+    group_id = instance.group.id if instance.group else 0
+    group_name = instance.group.name if instance.group else "Noma'lum"
+
     ArchivedHomework.objects.create(
         original_id=instance.id,
-        full_name=instance.title,
+        full_name=instance.title or "Nomsiz vazifa",
         item_type='homework',
-        archived_by=user,
-        group_id=instance.group.id,
-        group_name=instance.group.name,
-        mentor_name=instance.mentor.get_full_name() if instance.mentor else "Noma'lum",
+        archived_by=archived_by_user,
+        group_id=group_id,
+        group_name=group_name,
+        mentor_name=mentor_name,
         submission_stats=stats,
         metadata={
-            "description": instance.description,
-            "created_at": instance.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            "group_id": instance.group.id
+            "description": instance.description or "",
+            "created_at": instance.created_at.strftime('%Y-%m-%d %H:%M:%S') if instance.created_at else "",
+            "group_id": group_id
         }
     )
 
@@ -436,35 +453,53 @@ def archive_mock_test(instance, user):
     total = results.count()
     scored = results.exclude(score='').exclude(score__isnull=True).count()
     
+    submission_rate = round((scored / total * 100), 2) if total > 0 else 0
+    
+    students_data = []
+    for res in results:
+        student_name = "Noma'lum"
+        if res.student and getattr(res.student, 'full_name', None):
+            student_name = res.student.full_name
+        students_data.append({
+            "name": student_name,
+            "score": res.score or "N/A",
+            "status": "Qatnashgan" if res.score else "Qatnashmagan"
+        })
+
     stats = {
         "total_students": total,
         "participated": scored,
         "not_participated": total - scored,
-        "participation_rate": round((scored / total * 100), 2) if total > 0 else 0,
-        "students_data": [
-            {
-                "name": res.student.full_name,
-                "score": res.score or "N/A",
-                "status": "Qatnashgan" if res.score else "Qatnashmagan"
-            }
-            for res in results
-        ]
+        "participation_rate": submission_rate,
+        "students_data": students_data
     }
     
+    archived_by_user = user if (user and getattr(user, 'is_authenticated', False)) else None
+    
+    mentor_name = "Noma'lum"
+    if instance.group and instance.group.mentor:
+        if hasattr(instance.group.mentor, 'get_full_name') and instance.group.mentor.get_full_name():
+            mentor_name = instance.group.mentor.get_full_name()
+        elif getattr(instance.group.mentor, 'username', None):
+            mentor_name = instance.group.mentor.username
+
+    group_id = instance.group.id if instance.group else 0
+    group_name = instance.group.name if instance.group else "Noma'lum"
+
     ArchivedHomework.objects.create(
         original_id=instance.id,
-        full_name=instance.subject,
+        full_name=instance.subject or "Nomsiz test",
         item_type='mock_test',
-        archived_by=user,
-        group_id=instance.group.id,
-        group_name=instance.group.name,
-        mentor_name=instance.group.mentor.get_full_name() if instance.group.mentor else "Noma'lum",
+        archived_by=archived_by_user,
+        group_id=group_id,
+        group_name=group_name,
+        mentor_name=mentor_name,
         submission_stats=stats,
         metadata={
-            "test_type": instance.type,
-            "test_date": instance.date.strftime('%Y-%m-%d'),
-            "created_at": instance.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            "group_id": instance.group.id
+            "test_type": instance.type or "",
+            "test_date": instance.date.strftime('%Y-%m-%d') if instance.date else "",
+            "created_at": instance.created_at.strftime('%Y-%m-%d %H:%M:%S') if instance.created_at else "",
+            "group_id": group_id
         }
     )
 
@@ -485,9 +520,23 @@ def edit_past_attendance(attendance_id, user, new_status, reason=''):
              
         group = attendance.group
         
-        # 2. "Oxirgi 3 ta dars" validatsiyasi — dars jadvaliga asoslanadi (BUG #1 FIX)
+        # 2. "Oxirgi 3 ta dars" yoki to'liq davomat (1 oylik) validatsiyasi — dars jadvaliga asoslanadi
         last_3_dates = get_last_3_lesson_dates(group)
-        if attendance.date not in last_3_dates:
+        today = timezone.localdate()
+        has_full_attendance = False
+        if getattr(user, 'role', '') == 'super_admin' or getattr(user, 'is_superuser', False):
+            has_full_attendance = True
+        elif getattr(user, 'role', '') == 'admin':
+            try:
+                from permissions.models import StaffPermission
+                sp = StaffPermission.objects.filter(user=user).first()
+                if sp and sp.permissions:
+                    has_full_attendance = bool(sp.permissions.get('full_attendance'))
+            except Exception:
+                has_full_attendance = False
+
+        within_1_month = has_full_attendance and (today - timedelta(days=30) <= attendance.date <= today)
+        if attendance.date not in last_3_dates and not within_1_month:
             raise ValidationError("Siz faqat oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin.")
              
         # 3. Tarixni yozish (Audit) — reason ixtiyoriy, bo'sh bo'lishi mumkin (BUG #3 FIX)
@@ -513,34 +562,26 @@ def edit_past_attendance(attendance_id, user, new_status, reason=''):
         )
         
     # 6. Asinxron xabarnomalar — FAQAT bugungi sana uchun (BUG Notification FIX)
-    import threading
     from django.db import connection
     schema_name = getattr(connection, 'schema_name', None)
-
-    def background_notifications(att_id, active_schema=None):
-        try:
-            from telegram_bot.tasks import send_attendance_notifications_task
-            send_attendance_notifications_task.delay([att_id], schema_name=active_schema)
-        except Exception:
-            try:
-                def _send():
-                    from telegram_bot.signals import send_attendance_notification
-                    att = Attendance.objects.get(id=att_id)
-                    send_attendance_notification(att, async_send=False)
-
-                if active_schema:
-                    from tenants.utils import tenant_schema_context
-                    with tenant_schema_context(active_schema):
-                        _send()
-                else:
-                    _send()
-            except Exception:
-                pass
-    
     today = timezone.localdate()
     if attendance.date == today:
-        threading.Thread(target=background_notifications, args=(attendance.id, schema_name)).start()
-    
+        try:
+            from telegram_bot.tasks import send_attendance_notifications_task
+            send_attendance_notifications_task.delay([attendance.id], schema_name=schema_name)
+        except Exception:
+            import threading
+
+            def _fallback_single_send():
+                try:
+                    from telegram_bot.signals import send_attendance_notification
+                    att = Attendance.objects.get(id=attendance.id)
+                    send_attendance_notification(att, async_send=False)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_fallback_single_send, daemon=True).start()
+
     return attendance
 
 

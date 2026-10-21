@@ -160,7 +160,7 @@ const PaymentsStory = () => {
                     </div>
                     <button
                         onClick={() => setShowFilters(!showFilters)}
-                        className={`p-4 border rounded-xl transition-all flex items-center justify-center shadow-inner ${showFilters ? 'bg-[var(--gold)] border-transparent text-black' : 'bg-[var(--bg-panel)]/40 border-[#2a2a2a] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/30'}`}
+                        className={`p-4 border rounded-xl transition-all flex items-center justify-center shadow-inner ${showFilters ? 'bg-[var(--gold)] border-transparent text-white' : 'bg-[var(--bg-panel)]/40 border-[#2a2a2a] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/30'}`}
                     >
                         <Filter size={20} />
                     </button>

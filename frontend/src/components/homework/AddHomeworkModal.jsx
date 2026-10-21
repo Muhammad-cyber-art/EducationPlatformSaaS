@@ -93,7 +93,7 @@ const HomeworkModal = ({ isOpen, onClose, groupId }) => {
  <button
  type="submit"
  disabled={loading}
- className="w-full py-4 flex items-center justify-center gap-2 text-[10px] font-black capitalize tracking-widest text-black bg-[var(--gold)] rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-[var(--gold-glow)]"
+ className="w-full py-4 flex items-center justify-center gap-2 text-[10px] font-black capitalize tracking-widest text-white bg-[var(--gold)] rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-[var(--gold-glow)]"
  >
  {loading ? (
  <Loader2 className="animate-spin" size={18} />

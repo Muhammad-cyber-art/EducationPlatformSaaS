@@ -84,7 +84,7 @@ const StaffAdvanceModal = ({ isOpen, onClose, staffName, onConfirm }) => {
  <button
  type="submit"
  disabled={loading || !amount}
- className="w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs capitalize tracking-widest shadow-[0_0_30px_rgba(245,158,11,0.2)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+ className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs capitalize tracking-widest shadow-[0_0_30px_rgba(245,158,11,0.2)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
  >
  {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
  Tasdiqlash

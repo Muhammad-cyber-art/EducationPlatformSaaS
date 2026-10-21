@@ -31,7 +31,7 @@ const StaffHeader = ({ branches, activeBranch, setActiveBranch }) => {
                             key={b.id}
                             onClick={() => setActiveBranch(b.id)}
                             className={`px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black capitalize tracking-widest transition-all whitespace-nowrap ${activeBranch == b.id
-                                ? "bg-[var(--gold)] text-black shadow-[var(--gold-glow)] scale-105"
+                                ? "bg-[var(--gold)] text-white shadow-[var(--gold-glow)] scale-105"
                                 : "text-[var(--text-muted)] hover:bg-[var(--gold-dim)] hover:text-[var(--text-primary)]"
                                 }`}
                         >

@@ -4,13 +4,14 @@ import api from"../../../tokenUpdater/updater";
 import { get_user_info } from"../../Authorized/getRole";
 
 export const PERMISSION_LABELS = {
-"finance":"Moliya",
-"groups":"Guruhlar",
-"students":"O'quvchilar",
-"teachers":"Mentorlar",
-"branches":"Filiallar",
-"reports":"Hisobotlar",
-"pay_slip":"Oylik kvitansiya"
+  "finance": "Moliya",
+  "groups": "Guruhlar",
+  "students": "O'quvchilar",
+  "teachers": "Mentorlar",
+  "branches": "Filiallar",
+  "reports": "Hisobotlar",
+  "pay_slip": "Oylik kvitansiya",
+  "full_attendance": "To'liq davomat"
 };
 
 export const useAdminProfile = (admin_id, dispatch) => {

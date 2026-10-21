@@ -92,7 +92,7 @@ const MentorCard = React.memo(({ mentor, effectiveBranchId, readOnly, viewMode }
                 <Palette size={14} className="sm:w-5 sm:h-5" />
               </button>
             )}
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--text-muted)] group-hover:bg-[var(--gold)] group-hover:text-black transition-all">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--text-muted)] group-hover:bg-[var(--gold)] group-hover:text-white transition-all">
               <ChevronRight size={14} className="sm:w-5 sm:h-5" />
             </div>
           </div>
@@ -103,7 +103,7 @@ const MentorCard = React.memo(({ mentor, effectiveBranchId, readOnly, viewMode }
  <div className="absolute inset-0 z-30 bg-black/95 backdrop-blur-xl flex items-center justify-center p-2 gap-4 animate-in fade-in" onClick={e => e.stopPropagation()}>
  <input type="color" value={selectedColor} onChange={e => setSelectedColor(e.target.value)} className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-none" />
  <div className="flex gap-2">
- <button onClick={saveNewColor} className="px-3 py-1 bg-[var(--gold)] text-black text-[9px] font-black rounded-lg">OK</button>
+ <button onClick={saveNewColor} className="px-3 py-1 bg-[var(--gold)] text-white text-[9px] font-black rounded-lg">OK</button>
  <button onClick={() => setColorCh(false)} className="px-3 py-1 bg-white/10 text-white text-[9px] font-black rounded-lg">X</button>
  </div>
  </div>
@@ -214,7 +214,7 @@ const MentorCard = React.memo(({ mentor, effectiveBranchId, readOnly, viewMode }
  <Briefcase size={12} className="opacity-50" />
  <span>Batafsil</span>
  </div>
- <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--text-muted)] group-hover:bg-[var(--gold)] group-hover:text-black transition-all">
+ <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--text-muted)] group-hover:bg-[var(--gold)] group-hover:text-white transition-all">
  <ChevronRight size={14} className="sm:w-4 sm:h-4" />
  </div>
  </div>

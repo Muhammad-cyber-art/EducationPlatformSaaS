@@ -142,7 +142,7 @@ const JoinGroupModal = ({ isOpen, onClose, student, currentBranchId, api, onSucc
             disabled={!selectedGroupId || loading}
             className={`flex-[1.5] flex items-center justify-center gap-3 px-6 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl ${!selectedGroupId || loading
               ? 'bg-[var(--bg-void)] text-[var(--text-muted)] cursor-not-allowed border border-[var(--border-glass)]'
-              : 'bg-emerald-500 hover:bg-emerald-600 text-black shadow-emerald-500/20'
+              : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20'
               }`}
           >
             {loading ? (

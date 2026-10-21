@@ -376,6 +376,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'homework_attends.tasks.create_attendance_task',
         'schedule': crontab(hour=0, minute=0),  # Har kuni yarim tunda (Toshkent vaqti)
     },
+    'cleanup-old-homeworks-daily': {
+        'task': 'homework_attends.tasks.cleanup_old_homeworks_task',
+        'schedule': crontab(hour=3, minute=15),  # Har kuni soat 03:15 da eski (2 oylik) vazifalarni tozalash
+    },
     'generate-monthly-payments-first-day': {
         'task': 'finance.tasks.generate_monthly_payments_task',
         'schedule': crontab(day_of_month=1, hour=0, minute=5),  # Har oyning 1-kuni 00:05 da

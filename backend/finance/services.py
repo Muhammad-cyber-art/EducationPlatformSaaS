@@ -711,18 +711,50 @@ def confirm_student_payment(request_user, payment, data):
     if notes:
         notes_parts.append(notes)
 
+    group_name = payment.group.name if payment.group else (payment.group_name or "Guruhsiz")
+    month_str = payment.month.strftime("%Y-%m") if payment.month else ""
+
     lesson_dates = payment.group.get_lesson_dates(
         payment.month.year, payment.month.month
-    )
+    ) if payment.group else []
+
+    # O'quvchi guruhga qo'shilgan/chiqqan sanani inobatga olish
+    enrollment = payment.student.enrollments.filter(group=payment.group).first() if (payment.student and payment.group) else None
+    joined_date = enrollment.joined_at.date() if (enrollment and enrollment.joined_at) else (payment.student.joined_at.date() if (payment.student and payment.student.joined_at) else None)
+
+    student_lesson_dates = list(lesson_dates)
+    if joined_date:
+        student_lesson_dates = [d for d in student_lesson_dates if d >= joined_date]
+    if enrollment and enrollment.left_at:
+        student_lesson_dates = [d for d in student_lesson_dates if d <= enrollment.left_at.date()]
+
+    today = timezone.localdate()
+    effective_date = payment.paid_at.date() if payment.paid_at else today
+    passed_lessons = [d for d in student_lesson_dates if d <= effective_date]
+
+    # Aniq davomat hisobi: faqat ushbu guruhning haqiqiy dars kunlari va tasdiqlangan davomatlar
     present_count = Attendance.objects.filter(
         student=payment.student,
         group=payment.group,
         date__year=payment.month.year,
         date__month=payment.month.month,
+        date__in=student_lesson_dates,
         is_present=True,
-    ).count()
+        marked_by__isnull=False,
+    ).count() if (payment.student and payment.group and student_lesson_dates) else 0
 
-    notes_parts.append(f"Davomat: {present_count}/{len(lesson_dates)} dars")
+    total_group_lessons = len(lesson_dates)
+    total_student_lessons = len(student_lesson_dates)
+
+    if total_student_lessons != total_group_lessons and total_student_lessons > 0:
+        att_stat_str = f"Davomat: {present_count}/{total_student_lessons} dars (oyda jami {total_group_lessons})"
+    else:
+        att_stat_str = f"Davomat: {present_count}/{total_group_lessons} dars"
+
+    # Guruh, oy va aniq davomat ma'lumotlarini to'lov izohiga aniq kiritamiz
+    group_att_str = f"Guruh: {group_name} | Davr: {month_str} | {att_stat_str}"
+    notes_parts.append(group_att_str)
+
     if is_partial_payment:
         notes_parts.append("Bo'lib to'lov")
     if is_custom_amount:

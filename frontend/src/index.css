@@ -138,6 +138,29 @@
 /* CRITICAL: TO'Q RANGLI TUGMALAR VA BLOKLAR ICHIDA OQ MATNNI SAQLASH        */
 /* White text protection on dark / colored backgrounds, buttons, and badges  */
 /* ========================================================================= */
+/* ========================================================================= */
+/* CRITICAL: TO'Q RANGLI TUGMALAR VA BLOKLAR ICHIDA OQ MATNNI SAQLASH        */
+/* White / Light text protection on dark / saturated buttons, badges & cards */
+/* ========================================================================= */
+.lux-btn-primary,
+.lux-btn-primary *,
+.lux-btn-primary span,
+.lux-btn-primary svg,
+button.lux-btn-primary,
+button.lux-btn-primary *,
+button[class*='bg-[var(--gold)]']:not([class*='/']),
+button[class*='bg-[var(--gold)]']:not([class*='/']) *,
+button[class*='bg-gold']:not([class*='/']),
+button[class*='bg-gold']:not([class*='/']) *,
+a[class*='bg-[var(--gold)]']:not([class*='/']),
+a[class*='bg-[var(--gold)]']:not([class*='/']) *,
+[role='button'][class*='bg-[var(--gold)]']:not([class*='/']),
+[role='button'][class*='bg-[var(--gold)]']:not([class*='/']) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 [data-theme='light'] .text-white-force,
 [data-theme='light'] .text-white-force *,
 [data-theme='light'] .keep-white,
@@ -145,16 +168,36 @@
 [data-theme='light'] button.text-white,
 [data-theme='light'] button[class~='text-white'],
 [data-theme='light'] button [class~='text-white'],
+[data-theme='light'] .lux-btn-primary,
+[data-theme='light'] .lux-btn-primary *,
+[data-theme='light'] .lux-btn-primary span,
+[data-theme='light'] .lux-btn-primary svg,
+[data-theme='light'] button.lux-btn-primary,
+[data-theme='light'] button.lux-btn-primary *,
+[data-theme='light'] button[class*='bg-[var(--gold)]']:not([class*='/']),
+[data-theme='light'] button[class*='bg-[var(--gold)]']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-gold']:not([class*='/']),
+[data-theme='light'] button[class*='bg-gold']:not([class*='/']) *,
+[data-theme='light'] a[class*='bg-[var(--gold)]']:not([class*='/']),
+[data-theme='light'] a[class*='bg-[var(--gold)]']:not([class*='/']) *,
+[data-theme='light'] [role='button'][class*='bg-[var(--gold)]']:not([class*='/']),
+[data-theme='light'] [role='button'][class*='bg-[var(--gold)]']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-amber']:not([class*='/']),
+[data-theme='light'] button[class*='bg-amber']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-emerald']:not([class*='/']),
+[data-theme='light'] button[class*='bg-emerald']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-green']:not([class*='/']),
+[data-theme='light'] button[class*='bg-green']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-blue']:not([class*='/']),
+[data-theme='light'] button[class*='bg-blue']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-indigo']:not([class*='/']),
+[data-theme='light'] button[class*='bg-indigo']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-purple']:not([class*='/']),
+[data-theme='light'] button[class*='bg-purple']:not([class*='/']) *,
+[data-theme='light'] button[class*='bg-rose']:not([class*='/']),
+[data-theme='light'] button[class*='bg-rose']:not([class*='/']) *,
 [data-theme='light'] button[class*='bg-red']:not([class*='hover:']):not([class*='/']),
 [data-theme='light'] button[class*='bg-red']:not([class*='hover:']):not([class*='/']) *,
-[data-theme='light'] button[class*='bg-emerald']:not([class*='hover:']):not([class*='/']),
-[data-theme='light'] button[class*='bg-emerald']:not([class*='hover:']):not([class*='/']) *,
-[data-theme='light'] button[class*='bg-green']:not([class*='hover:']):not([class*='/']),
-[data-theme='light'] button[class*='bg-green']:not([class*='hover:']):not([class*='/']) *,
-[data-theme='light'] button[class*='bg-blue']:not([class*='hover:']):not([class*='/']),
-[data-theme='light'] button[class*='bg-blue']:not([class*='hover:']):not([class*='/']) *,
-[data-theme='light'] button[class*='bg-amber']:not([class*='hover:']):not([class*='/']),
-[data-theme='light'] button[class*='bg-amber']:not([class*='hover:']):not([class*='/']) *,
 [data-theme='light'] button[class*='bg-black']:not([class*='hover:']):not([class*='/']),
 [data-theme='light'] button[class*='bg-black']:not([class*='hover:']):not([class*='/']) *,
 [data-theme='light'] button[class*='bg-zinc']:not([class*='hover:']):not([class*='/']),
@@ -200,6 +243,71 @@
 [data-theme='light'] .dark-tooltip,
 [data-theme='light'] .dark-tooltip * {
   color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Explicit override for any hardcoded dark/black text inside dark/saturated buttons, badges, tabs, containers */
+[class*='bg-[var(--gold)]']:not([class*='/']) [class*='text-black'],
+[class*='bg-[var(--gold)]']:not([class*='/'])[class*='text-black'],
+[class*='bg-[var(--gold)]']:not([class*='/']) [class*='text-[#000]'],
+[class*='bg-[var(--gold)]']:not([class*='/'])[class*='text-[#000]'],
+[class*='bg-gold']:not([class*='/']) [class*='text-black'],
+[class*='bg-gold']:not([class*='/'])[class*='text-black'],
+[class*='bg-amber']:not([class*='/']) [class*='text-black'],
+[class*='bg-amber']:not([class*='/'])[class*='text-black'],
+[class*='bg-emerald']:not([class*='/']) [class*='text-black'],
+[class*='bg-emerald']:not([class*='/'])[class*='text-black'],
+.lux-btn-primary [class*='text-black'],
+.lux-btn-primary[class*='text-black'],
+.lux-btn-primary [class*='text-[#000]'],
+[data-theme='light'] [class*='bg-[var(--gold)]']:not([class*='/']) [class*='text-black'],
+[data-theme='light'] [class*='bg-[var(--gold)]']:not([class*='/'])[class*='text-black'],
+[data-theme='light'] [class*='bg-[var(--gold)]']:not([class*='/']) [class*='text-[#000]'],
+[data-theme='light'] [class*='bg-[var(--gold)]']:not([class*='/'])[class*='text-[#000]'],
+[data-theme='light'] [class*='bg-gold']:not([class*='/']) [class*='text-black'],
+[data-theme='light'] [class*='bg-gold']:not([class*='/'])[class*='text-black'],
+[data-theme='light'] [class*='bg-amber']:not([class*='/']) [class*='text-black'],
+[data-theme='light'] [class*='bg-amber']:not([class*='/'])[class*='text-black'],
+[data-theme='light'] [class*='bg-emerald']:not([class*='/']) [class*='text-black'],
+[data-theme='light'] [class*='bg-emerald']:not([class*='/'])[class*='text-black'],
+[data-theme='light'] .lux-btn-primary [class*='text-black'],
+[data-theme='light'] .lux-btn-primary[class*='text-black'],
+[data-theme='light'] .lux-btn-primary [class*='text-[#000]'] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Hover and active states for elements turning into gold/dark */
+button[class*='hover:bg-[var(--gold)]']:hover,
+button[class*='hover:bg-[var(--gold)]']:hover *,
+button[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
+a[class*='hover:bg-[var(--gold)]']:hover,
+a[class*='hover:bg-[var(--gold)]']:hover *,
+a[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
+div[class*='hover:bg-[var(--gold)]']:hover,
+div[class*='hover:bg-[var(--gold)]']:hover *,
+div[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
+[class*='group']:hover [class*='group-hover:bg-[var(--gold)]'],
+[class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] *,
+[class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] [class*='group-hover:text-black'],
+[class*='group']:hover [class*='group-hover:text-black'][class*='group-hover:bg-[var(--gold)]'],
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:hover,
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:hover *,
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:hover,
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:hover *,
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:hover,
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:hover *,
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
+[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]'],
+[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] *,
+[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] [class*='group-hover:text-black'],
+[data-theme='light'] [class*='group']:hover [class*='group-hover:text-black'][class*='group-hover:bg-[var(--gold)]'] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* Danger / Cancel Action Buttons styling */
@@ -222,7 +330,16 @@
 [data-theme='light'] [class*='bg-[#16a34a]'] svg,
 [data-theme='light'] [class*='bg-[#991b1b]'] svg,
 [data-theme='light'] [class*='bg-red-'] svg.text-white,
-[data-theme='light'] [class*='bg-emerald-'] svg.text-white {
+[data-theme='light'] [class*='bg-emerald-'] svg.text-white,
+[data-theme='light'] button.lux-btn-primary svg,
+[data-theme='light'] button[class*='bg-[var(--gold)]']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-gold']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-amber']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-emerald']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-green']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-blue']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-black']:not([class*='/']) svg,
+[data-theme='light'] button[class*='bg-zinc']:not([class*='/']) svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
@@ -247,7 +364,7 @@
   border-color: rgba(150, 123, 79, 0.2) !important;
 }
 
-[data-theme='light'] button:not(.lux-btn-primary):not([class*='bg-red']):not([class*='bg-emerald']):not([class*='bg-green']):not([class*='bg-blue']):not([class*='bg-amber']):not([class*='bg-black']):not([class*='bg-zinc']):not([class*='bg-[#']):not(.text-white):not([class~='text-white']) {
+[data-theme='light'] button:not(.lux-btn-primary):not([class*='lux-btn-primary']):not([class*='bg-[var(--gold)]']):not([class*='bg-gold']):not([class*='bg-[#967b4f]']):not([class*='bg-[#b8860b]']):not([class*='bg-red']):not([class*='bg-emerald']):not([class*='bg-green']):not([class*='bg-blue']):not([class*='bg-amber']):not([class*='bg-black']):not([class*='bg-zinc']):not([class*='bg-[#']):not(.text-white):not([class~='text-white']):not(.text-white-force) {
   color: #4a3d31;
 }
 
@@ -547,13 +664,21 @@ button[type="reset"] {
 
 .lux-btn-primary {
   background: var(--gold) !important;
-  color: #000000 !important;
+  color: #ffffff !important;
   border: none !important;
 }
 
 .lux-btn-primary:hover {
   background: var(--gold) !important;
   box-shadow: 0 0 40px rgba(184, 134, 11, 0.6) !important;
+  color: #ffffff !important;
+}
+
+.lux-btn-primary *,
+.lux-btn-primary span,
+.lux-btn-primary svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* NAVIGATION */

@@ -30,7 +30,7 @@ const SmallFormDialog = ({ onClose, onSave, title, initialValue, label, isPaid }
           </div>
           <div className="flex gap-4 pt-4">
             <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-[var(--border-glass)] text-[9px] font-black capitalize tracking-widest hover:bg-white/5 transition-all">Bekor qilish</button>
-            <button onClick={() => onSave(val)} className="flex-1 py-3 rounded-xl bg-[var(--gold)] text-black text-[9px] font-black capitalize tracking-widest active:scale-95 transition-all">Saqlash</button>
+            <button onClick={() => onSave(val)} className="flex-1 py-3 rounded-xl bg-[var(--gold)] text-white text-[9px] font-black capitalize tracking-widest active:scale-95 transition-all">Saqlash</button>
           </div>
         </div>
       </div>

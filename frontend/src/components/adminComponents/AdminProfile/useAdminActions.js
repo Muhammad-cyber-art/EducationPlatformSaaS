@@ -31,6 +31,8 @@ export const useAdminActions = (admin_id, admin, dispatch, navigate, refetchBran
  return await api.put(`/permissions/staff/${admin_id}/`, perms);
  },
  onSuccess: () => {
+ queryClient.invalidateQueries(['staffPermissions', admin_id]);
+ queryClient.invalidateQueries(['admin', admin_id]);
  dispatch({ type:'TOGGLE_PERM_MODAL', payload: false });
  toast.success("Huquqlar yangilandi.");
  }

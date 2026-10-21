@@ -60,7 +60,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
        today = timezone.localdate()
        last_3_dates = get_last_3_lesson_dates(group)
        is_past_month = requested_date.year < today.year or (requested_date.year == today.year and requested_date.month < today.month)
-       view_only = is_past_month and (requested_date not in last_3_dates)
+       has_full_attendance = self._user_has_full_attendance(self.request.user)
+       within_1_month = has_full_attendance and (today - timedelta(days=30) <= requested_date <= today)
+       view_only = is_past_month and (requested_date not in last_3_dates) and not within_1_month
        return get_or_create_attendance_records(group, requested_date, view_only=view_only)
 
     @action(detail=False, methods=['get'])
@@ -90,7 +92,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 # Grace period: Tungi 4 gacha kechagi kunni o'zgartirishga ruxsat
                 is_early_morning = timezone.localtime().hour < 4
                 is_yesterday = instance.date == (today - timedelta(days=1))
-                if instance.date not in last_3_dates and not (is_early_morning and is_yesterday):
+                has_full_attendance = self._user_has_full_attendance(request.user)
+                within_1_month = has_full_attendance and (today - timedelta(days=30) <= instance.date <= today)
+                if instance.date not in last_3_dates and not (is_early_morning and is_yesterday) and not within_1_month:
                     return Response({"detail": f"Faqat bugungi yoki oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin."}, status=status.HTTP_400_BAD_REQUEST)
             
             instance.is_present = is_present
@@ -121,14 +125,16 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if request.user.is_authenticated and not self._user_can_access_group(request.user, group):
             return Response({"detail": "Sizda ushbu guruh davomatini tahrirlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
         
-        # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars
+        # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars, yoki to'liq davomat huquqi bo'lsa 1 oy
         today = timezone.localdate()
         if requested_date != today:
             last_3_dates = get_last_3_lesson_dates(group)
             
             is_early_morning = timezone.localtime().hour < 4
             is_yesterday = requested_date == (today - timedelta(days=1))
-            if requested_date not in last_3_dates and not (is_early_morning and is_yesterday):
+            has_full_attendance = self._user_has_full_attendance(request.user)
+            within_1_month = has_full_attendance and (today - timedelta(days=30) <= requested_date <= today)
+            if requested_date not in last_3_dates and not (is_early_morning and is_yesterday) and not within_1_month:
                 return Response({"detail": f"Faqat bugungi yoki oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin."}, status=status.HTTP_400_BAD_REQUEST)
 
         student = get_object_or_404(group.students, id=student_id)
@@ -176,14 +182,16 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if request.user.is_authenticated and not self._user_can_access_group(request.user, group):
             return Response({"detail": "Sizda ushbu guruh davomatini tasdiqlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
         
-        # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars
+        # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars, yoki to'liq davomat huquqi bo'lsa 1 oy
         today = timezone.localdate()
         if requested_date != today:
             last_3_dates = get_last_3_lesson_dates(group)
             
             is_early_morning = timezone.localtime().hour < 4
             is_yesterday = requested_date == (today - timedelta(days=1))
-            if requested_date not in last_3_dates and not (is_early_morning and is_yesterday):
+            has_full_attendance = self._user_has_full_attendance(request.user)
+            within_1_month = has_full_attendance and (today - timedelta(days=30) <= requested_date <= today)
+            if requested_date not in last_3_dates and not (is_early_morning and is_yesterday) and not within_1_month:
                 return Response({"detail": f"Faqat bugungi yoki oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin."}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -195,6 +203,22 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             logger.exception(f"Attendance confirm failed for group {group_id}: {e}")
             return Response({"detail": f"Davomatni tasdiqlashda xatolik: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
+    def _user_has_full_attendance(self, user):
+        """Admin yoki super admin uchun to'liq davomat (1 oylik tahrirlash) huquqini tekshirish"""
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'role', '') == 'super_admin' or getattr(user, 'is_superuser', False):
+            return True
+        if getattr(user, 'role', '') == 'admin':
+            try:
+                from permissions.models import StaffPermission
+                sp = StaffPermission.objects.filter(user=user).first()
+                if sp and sp.permissions:
+                    return bool(sp.permissions.get('full_attendance'))
+            except Exception:
+                return False
+        return False
+
     def _user_can_access_group(self, user, group):
         """Foydalanuvchi guruhga kirish huquqini tekshirish"""
         if not user or not getattr(user, 'is_authenticated', False):
@@ -202,6 +226,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if user.role == 'super_admin':
             return True
         if user.role == 'admin':
+            if self._user_has_full_attendance(user):
+                return True
             allowed = [user.branch_id] if user.branch_id else []
             if hasattr(user, 'branch_accesses'):
                 allowed.extend(user.branch_accesses.values_list('branch_id', flat=True))

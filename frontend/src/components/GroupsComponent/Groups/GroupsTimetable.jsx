@@ -189,7 +189,7 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
               onClick={() => setSelectedDay("all")}
               className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap border ${
                 selectedDay === "all"
-                  ? "bg-[var(--gold)] text-black border-transparent shadow-sm"
+                  ? "bg-[var(--gold)] text-white border-transparent shadow-sm"
                   : "bg-[var(--bg-void)]/60 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--text-primary)]"
               }`}
             >
@@ -205,14 +205,14 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
                   onClick={() => setSelectedDay(d.id)}
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap border flex items-center gap-1.5 ${
                     isSelected
-                      ? "bg-[var(--gold)] text-black border-transparent shadow-sm"
+                      ? "bg-[var(--gold)] text-white border-transparent shadow-sm"
                       : isToday
                       ? "bg-[var(--gold)]/10 text-[var(--gold)] border-[var(--gold)]/40"
                       : "bg-[var(--bg-void)]/60 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--text-primary)]"
                   }`}
                 >
                   <span>{d.short}</span>
-                  <span className={`text-[8px] px-1 py-0.2 rounded-full ${isSelected ? "bg-black/20 text-black" : "bg-[var(--border-glass)] text-[var(--text-muted)]"}`}>
+                  <span className={`text-[8px] px-1 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-[var(--border-glass)] text-[var(--text-muted)]"}`}>
                     {count}
                   </span>
                   {isToday && (
@@ -281,7 +281,7 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
                     {day.name}
                   </span>
                   {isToday && (
-                    <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[var(--gold)] text-black">
+                    <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[var(--gold)] text-white">
                       Bugun
                     </span>
                   )}

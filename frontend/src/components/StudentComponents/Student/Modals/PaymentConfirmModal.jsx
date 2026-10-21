@@ -178,13 +178,13 @@ export const PaymentConfirmModal = ({ isOpen, onClose, onConfirm, data, loading 
                     <div className="w-full grid grid-cols-2 gap-2 bg-[var(--bg-void)] p-1.5 rounded-[2rem] border border-[var(--border-glass)]">
                         <button
                             onClick={() => setMethod('cash')}
-                            className={`flex items-center justify-center gap-2 py-3.5 rounded-[1.7rem] text-[11px] font-black transition-all ${method === 'cash' ? 'bg-amber-500 text-black shadow-lg' : 'text-[var(--text-muted)] hover:bg-white/5'}`}
+                            className={`flex items-center justify-center gap-2 py-3.5 rounded-[1.7rem] text-[11px] font-black transition-all ${method === 'cash' ? 'bg-amber-500 text-white shadow-lg' : 'text-[var(--text-muted)] hover:bg-white/5'}`}
                         >
                             <Banknote size={16} /> Naqd
                         </button>
                         <button
                             onClick={() => setMethod('click')}
-                            className={`flex items-center justify-center gap-2 py-3.5 rounded-[1.7rem] text-[11px] font-black transition-all ${method === 'click' ? 'bg-amber-500 text-black shadow-lg' : 'text-[var(--text-muted)] hover:bg-white/5'}`}
+                            className={`flex items-center justify-center gap-2 py-3.5 rounded-[1.7rem] text-[11px] font-black transition-all ${method === 'click' ? 'bg-amber-500 text-white shadow-lg' : 'text-[var(--text-muted)] hover:bg-white/5'}`}
                         >
                             <Smartphone size={16} /> Click / Karta
                         </button>
@@ -280,7 +280,7 @@ export const PaymentConfirmModal = ({ isOpen, onClose, onConfirm, data, loading 
                         <button
                             onClick={handleConfirmClick}
                             disabled={loading || (method === 'click' && !noReceipt && !receiptImage) || (noReceipt && !notes)}
-                            className="flex-1 py-4 rounded-2xl bg-amber-500 text-black text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(245,158,11,0.2)] hover:shadow-[0_15px_30px_rgba(245,158,11,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-gray-500 disabled:shadow-none"
+                            className="flex-1 py-4 rounded-2xl bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(245,158,11,0.2)] hover:shadow-[0_15px_30px_rgba(245,158,11,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-gray-500 disabled:shadow-none"
                         >
                             {loading ? <Loader2 size={18} className="animate-spin" /> : "Tasdiqlash"}
                         </button>

@@ -37,13 +37,13 @@ const BranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentBranchP
  className={`block p-4 rounded-2xl border transition-all duration-300 ${activeBranchId === userInfo?.branch_id || !currentBranchParam ?'bg-[var(--gold)]/10 border-[var(--gold)]/30' :'bg-[var(--bg-void)]/40 border-[var(--border-glass)]'}`}
  >
  <div className="flex items-start gap-3">
- <div className={`p-2 rounded-xl ${activeBranchId === userInfo?.branch_id || !currentBranchParam ?'bg-[var(--gold)] text-black' :'bg-[var(--bg-panel)] text-[var(--gold)]'}`}>
+ <div className={`p-2 rounded-xl ${activeBranchId === userInfo?.branch_id || !currentBranchParam ?'bg-[var(--gold)] text-white' :'bg-[var(--bg-panel)] text-[var(--gold)]'}`}>
  <Building2 size={18} />
  </div>
  <div className="flex-1 min-w-0">
  <h4 className="text-sm font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
  {userInfo?.branch_name}
- <span className="text-[8px] bg-[var(--gold)] text-black px-2 py-0.5 rounded font-black capitalize tracking-wider">Asosiy</span>
+ <span className="text-[8px] bg-[var(--gold)] text-white px-2 py-0.5 rounded font-black capitalize tracking-wider">Asosiy</span>
  </h4>
  <p className="text-[9px] text-[var(--text-secondary)] font-bold capitalize tracking-widest opacity-40">Asosiy filial</p>
  </div>
@@ -59,7 +59,7 @@ const BranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentBranchP
  className={`block p-4 rounded-2xl border transition-all duration-300 ${activeBranchId === branch.branch_id ?'bg-[var(--gold)]/10 border-[var(--gold)]/30' :'bg-[var(--bg-void)]/40 border-[var(--border-glass)]'}`}
  >
  <div className="flex items-start gap-3">
- <div className={`p-2 rounded-xl ${activeBranchId === branch.branch_id ?'bg-[var(--gold)] text-black' :'bg-[var(--bg-panel)] text-[var(--gold)]'}`}>
+ <div className={`p-2 rounded-xl ${activeBranchId === branch.branch_id ?'bg-[var(--gold)] text-white' :'bg-[var(--bg-panel)] text-[var(--gold)]'}`}>
  <Building2 size={18} />
  </div>
  <div className="flex-1 min-w-0">
@@ -101,8 +101,9 @@ export default function MobileBottomNav() {
  return (
  <>
  <div 
-   className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[var(--bg-panel)]/95 backdrop-blur-xl border-t border-[var(--border-glass)] flex items-center px-2.5 z-50 overflow-x-auto gap-1.5 touch-pan-x select-none"
+   className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[var(--bg-panel)] border-t border-[var(--border-glass)] flex items-center px-2.5 z-50 overflow-x-auto gap-1.5 touch-pan-x select-none"
    style={{ 
+     backgroundColor: 'var(--bg-panel)',
      scrollbarWidth: 'none', 
      msOverflowStyle: 'none', 
      WebkitOverflowScrolling: 'touch' 
@@ -131,7 +132,7 @@ export default function MobileBottomNav() {
  >
  <div className="relative">
  <Building2 size={19} />
- <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-[var(--gold)] text-black text-[7px] font-bold rounded-full flex items-center justify-center">
+ <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-[var(--gold)] text-white text-[7px] font-bold rounded-full flex items-center justify-center">
  {userInfo?.accessible_branches?.length ? userInfo.accessible_branches.length + 1 : 1}
  </span>
  </div>

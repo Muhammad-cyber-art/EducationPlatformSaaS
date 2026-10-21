@@ -126,7 +126,7 @@ const EditProfileModal = ({ isOpen, onClose, user, onSave, isPending }) => {
             <button
               type="submit"
               disabled={isPending}
-              className="px-5 py-2.5 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black rounded-xl text-sm font-bold flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50"
+              className="px-5 py-2.5 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50"
             >
               {isPending ? 'Saqlanmoqda...' : <><Save size={18} /> Saqlash</>}
             </button>

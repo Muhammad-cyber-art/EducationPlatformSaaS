@@ -111,7 +111,7 @@ const AddMockTestModal = ({ isOpen, onClose, groupId }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4.5 h-14 flex items-center justify-center gap-3 text-[11px] font-black uppercase tracking-widest text-black bg-[var(--gold)] rounded-2xl hover:opacity-95 active:scale-95 transition-all shadow-[0_15px_30px_rgba(184,134,11,0.3)] disabled:opacity-50"
+              className="w-full py-4.5 h-14 flex items-center justify-center gap-3 text-[11px] font-black uppercase tracking-widest text-white bg-[var(--gold)] rounded-2xl hover:opacity-95 active:scale-95 transition-all shadow-[0_15px_30px_rgba(184,134,11,0.3)] disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 size={20} className="animate-spin" />

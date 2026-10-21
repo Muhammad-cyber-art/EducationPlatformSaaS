@@ -53,7 +53,7 @@ const PaymentModal = ({ isOpen, onClose, onConfirm, loading, amount: initialAmou
  className="lux-input !bg-[var(--bg-void)] !text-center !text-2xl !font-black !py-6 !border-[var(--gold)]/30 focus:!border-[var(--gold)] transition-all"
  placeholder="0"
  />
- <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[var(--gold)] text-black text-[7px] font-black capitalize tracking-[0.2em] rounded">To'lov summasi</div>
+ <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[var(--gold)] text-white text-[7px] font-black capitalize tracking-[0.2em] rounded">To'lov summasi</div>
  </div>
  </div>
 

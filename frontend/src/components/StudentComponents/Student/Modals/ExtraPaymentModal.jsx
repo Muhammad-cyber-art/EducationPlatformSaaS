@@ -46,7 +46,7 @@ export const ExtraPaymentModal = ({ isOpen, onClose, onSave, loading, studentNam
         <div className="flex p-1 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-2xl mb-6">
           <button
             onClick={() => setData({ ...data, transaction_type: 'income' })}
-            className={`flex-1 py-3 rounded-xl text-[9px] font-black capitalize tracking-widest transition-all ${data.transaction_type === 'income' ? 'bg-[var(--gold)] text-black shadow-lg' : 'text-[var(--text-muted)] hover:text-white'}`}
+            className={`flex-1 py-3 rounded-xl text-[9px] font-black capitalize tracking-widest transition-all ${data.transaction_type === 'income' ? 'bg-[var(--gold)] text-white shadow-lg' : 'text-[var(--text-muted)] hover:text-white'}`}
           >
             Kirim
           </button>
@@ -97,7 +97,7 @@ export const ExtraPaymentModal = ({ isOpen, onClose, onSave, loading, studentNam
 
           <div className="flex gap-4 pt-6">
             <button onClick={handleClose} className="flex-1 py-4 rounded-2xl border border-[var(--border-glass)] text-[10px] font-black capitalize tracking-widest hover:bg-white/5 transition-all">Yopish</button>
-            <button disabled={loading || !data.group || groups.length === 0} onClick={() => onSave(data)} className={`flex-1 py-4 rounded-2xl text-[10px] font-black capitalize tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${data.transaction_type === 'income' ? 'bg-[var(--gold)] text-black shadow-[0_0_20px_#b8860b30]' : 'bg-red-500 text-white shadow-[0_0_20px_#ef444430]'}`}>
+            <button disabled={loading || !data.group || groups.length === 0} onClick={() => onSave(data)} className={`flex-1 py-4 rounded-2xl text-[10px] font-black capitalize tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${data.transaction_type === 'income' ? 'bg-[var(--gold)] text-white shadow-[0_0_20px_#b8860b30]' : 'bg-red-500 text-white shadow-[0_0_20px_#ef444430]'}`}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Saqlash
             </button>
           </div>

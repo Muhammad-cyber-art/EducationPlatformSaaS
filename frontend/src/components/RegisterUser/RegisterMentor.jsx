@@ -203,7 +203,7 @@ export default function MentorRegister() {
                         <button
                             type="submit"
                             disabled={loading || branchLoading}
-                            className="w-full py-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-black text-[11px] font-black capitalize tracking-[0.2em] rounded-[1.5rem] transition-all shadow-xl shadow-[var(--gold)]/20 flex items-center justify-center gap-3 mt-6 active:scale-95"
+                            className="w-full py-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-black capitalize tracking-[0.2em] rounded-[1.5rem] transition-all shadow-xl shadow-[var(--gold)]/20 flex items-center justify-center gap-3 mt-6 active:scale-95"
                         >
                             {loading ? <Loader2 className="animate-spin" size={18} /> : (
                                 <>

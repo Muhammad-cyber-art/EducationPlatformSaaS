@@ -209,7 +209,7 @@ const AllPayments = () => {
             type="button"
             onClick={() => navigate('kassa')}
             title="Kassa tizimi"
-            className="shrink-0 inline-flex items-center justify-center gap-1 h-8 px-2 sm:px-3 bg-[var(--bg-void)] border border-[var(--gold)]/30 text-[var(--gold)] rounded-lg font-bold text-[8px] sm:text-[9px] capitalize tracking-wide whitespace-nowrap transition-all hover:bg-[var(--gold)] hover:text-black active:scale-95 shadow-[0_5px_15px_rgba(184,134,11,0.1)]"
+            className="shrink-0 inline-flex items-center justify-center gap-1 h-8 px-2 sm:px-3 bg-[var(--bg-void)] border border-[var(--gold)]/30 text-[var(--gold)] rounded-lg font-bold text-[8px] sm:text-[9px] capitalize tracking-wide whitespace-nowrap transition-all hover:bg-[var(--gold)] hover:text-white active:scale-95 shadow-[0_5px_15px_rgba(184,134,11,0.1)]"
           >
             <Wallet size={14} className="shrink-0 sm:w-4 sm:h-4" />
             <span>Kassa</span>
@@ -219,7 +219,7 @@ const AllPayments = () => {
             onClick={handleDownloadMonthlyReport}
             disabled={isDownloading}
             title="Hisobotni yuklash"
-            className="shrink-0 inline-flex items-center justify-center gap-1 h-8 px-2 sm:px-3 bg-[var(--gold)] text-black rounded-lg font-bold text-[8px] sm:text-[9px] capitalize tracking-wide whitespace-nowrap transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
+            className="shrink-0 inline-flex items-center justify-center gap-1 h-8 px-2 sm:px-3 bg-[var(--gold)] text-white rounded-lg font-bold text-[8px] sm:text-[9px] capitalize tracking-wide whitespace-nowrap transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
           >
             {isDownloading ? <Loader2 size={14} className="animate-spin shrink-0" /> : <Download size={14} className="shrink-0 sm:w-4 sm:h-4" />}
             <span className="max-[380px]:hidden sm:inline">Yuklash</span>
@@ -515,7 +515,7 @@ const SidebarProtocol = ({ icon, label, to = "#", badge }) => (
       <span className="text-[9px] font-bold text-[var(--text-muted)] group-hover:text-[var(--text-primary)] capitalize tracking-wide">{label}</span>
     </div>
     {badge ? (
-      <span className="px-1.5 py-0.5 bg-[var(--gold)] text-black text-[8px] font-bold rounded">{badge}</span>
+      <span className="px-1.5 py-0.5 bg-[var(--gold)] text-white text-[8px] font-bold rounded">{badge}</span>
     ) : (
       <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-[var(--gold)] transition-all" />
     )}

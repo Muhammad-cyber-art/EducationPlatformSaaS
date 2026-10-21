@@ -363,7 +363,7 @@ export default function AdminPanel() {
                                                 }}
                                                 className="w-full flex items-center gap-3.5 p-3 hover:bg-[var(--gold-dim)] border border-[var(--gold)]/20 rounded-xl transition-all group text-left bg-[var(--gold)]/5"
                                             >
-                                                <div className="p-2.5 rounded-lg bg-[var(--gold)]/10 text-[var(--gold)] group-hover:bg-[var(--gold)] group-hover:text-black transition-colors shrink-0">
+                                                <div className="p-2.5 rounded-lg bg-[var(--gold)]/10 text-[var(--gold)] group-hover:bg-[var(--gold)] group-hover:text-white transition-colors shrink-0">
                                                     <FileDown size={16} />
                                                 </div>
                                                 <div className="min-w-0">
@@ -382,7 +382,7 @@ export default function AdminPanel() {
                                                 }}
                                                 className="w-full flex items-center gap-3.5 p-3 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-xl transition-all group text-left bg-emerald-500/5 animate-pulse"
                                             >
-                                                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-black transition-colors shrink-0">
+                                                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
                                                     <FileDown size={16} />
                                                 </div>
                                                 <div className="min-w-0">

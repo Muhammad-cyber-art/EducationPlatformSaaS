@@ -63,12 +63,13 @@ class StaffPermissionSerializer(serializers.ModelSerializer):
     reports = serializers.BooleanField(default=False, label="Hisobotlar (Reports)")
     homework = serializers.BooleanField(default=False, label="Vazifalar va Davomat (Homework)")
     pay_slip = serializers.BooleanField(default=False, label="Oylik maosh kvitansiyasi (Pay Slip)")
+    full_attendance = serializers.BooleanField(default=False, label="To'liq davomat (Full Attendance)")
 
     class Meta:
         model = StaffPermission
         fields = [
             'id', 'user', 'username', 'finance', 'groups', 'students', 
-            'teachers', 'branches', 'reports', 'homework', 'pay_slip'
+            'teachers', 'branches', 'reports', 'homework', 'pay_slip', 'full_attendance'
         ]
         read_only_fields = ['id', 'user'] 
 
@@ -83,7 +84,7 @@ class StaffPermissionSerializer(serializers.ModelSerializer):
         
         # Super admin hamma narsaga ruxsatga ega
         if instance.user.role == 'super_admin':
-            for module in ['finance', 'groups', 'students', 'teachers', 'branches', 'reports', 'homework', 'pay_slip']:
+            for module in ['finance', 'groups', 'students', 'teachers', 'branches', 'reports', 'homework', 'pay_slip', 'full_attendance']:
                 ret[module] = True
             return ret
 
@@ -98,6 +99,7 @@ class StaffPermissionSerializer(serializers.ModelSerializer):
         ret['reports'] = bool(perms.get('reports'))
         ret['homework'] = bool(perms.get('homework'))
         ret['pay_slip'] = bool(perms.get('pay_slip'))
+        ret['full_attendance'] = bool(perms.get('full_attendance'))
         
         return ret
 
@@ -120,6 +122,12 @@ class StaffPermissionSerializer(serializers.ModelSerializer):
             # Attrs dan tozalash (baribir modelda yo'q)
             if module in attrs:
                 del attrs[module]
+        
+        # To'liq davomat ruxsati (oxirgi 1 oylik davomatni tahrirlash huquqi)
+        if attrs.get('full_attendance'):
+            permissions_json['full_attendance'] = True
+        if 'full_attendance' in attrs:
+            del attrs['full_attendance']
         
         attrs['permissions'] = permissions_json
         return attrs

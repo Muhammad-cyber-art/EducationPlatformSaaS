@@ -152,7 +152,7 @@ export default function GroupsListPage() {
             onClick={() => setViewMode("grid")}
             className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
               viewMode === "grid"
-                ? "bg-[var(--gold)] text-black shadow-sm font-bold"
+                ? "bg-[var(--gold)] text-white shadow-sm font-bold"
                 : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
@@ -164,7 +164,7 @@ export default function GroupsListPage() {
             onClick={() => setViewMode("timetable")}
             className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
               viewMode === "timetable"
-                ? "bg-[var(--gold)] text-black shadow-sm font-bold"
+                ? "bg-[var(--gold)] text-white shadow-sm font-bold"
                 : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
@@ -222,7 +222,7 @@ export default function GroupsListPage() {
  {canCreateGroup && (
  <button
  onClick={() => navigate(`addgroup?branch=${currentBranchId}`)}
- className="lg:hidden fixed bottom-24 right-6 w-16 h-16 bg-[var(--gold)] text-black rounded-2xl shadow-[0_15px_40px_rgba(184,134,11,0.4)] flex items-center justify-center z-[110] active:scale-90 transition-transform"
+ className="lg:hidden fixed bottom-24 right-6 w-16 h-16 bg-[var(--gold)] text-white rounded-2xl shadow-[0_15px_40px_rgba(184,134,11,0.4)] flex items-center justify-center z-[110] active:scale-90 transition-transform"
  >
  <Plus size={28} />
  </button>

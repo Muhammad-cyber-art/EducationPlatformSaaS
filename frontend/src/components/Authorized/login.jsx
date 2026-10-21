@@ -55,7 +55,7 @@ export default function Login() {
             setError(`'${activeSub}' subdomenli o'quv markaz topilmadi.`);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, []);
 
@@ -136,8 +136,8 @@ export default function Login() {
       const payload = jwtDecode(access);
 
       // Tizimga kirilganda orqa fonda davomat va moliya ma'lumotlarini oldindan yuklab olish
-      attendanceOfflineService.prefetchBundle().catch(() => {});
-      financeOfflineService.prefetchFinanceBundle().catch(() => {});
+      attendanceOfflineService.prefetchBundle().catch(() => { });
+      financeOfflineService.prefetchFinanceBundle().catch(() => { });
 
       let role = payload.role;
       if (payload.is_superuser) {
@@ -158,8 +158,8 @@ export default function Login() {
         (errorr.response?.status === 401
           ? "Parol yoki login noto'g'ri"
           : errorr.response?.status === 404
-          ? "Ushbu markaz domeni topilmadi"
-          : "Server bilan xatolik, iltimos keyinroq urinib ko'ring")
+            ? "Ushbu markaz domeni topilmadi"
+            : "Server bilan xatolik, iltimos keyinroq urinib ko'ring")
       );
       setTimeout(() => setError(""), 5000);
     } finally {
@@ -214,11 +214,7 @@ export default function Login() {
             <div className="space-y-6">
               {/* Workspace Header */}
               <div className="text-center pb-2 border-b border-[var(--border-glass)] space-y-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold"
-                  style={{ background: 'var(--gold-dim)', color: 'var(--gold)', border: '1px solid var(--gold)' }}>
-                  <Globe size={13} />
-                  <span>{subdomain}.localhost</span>
-                </div>
+
                 {workspaceName && (
                   <h3 className="text-base font-bold text-[var(--text-primary)]">
                     {workspaceName}
@@ -271,12 +267,12 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="lux-btn lux-btn-primary w-full !py-3.5 group shadow-[0_0_20px_rgba(184,134,11,0.2)] disabled:opacity-50"
+                  className="lux-btn lux-btn-primary text-white w-full !py-3.5 group shadow-[0_0_20px_rgba(184,134,11,0.2)] disabled:opacity-50"
                 >
-                  <span className="text-[12px] font-black tracking-[0.2em]">
+                  <span className="text-[12px] font-black tracking-[0.2em] text-white">
                     {loginLoading ? "TEKSHIRILMOQDA..." : "ACCESS SYSTEM"}
                   </span>
-                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight size={16} className="text-white group-hover:translate-x-1 transition-transform" />
                 </button>
               </form>
 
@@ -345,7 +341,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={workspaceLoading || !workspaceInput.trim()}
-                  className="lux-btn lux-btn-primary w-full !py-3.5 font-bold text-xs tracking-wider disabled:opacity-40"
+                  className="lux-btn lux-btn-primary text-white w-full !py-3.5 font-bold text-xs tracking-wider disabled:opacity-40"
                 >
                   {workspaceLoading ? "TEKSHIRILMOQDA..." : "DAVOM ETISH →"}
                 </button>

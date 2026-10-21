@@ -251,6 +251,10 @@ class Payment(models.Model):
                     (self.student.branch if self.student else None)
                     or (self.group.branch if self.group else None)
                 )
+                if _branch is None and self.student:
+                    enr = self.student.enrollments.filter(is_active=True, group__branch__isnull=False).select_related('group__branch').first()
+                    if enr and enr.group:
+                        _branch = enr.group.branch
 
                 if _branch is None:
                     # Branch aniqlanmasa tranzaksiya yaratmaymiz — AttributeError dan saqlaymiz

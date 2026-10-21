@@ -33,7 +33,7 @@ const EditProfileModal = ({
  key={type}
  type="button"
  onClick={() => dispatch(updateEditForm({ salary_type: type }))}
- className={`py-2.5 px-3 rounded-xl transition-all ${editForm.salary_type === type ?'bg-[var(--gold)] text-black shadow-[0_0_15px_rgba(184,134,11,0.3)]' :'bg-[var(--bg-panel)] text-[var(--text-muted)] border border-[#2a2a2a]'}`}
+ className={`py-2.5 px-3 rounded-xl transition-all ${editForm.salary_type === type ?'bg-[var(--gold)] text-white shadow-[0_0_15px_rgba(184,134,11,0.3)]' :'bg-[var(--bg-panel)] text-[var(--text-muted)] border border-[#2a2a2a]'}`}
  >
  <span className="text-[10px] font-black capitalize">
  {type ==='fixed' ?'Belgilangan' : type ==='percentage' ?'Foiz' :'Student'}
@@ -88,7 +88,7 @@ const EditProfileModal = ({
  <button
  onClick={() => handleUpdate(editForm)}
  disabled={editLoading}
- className="w-full bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-2 text-xs capitalize tracking-widest shadow-[0_0_20px_rgba(184,134,11,0.3)] active:scale-[0.98] disabled:opacity-50"
+ className="w-full bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-2 text-xs capitalize tracking-widest shadow-[0_0_20px_rgba(184,134,11,0.3)] active:scale-[0.98] disabled:opacity-50"
  >
  {editLoading ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
  Saqlash

@@ -86,7 +86,7 @@ const StudentGroupsSection = ({
                                                     dispatch({ type: 'TOGGLE_TRANSFER_MODAL', payload: true, group: group });
                                                     dispatch({ type: 'TOGGLE_MENU', payload: false });
                                                 }}
-                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-[var(--text-primary)] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-black transition-colors"
+                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-[var(--text-primary)] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-white transition-colors"
                                             >
                                                 <LogIn size={14} /> Ko'chirish
                                             </button>
@@ -97,7 +97,7 @@ const StudentGroupsSection = ({
                                                         dispatch({ type: 'TOGGLE_MENU', payload: false });
                                                         generatePaymentMutation.mutate(group.id);
                                                     }}
-                                                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-amber-500 uppercase tracking-widest hover:bg-amber-500 hover:text-black transition-colors"
+                                                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[9px] font-black text-amber-500 uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-colors"
                                                     disabled={generatePaymentMutation.isPending}
                                                 >
                                                     {generatePaymentMutation.isPending ? <DollarSign size={14} className="animate-spin" /> : <DollarSign size={14} />} To'lov yaratish

@@ -90,7 +90,7 @@ const StaffProfileForm = ({ isOpen, onClose, onSuccess, branch }) => {
  type="button"
  onClick={handleSubmit}
  disabled={loading || loadingUsers || !formData.user || availableUsers.length === 0}
- className="w-full flex items-center justify-center gap-3 bg-[var(--gold)] hover:bg-[var(--gold)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black text-[11px] capitalize tracking-widest py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(184,134,11,0.3)] active:scale-[0.97]"
+ className="w-full flex items-center justify-center gap-3 bg-[var(--gold)] hover:bg-[var(--gold)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-[11px] capitalize tracking-widest py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(184,134,11,0.3)] active:scale-[0.97]"
  >
  {loading ? (
  <><Loader2 className="animate-spin" size={18} /> Saqlanmoqda...</>

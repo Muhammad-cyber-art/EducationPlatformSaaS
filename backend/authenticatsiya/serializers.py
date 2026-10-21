@@ -261,24 +261,24 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         Permissions ni soddalashtirilgan Boolean formatda qaytaradi.
         Masalan: {finance: true, groups: false, ...}
         """
+        # Super admin hamma narsaga ruxsatga ega
+        if getattr(obj, 'role', '') == 'super_admin' or getattr(obj, 'is_superuser', False):
+            return {
+                'finance': True,
+                'groups': True,
+                'students': True,
+                'teachers': True,
+                'branches': True,
+                'reports': True,
+                'homework': True,
+                'pay_slip': True,
+                'full_attendance': True
+            }
+
         try:
             from permissions.models import StaffPermission
-            sp = StaffPermission.objects.get(user=obj)
-            
-            # Super admin hamma narsaga ruxsatga ega
-            if obj.role == 'super_admin' or obj.is_superuser:
-                return {
-                    'finance': True,
-                    'groups': True,
-                    'students': True,
-                    'teachers': True,
-                    'branches': True,
-                    'reports': True,
-                    'homework': True,
-                    'pay_slip': True
-                }
-            
-            perms = sp.permissions or {}
+            sp = StaffPermission.objects.filter(user=obj).first()
+            perms = (sp.permissions or {}) if sp else {}
             
             # Modul kaliti bormi va bo'sh emasmi? -> True, aks holda False
             return {
@@ -289,7 +289,8 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'branches': bool(perms.get('branches')),
                 'reports': bool(perms.get('reports')),
                 'homework': bool(perms.get('homework')),
-                'pay_slip': bool(perms.get('pay_slip'))
+                'pay_slip': bool(perms.get('pay_slip')),
+                'full_attendance': bool(perms.get('full_attendance'))
             }
         except Exception:
             return {
@@ -300,7 +301,8 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'branches': False,
                 'reports': False,
                 'homework': False,
-                'pay_slip': False
+                'pay_slip': False,
+                'full_attendance': False
             }
 
 # authentication/serializers.py

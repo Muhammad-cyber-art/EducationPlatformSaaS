@@ -23,7 +23,7 @@ const ResourcesModal = ({
  {/* Modal Header */}
  <div className="px-6 md:px-10 py-6 md:py-8 border-b border-[var(--border-glass)] flex justify-between items-center bg-[var(--bg-panel)] shrink-0">
  <div className="flex items-center gap-4 md:gap-5">
- <div className="p-3 md:p-4 bg-[var(--gold)] rounded-2xl text-black shadow-lg shadow-[var(--gold-glow)]">
+ <div className="p-3 md:p-4 bg-[var(--gold)] rounded-2xl text-white shadow-lg shadow-[var(--gold-glow)]">
  <Layers size={20} className="md:size-[24px]" strokeWidth={2.5} />
  </div>
  <div className="min-w-0">

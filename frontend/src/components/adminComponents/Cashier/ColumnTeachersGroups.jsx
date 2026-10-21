@@ -53,7 +53,7 @@ export default function ColumnTeachersGroups({
             onClick={() => onTabChange('groups')}
             className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
               activeTab === 'groups'
-                ? 'bg-[var(--gold)] text-black shadow-md shadow-[var(--gold)]/20'
+                ? 'bg-[var(--gold)] text-white font-bold shadow-md shadow-[var(--gold)]/20'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-glass)]/30'
             }`}
           >

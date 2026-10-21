@@ -116,7 +116,7 @@ export default function GroupRoster({
                 onClick={() => setFilterMode('all')}
                 className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
                   filterMode === 'all'
-                    ? 'bg-[var(--gold)] text-black'
+                    ? 'bg-[var(--gold)] text-white font-bold'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -268,7 +268,7 @@ export default function GroupRoster({
                         <button
                           type="button"
                           onClick={() => onOpenPayment(st)}
-                          className="px-3 py-1.5 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black text-xs font-black rounded-xl shadow-md shadow-[var(--gold)]/10 active:scale-95 transition-all flex items-center gap-1.5"
+                          className="px-3 py-1.5 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white text-xs font-black rounded-xl shadow-md shadow-[var(--gold)]/10 active:scale-95 transition-all flex items-center gap-1.5"
                         >
                           <CreditCard size={13} />
                           <span>To'lov</span>

@@ -30,7 +30,7 @@ export const PaymentCheckout = ({ payment, onConfirm }) => {
         return (
             <button
                 onClick={() => onConfirm(payment.id)}
-                className="p-2 sm:p-3 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-black rounded-lg sm:rounded-xl font-black capitalize tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
+                className="p-2 sm:p-3 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-lg sm:rounded-xl font-black capitalize tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
                 title="To'lash"
             >
                 <CreditCard size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -65,7 +65,7 @@ export const PaymentCheckout = ({ payment, onConfirm }) => {
 
             <button
                 onClick={() => onConfirm(payment.id, null, ignoreRefund)}
-                className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-black transition-all shadow-md active:scale-90 flex items-center justify-center cursor-pointer relative z-10"
+                className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-md active:scale-90 flex items-center justify-center cursor-pointer relative z-10"
                 title="Tasdiqlash"
             >
                 <CreditCard size={14} className="sm:w-[16px] sm:h-[16px]" />

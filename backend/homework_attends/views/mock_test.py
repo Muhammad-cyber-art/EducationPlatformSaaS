@@ -51,6 +51,11 @@ class MockTestViewSet(ModelViewSet):
 
         return queryset.select_related('group').distinct()
 
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('group_id') or self.request.query_params.get('group'):
+            return None
+        return super().paginate_queryset(queryset)
+
     def get_serializer_class(self):
         if self.action == 'list':
             return MockTestListSerializer
@@ -73,7 +78,11 @@ class MockTestViewSet(ModelViewSet):
         create_mock_test_with_results(serializer, group)
 
     def perform_destroy(self, instance):
-        archive_mock_test(instance, self.request.user)
+        try:
+            archive_mock_test(instance, self.request.user)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to archive mock test %s before deletion: %s", instance.id, e, exc_info=True)
         instance.delete()
 
     @action(detail=True, methods=['patch'])

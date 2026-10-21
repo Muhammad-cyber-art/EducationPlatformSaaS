@@ -74,7 +74,7 @@ const GroupCard = React.memo(({ group, readOnly, currentBranchId }) => {
           {!readOnly && (
             <button
               onClick={(e) => { e.stopPropagation(); setColorCh(!colorCh); }}
-              className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all border ${colorCh ? 'bg-[var(--gold)] text-black border-transparent shadow-lg' : 'bg-[var(--bg-panel)]/50 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--gold)]'}`}
+              className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl transition-all border ${colorCh ? 'bg-[var(--gold)] text-white border-transparent shadow-lg' : 'bg-[var(--bg-panel)]/50 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--gold)]'}`}
             >
               <Palette size={14} className="sm:w-4 sm:h-4" />
             </button>

@@ -411,13 +411,28 @@ class Student(models.Model):
 
         return bool(updated_fields)
 
+    @property
+    def primary_group(self):
+        """
+        Faol guruhni xavfsiz qaytaradi:
+        1. student.group (legacy FK agar mavjud bo'lsa)
+        2. Aks holda birinchi faol enrollment guruhi
+        """
+        if self.group:
+            return self.group
+        if self.pk:
+            enr = self.enrollments.filter(is_active=True, group__isnull=False).select_related('group').first()
+            if enr and enr.group:
+                return enr.group
+        return None
+
     def get_absences_count(self, year, month, group=None):
         """O'quvchining berilgan oydagi qoldirgan darslari sonini qaytaradi.
 
         BUG #5 TUZATILDI: calculate_attendance_based_student_payment() bilan
         izchillik uchun marked_by__isnull=False filtri qo'shildi.
         """
-        target_group = group or self.group
+        target_group = group or self.primary_group
         if not target_group:
             return 0
 
@@ -458,7 +473,7 @@ class Student(models.Model):
         """
         from finance.utils import floor_amount
 
-        target_group = group or self.group
+        target_group = group or self.primary_group
         if not target_group:
             return 0
 
@@ -512,7 +527,7 @@ class Student(models.Model):
         from decimal import Decimal
         from finance.utils import floor_amount
 
-        target_group = group or self.group
+        target_group = group or self.primary_group
         if not target_group:
             return 0
 
@@ -548,7 +563,8 @@ class Student(models.Model):
         return refund
 
     def __str__(self):
-        group_name = self.group.name if self.group else "Guruhsiz"
+        target = self.primary_group
+        group_name = target.name if target else "Guruhsiz"
         return f"{self.full_name} ({group_name})"
 
 

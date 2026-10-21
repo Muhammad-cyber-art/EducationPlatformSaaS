@@ -367,7 +367,7 @@ const GroupConfigModal = ({ isOpen, onClose, staffId, data }) => {
                             <button
                                 onClick={handleAddConfig}
                                 disabled={groupConfigsLoading || availableGroups.length === 0}
-                                className="w-full flex items-center justify-center gap-2 bg-[var(--gold)] hover:bg-[var(--gold)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black text-[10px] capitalize tracking-widest py-2.5 rounded-lg transition-all shadow-[0_0_15px_rgba(184,134,11,0.25)] active:scale-[0.97]"
+                                className="w-full flex items-center justify-center gap-2 bg-[var(--gold)] hover:bg-[var(--gold)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-[10px] capitalize tracking-widest py-2.5 rounded-lg transition-all shadow-[0_0_15px_rgba(184,134,11,0.25)] active:scale-[0.97]"
                             >
                                 {groupConfigsLoading ? (
                                     <Loader2 className="animate-spin" size={14} />

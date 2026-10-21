@@ -119,14 +119,14 @@ export default function TransferStaff({ isOpen, onClose }) {
  <div className="flex p-1.5 bg-[var(--bg-panel)] mx-8 mt-8 rounded-2xl gap-1">
  <button
  onClick={() => setActiveTab("mentor")}
- className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-xs font-black capitalize tracking-widest ${activeTab ==="mentor" ?"bg-[var(--gold)] text-black shadow-lg" :"text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+ className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-xs font-black capitalize tracking-widest ${activeTab ==="mentor" ?"bg-[var(--gold)] text-white shadow-lg" :"text-[var(--text-muted)] hover:text-[var(--text-primary)]"
  }`}
  >
  <Users size={16} /> MENTORLAR
  </button>
  <button
  onClick={() => setActiveTab("admin")}
- className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-xs font-black capitalize tracking-widest ${activeTab ==="admin" ?"bg-[var(--gold)] text-black shadow-lg" :"text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+ className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all text-xs font-black capitalize tracking-widest ${activeTab ==="admin" ?"bg-[var(--gold)] text-white shadow-lg" :"text-[var(--text-muted)] hover:text-[var(--text-primary)]"
  }`}
  >
  <Shield size={16} /> ADMINLAR
@@ -219,7 +219,7 @@ export default function TransferStaff({ isOpen, onClose }) {
  <button
  onClick={handleSubmit}
  disabled={loading || !formData.user_id || !formData.branch_id}
- className={`flex-[2] py-4 px-6 rounded-2xl font-black text-xs capitalize tracking-widest text-[#000] shadow-[0_0_20px_rgba(184,134,11,0.3)] transition-all active:scale-[0.98] disabled:opacity-30 bg-[var(--gold)] hover:bg-[var(--gold)]/90
+ className={`flex-[2] py-4 px-6 rounded-2xl font-black text-xs capitalize tracking-widest text-white shadow-[0_0_20px_rgba(184,134,11,0.3)] transition-all active:scale-[0.98] disabled:opacity-30 bg-[var(--gold)] hover:bg-[var(--gold)]/90
  }`}
  >
  {loading ?"YUKLANMOQDA..." :"TRANSFERNI AMALGA OSHIRISH"}

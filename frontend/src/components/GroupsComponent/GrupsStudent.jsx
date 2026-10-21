@@ -318,7 +318,7 @@ export default function GroupsStudent({
                   </span>
 
                   <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-300 flex items-center justify-center ${markedStudents[item.id] || Object.keys(markedStudents || {}).length > 0 ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover/mark:opacity-100 group-hover/mark:scale-100'}`}>
-                    <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedStudents[item.id] ? 'bg-[var(--gold)] border-[var(--gold)] text-black shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--border-glass)] border bg-[var(--bg-void)] text-transparent hover:border-[var(--gold)]/50'}`}>
+                    <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedStudents[item.id] ? 'bg-[var(--gold)] border-[var(--gold)] text-white shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--border-glass)] border bg-[var(--bg-void)] text-transparent hover:border-[var(--gold)]/50'}`}>
                       {markedStudents[item.id] && <Check size={12} strokeWidth={3} />}
                     </div>
                   </div>
@@ -367,7 +367,7 @@ export default function GroupsStudent({
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
                     className={`h-9 px-6 rounded-xl text-[9px] font-black capitalize tracking-[0.2em] flex items-center gap-2 transition-all shadow-md active:scale-90 ${isPresent === true
-                      ? 'bg-emerald-500 text-black shadow-emerald-500/20'
+                      ? 'bg-emerald-500 text-white shadow-emerald-500/20'
                       : isPresent === false
                         ? 'bg-red-500 text-white shadow-red-500/20'
                         : 'bg-[var(--bg-void)]/50 text-[var(--text-muted)] border border-[var(--border-glass)]'
@@ -418,7 +418,7 @@ export default function GroupsStudent({
                   onClick={(e) => { e.stopPropagation(); onToggleMark(item.id); }}
                   className="cursor-pointer p-2 -ml-2 flex items-center justify-center"
                 >
-                  <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedStudents[item.id] ? 'bg-[var(--gold)] border-transparent text-black shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--text-muted)]/40 border bg-[var(--bg-void)] text-transparent hover:border-[var(--gold)]/50'}`}>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedStudents[item.id] ? 'bg-[var(--gold)] border-transparent text-white shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--text-muted)]/40 border bg-[var(--bg-void)] text-transparent hover:border-[var(--gold)]/50'}`}>
                     {markedStudents[item.id] && <Check size={12} strokeWidth={3} />}
                   </div>
                 </div>
@@ -456,7 +456,7 @@ export default function GroupsStudent({
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
                     className={`h-9 px-5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 text-[9px] font-black capitalize tracking-widest ${isPresent === true
-                      ? 'bg-emerald-500 text-black shadow-emerald-500/20'
+                      ? 'bg-emerald-500 text-white shadow-emerald-500/20'
                       : isPresent === false
                         ? 'bg-red-500 text-white shadow-red-500/20'
                         : 'bg-[var(--bg-void)]/50 text-[var(--text-muted)] border border-[var(--border-glass)]'

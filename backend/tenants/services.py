@@ -302,9 +302,15 @@ class TenantProvisioningService:
         logger.info("Schema %s uchun migratsiyalar ishga tushirilmoqda...", schema_name)
 
         try:
-            # Joriy Python interpretatori ishlatiladi (venv mos kelishi uchun)
+            import os
+            from django.conf import settings
+            base_dir = str(getattr(settings, "BASE_DIR", ""))
+            manage_py = os.path.join(base_dir, "manage.py") if (base_dir and os.path.exists(os.path.join(base_dir, "manage.py"))) else "manage.py"
+
+            # Joriy Python interpretatori va aniq working directory ishlatiladi
             result = subprocess.run(
-                [sys.executable, "manage.py", "migrate_tenant_schema", schema_name],
+                [sys.executable, manage_py, "migrate_tenant_schema", schema_name],
+                cwd=base_dir if (base_dir and os.path.isdir(base_dir)) else None,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -332,12 +338,18 @@ class TenantProvisioningService:
                 schema_name,
                 Exception("Migration timeout (120s) — server yuklanishi juda yuqori bo'lishi mumkin")
             )
-        except FileNotFoundError:
-            # manage.py topilmasa (test muhiti) — o'tkazib yuborish
+        except (FileNotFoundError, OSError) as os_err:
             logger.warning(
-                "manage.py topilmadi — migratsiya o'tkazib yuborildi (test rejimi?) schema=%s",
-                schema_name
+                "Subprocess orqali manage.py ishga tushirishda ogohlantirish (%s). In-process call_command fallback sinab ko'rilmoqda: schema=%s",
+                os_err, schema_name
             )
+            try:
+                from django.core.management import call_command
+                call_command("migrate_tenant_schema", schema_name, verbosity=0)
+                logger.info("In-process migratsiyalar muvaffaqiyatli bajarildi: schema=%s", schema_name)
+            except Exception as in_process_err:
+                logger.error("In-process fallback migratsiya ham xatolik bilan to'xtadi: %s", in_process_err)
+                raise TenantSchemaError(schema_name, in_process_err) from in_process_err
 
     def _create_first_admin(
         self,

@@ -27,7 +27,7 @@ const MentorBranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentB
                         onClick={() => { navigate(currentPath); onClose(); }}
                         className={`p-5 rounded-[1.8rem] transition-all duration-500 flex items-center gap-4 ${activeBranchId === userInfo?.branch_id || !currentBranchParam ? "bg-[var(--gold)]/10 shadow-lg shadow-[var(--gold)]/5" : "bg-white/5"}`}
                     >
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeBranchId === userInfo?.branch_id || !currentBranchParam ? "bg-[var(--gold)] text-black shadow-lg" : "bg-white/10 text-[var(--text-secondary)]"}`}>
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeBranchId === userInfo?.branch_id || !currentBranchParam ? "bg-[var(--gold)] text-white shadow-lg" : "bg-white/10 text-[var(--text-secondary)]"}`}>
                             <Building2 size={20} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -44,7 +44,7 @@ const MentorBranchModal = ({ isOpen, onClose, userInfo, activeBranchId, currentB
                             onClick={() => { navigate(`${currentPath}?branch=${branch.branch_id}`); onClose(); }}
                             className={`p-5 rounded-[1.8rem] transition-all duration-500 flex items-center gap-4 ${activeBranchId === branch.branch_id ? "bg-[var(--gold)]/10 shadow-lg shadow-[var(--gold)]/5" : "bg-white/5"}`}
                         >
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeBranchId === branch.branch_id ? "bg-[var(--gold)] text-black shadow-lg" : "bg-white/10 text-[var(--text-secondary)]"}`}>
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeBranchId === branch.branch_id ? "bg-[var(--gold)] text-white shadow-lg" : "bg-white/10 text-[var(--text-secondary)]"}`}>
                                 <Building2 size={20} />
                             </div>
                             <div className="flex-1 min-w-0">

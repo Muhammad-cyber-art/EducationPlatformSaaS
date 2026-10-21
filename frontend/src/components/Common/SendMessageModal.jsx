@@ -120,7 +120,7 @@ const SendMessageModal = ({ isOpen, onClose, groupId = null, branchId = null, sh
             <button
               type="submit"
               disabled={loading || !message.trim()}
-              className="flex-[1.5] h-12 bg-[var(--gold)] hover:bg-[#a67c00] text-black rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-[0_5px_15px_rgba(184,134,11,0.2)] transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-[1.5] h-12 bg-[var(--gold)] hover:bg-[#a67c00] text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-[0_5px_15px_rgba(184,134,11,0.2)] transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <Loader2 className="animate-spin" size={18} strokeWidth={3} />

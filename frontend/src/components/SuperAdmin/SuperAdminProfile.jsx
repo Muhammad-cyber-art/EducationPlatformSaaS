@@ -90,7 +90,7 @@ const SuperAdminProfile = () => {
           </div>
           <button 
             onClick={() => setIsEditModalOpen(true)}
-            className="p-3 bg-[var(--bg-panel)] hover:bg-[var(--gold)] hover:text-black border border-[var(--border-glass)] rounded-2xl text-[var(--text-secondary)] transition-all shadow-lg active:scale-95"
+            className="p-3 bg-[var(--bg-panel)] hover:bg-[var(--gold)] hover:text-white border border-[var(--border-glass)] rounded-2xl text-[var(--text-secondary)] transition-all shadow-lg active:scale-95"
           >
             <Edit size={20} />
           </button>
@@ -101,7 +101,7 @@ const SuperAdminProfile = () => {
           {/* Global Broadcast Button */}
           <button
             onClick={() => setIsMessageModalOpen(true)}
-            className="w-full py-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black border border-[var(--gold)]/50 rounded-2xl text-[12px] md:text-sm font-black capitalize tracking-widest transition-all shadow-lg shadow-[var(--gold)]/20 active:scale-95 flex items-center justify-center gap-3"
+            className="w-full py-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white border border-[var(--gold)]/50 rounded-2xl text-[12px] md:text-sm font-black capitalize tracking-widest transition-all shadow-lg shadow-[var(--gold)]/20 active:scale-95 flex items-center justify-center gap-3"
           >
             <Send size={18} />
             Global Xabar Yuborish

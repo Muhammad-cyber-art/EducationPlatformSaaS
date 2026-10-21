@@ -6,12 +6,12 @@ const CategoryBtn = ({ active, onClick, icon, label, shortLabel, count }) => (
  onClick={onClick}
  className={`w-full flex items-center justify-between p-2.5 sm:p-4 rounded-xl transition-all border ${
  active
- ?"bg-[var(--gold)] text-black border-transparent shadow-[var(--gold-glow)]"
+ ?"bg-[var(--gold)] text-white border-transparent shadow-[var(--gold-glow)]"
  :"bg-transparent text-[var(--text-muted)] border-transparent hover:bg-white/5 hover:text-white"
  }`}
  >
  <div className="flex items-center gap-2 sm:gap-4">
- <div className={`${active ?"text-black" :"text-[var(--gold)]"} shrink-0`}>
+ <div className={`${active ?"text-white" :"text-[var(--gold)]"} shrink-0`}>
  {React.cloneElement(icon, { size: 16, className:"sm:w-4 sm:h-4 w-3.5 h-3.5" })}
  </div>
  <span className="text-[8px] sm:text-[10px] font-black capitalize tracking-[0.1em] sm:tracking-[0.2em] whitespace-nowrap">
@@ -19,7 +19,7 @@ const CategoryBtn = ({ active, onClick, icon, label, shortLabel, count }) => (
  <span className="sm:hidden">{shortLabel}</span>
  </span>
  </div>
- <div className={`px-1.5 sm:px-2 py-0.5 rounded-lg text-[8px] sm:text-[9px] font-black shrink-0 ${active ?"bg-black/10" :"bg-[var(--gold-dim)] text-[var(--gold)]"}`}>
+ <div className={`px-1.5 sm:px-2 py-0.5 rounded-lg text-[8px] sm:text-[9px] font-black shrink-0 ${active ?"bg-white/20 text-white" :"bg-[var(--gold-dim)] text-[var(--gold)]"}`}>
  {count}
  </div>
  </button>

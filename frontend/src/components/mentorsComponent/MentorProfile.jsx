@@ -197,7 +197,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                     <div className="flex items-center gap-3 pt-4">
                                         <button
                                             onClick={handleUpdate}
-                                            className="flex-1 bg-[var(--gold)] text-black font-black text-[11px] uppercase tracking-widest py-3.5 rounded-xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(184,134,11,0.3)]"
+                                            className="flex-1 bg-[var(--gold)] text-white font-black text-[11px] uppercase tracking-widest py-3.5 rounded-xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(184,134,11,0.3)]"
                                         >
                                             <Save size={16} /> Saqlash
                                         </button>
@@ -272,7 +272,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                         <button
                                             onClick={() => permMutation.mutate(permissions)}
                                             disabled={permMutation.isPending}
-                                            className="px-4 py-1.5 bg-[var(--gold)]/10 text-[var(--gold)] hover:bg-[var(--gold)] hover:text-black rounded-lg text-[9px] font-black uppercase tracking-widest border border-[var(--gold)]/20 transition-all flex items-center gap-1.5 shadow-lg shadow-[var(--gold)]/10 active:scale-95"
+                                            className="px-4 py-1.5 bg-[var(--gold)]/10 text-[var(--gold)] hover:bg-[var(--gold)] hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest border border-[var(--gold)]/20 transition-all flex items-center gap-1.5 shadow-lg shadow-[var(--gold)]/10 active:scale-95"
                                         >
                                             {permMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Saqlash
                                         </button>

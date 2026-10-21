@@ -188,7 +188,7 @@ const GroupEditForm = ({
           </button>
           <button
             onClick={handleUpdate}
-            className="px-12 py-3.5 bg-[var(--gold)] text-black rounded-xl text-[10px] font-black capitalize tracking-widest shadow-lg transition-opacity hover:opacity-90 active:scale-95"
+            className="px-12 py-3.5 bg-[var(--gold)] text-white rounded-xl text-[10px] font-black capitalize tracking-widest shadow-lg transition-opacity hover:opacity-90 active:scale-95"
           >
             Saqlash
           </button>

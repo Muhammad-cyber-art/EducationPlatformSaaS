@@ -344,11 +344,17 @@ export default function GroupDetailPage() {
     return false;
   }, [selectedDate, groupinfo, lessonDates, last3EditableDates]);
 
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+  const oneMonthAgoStr = oneMonthAgo.toLocaleDateString('sv-SE');
+
   // Mentorlar va Adminlar uchun oxirgi 3 ta o'tilgan dars yoki bugungi dars davomatini tahrirlash huquqi
+  // To'liq davomat huquqiga ega adminlar va super adminlar uchun oxirgi 1 oylik davomatni tahrirlash huquqi
   const canEditAttendance = isLessonDay && permissions.canTakeAttendance && isGroupLogicActive && (
     selectedDate === todayStr_actual ||
     (currentHour < 4 && selectedDate === yesterdayStr) ||
-    last3EditableDates.includes(selectedDate)
+    last3EditableDates.includes(selectedDate) ||
+    (permissions.hasFullAttendance && selectedDate >= oneMonthAgoStr && selectedDate <= todayStr_actual)
   );
 
 

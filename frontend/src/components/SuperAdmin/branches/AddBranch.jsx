@@ -128,7 +128,7 @@ export default function BranchCreateView() {
  <button
  type="submit"
  disabled={loading}
- className="px-10 py-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black text-[10px] font-black capitalize tracking-widest rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(184,134,11,0.3)] hover:shadow-[0_0_30px_rgba(184,134,11,0.5)] disabled:opacity-50 flex items-center gap-3"
+ className="px-10 py-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white text-[10px] font-black capitalize tracking-widest rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(184,134,11,0.3)] hover:shadow-[0_0_30px_rgba(184,134,11,0.5)] disabled:opacity-50 flex items-center gap-3"
  >
  {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
  {loading ?"Saqlanmoqda..." :"Filialni saqlash"}

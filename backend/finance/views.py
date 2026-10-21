@@ -834,8 +834,44 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "is_partial": g_is_partial
             })
 
-        if not target_group and active_enrollments.exists():
-            target_group = active_enrollments.first().group
+        if not target_group:
+            if active_enrollments.exists():
+                target_group = active_enrollments.first().group
+            elif getattr(student, 'primary_group', None):
+                target_group = student.primary_group
+
+        if not all_groups_info and target_group:
+            pmt = Payment.objects.filter(student=student, group=target_group, month=month_date).first()
+            if pmt:
+                g_expected = float(pmt.amount or target_group.monthly_price or 0)
+                g_paid = float(pmt.paid_amount or 0)
+                g_remaining = float(pmt.remaining_amount)
+                g_is_paid = pmt.is_paid
+                g_is_partial = pmt.is_partial
+                pmt_id = pmt.id
+            else:
+                fee = float(student.custom_fee) if (student.status in ['low_income', 'negotiated', 'teacher_negotiated'] and student.custom_fee is not None) else float(target_group.monthly_price or 0)
+                g_expected = fee
+                g_paid = 0.0
+                g_remaining = 0.0 if student.status == 'teacher_negotiated' else fee
+                g_is_paid = (student.status == 'teacher_negotiated')
+                g_is_partial = False
+                pmt_id = None
+
+            all_groups_info.append({
+                "group_id": target_group.id,
+                "group_name": target_group.name,
+                "branch_id": target_group.branch_id,
+                "branch_name": target_group.branch.name if target_group.branch else "",
+                "mentor_name": target_group.mentor.get_full_name() if target_group.mentor else "Biriktirilmagan",
+                "monthly_price": float(target_group.monthly_price or 0),
+                "payment_id": pmt_id,
+                "expected_amount": g_expected,
+                "paid_amount": g_paid,
+                "remaining_amount": g_remaining,
+                "is_paid": g_is_paid,
+                "is_partial": g_is_partial
+            })
 
         # 2. Target guruh davomat statistikasi
         attendance_stats = {"total_lessons": 0, "passed_lessons": 0, "present_count": 0, "absences": 0}
@@ -901,6 +937,7 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                         "amount": float(rp.paid_amount or rp.amount or 0),
                         "payment_method": rp.payment_method,
                         "receipt_url": url,
+                        "notes": rp.notes or "",
                         "paid_at": rp.paid_at.isoformat() if rp.paid_at else None
                     })
 

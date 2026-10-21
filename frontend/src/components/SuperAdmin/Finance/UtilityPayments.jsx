@@ -140,7 +140,7 @@ const UtilityPayments = () => {
 
  <button
  onClick={() => setShowAddModal(true)}
- className="px-8 py-4 bg-[var(--gold)] text-black rounded-2xl text-[10px] font-black capitalize tracking-widest hover:shadow-[var(--gold-glow)] transition-all flex items-center gap-3"
+ className="px-8 py-4 bg-[var(--gold)] text-white rounded-2xl text-[10px] font-black capitalize tracking-widest hover:shadow-[var(--gold-glow)] transition-all flex items-center gap-3"
  >
  <Plus size={18} /> Yangi To'lov
  </button>
@@ -284,7 +284,7 @@ const UtilityPayments = () => {
  <button
  type="submit"
  disabled={createMutation.isPending}
- className="flex-3 py-4 bg-[var(--gold)] text-black rounded-2xl text-[10px] font-black capitalize tracking-widest hover:shadow-[var(--gold-glow)] transition-all flex justify-center items-center gap-2"
+ className="flex-3 py-4 bg-[var(--gold)] text-white rounded-2xl text-[10px] font-black capitalize tracking-widest hover:shadow-[var(--gold-glow)] transition-all flex justify-center items-center gap-2"
  >
  {createMutation.isPending ? <Loader2 size={16} className="animate-spin" /> :"Tasdiqlash"}
  </button>

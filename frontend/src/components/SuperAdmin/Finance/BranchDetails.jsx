@@ -116,7 +116,7 @@ export default function BranchFinance() {
               <p className="text-[10px] text-amber-500/70 font-bold mt-1 tracking-wide">Imtiyozli, kelishilgan va ehtiyojmand o'quvchilar uchun moliyaviy tahlil va wallet hisoboti</p>
             </div>
           </div>
-          <div className="flex items-center self-end sm:self-auto gap-2 px-4 py-2 bg-amber-500/10 rounded-lg text-amber-500 text-[10px] font-black uppercase tracking-widest border border-amber-500/20 group-hover:bg-amber-500 text-amber-500 group-hover:text-black transition-colors shrink-0">
+          <div className="flex items-center self-end sm:self-auto gap-2 px-4 py-2 bg-amber-500/10 rounded-lg text-amber-500 text-[10px] font-black uppercase tracking-widest border border-amber-500/20 group-hover:bg-amber-500 group-hover:text-white transition-colors shrink-0">
             <span>Ko'rish</span>
           </div>
         </Link>

@@ -355,7 +355,7 @@ const StudentHistorySection = ({
                           onClick={() => handlePaymentConfirm(p.id)}
                           className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border font-black text-[9px] uppercase tracking-wider transition-all active:scale-95 shadow-sm ${
                             p.is_partial
-                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500 hover:text-black"
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500 hover:text-white"
                               : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500 hover:text-white"
                           }`}
                         >

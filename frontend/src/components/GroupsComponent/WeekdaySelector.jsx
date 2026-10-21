@@ -95,7 +95,7 @@ export default function WeekdaySelector({
             onClick={() => setPreset([0, 2, 4])}
             className={`px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all border ${
               JSON.stringify(selectedDays) === JSON.stringify([0, 2, 4])
-                ? "bg-[var(--gold)] text-black border-[var(--gold)] shadow-sm font-black"
+                ? "bg-[var(--gold)] text-white border-[var(--gold)] shadow-sm font-black"
                 : "bg-[var(--bg-void)]/60 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/30"
             }`}
           >
@@ -106,7 +106,7 @@ export default function WeekdaySelector({
             onClick={() => setPreset([1, 3, 5])}
             className={`px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all border ${
               JSON.stringify(selectedDays) === JSON.stringify([1, 3, 5])
-                ? "bg-[var(--gold)] text-black border-[var(--gold)] shadow-sm font-black"
+                ? "bg-[var(--gold)] text-white border-[var(--gold)] shadow-sm font-black"
                 : "bg-[var(--bg-void)]/60 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/30"
             }`}
           >
@@ -117,7 +117,7 @@ export default function WeekdaySelector({
             onClick={() => setPreset([0, 1, 2, 3, 4, 5])}
             className={`px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all border ${
               selectedDays.length === 6 && !selectedDays.includes(6)
-                ? "bg-[var(--gold)] text-black border-[var(--gold)] shadow-sm font-black"
+                ? "bg-[var(--gold)] text-white border-[var(--gold)] shadow-sm font-black"
                 : "bg-[var(--bg-void)]/60 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/30"
             }`}
           >
@@ -128,7 +128,7 @@ export default function WeekdaySelector({
             onClick={() => setPreset([0, 1, 2, 3, 4, 5, 6])}
             className={`px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all border ${
               selectedDays.length === 7
-                ? "bg-[var(--gold)] text-black border-[var(--gold)] shadow-sm font-black"
+                ? "bg-[var(--gold)] text-white border-[var(--gold)] shadow-sm font-black"
                 : "bg-[var(--bg-void)]/60 text-[var(--text-secondary)] border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/30"
             }`}
           >

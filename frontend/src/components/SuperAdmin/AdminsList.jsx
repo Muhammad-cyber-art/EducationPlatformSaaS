@@ -119,14 +119,14 @@ const AdminList = () => {
         <div className="absolute top-0 right-0 h-fit bg-[var(--bg-panel)] p-1 rounded-xl border border-[var(--border-glass)] flex gap-1 shadow-lg z-10 transition-transform">
           <button
             onClick={() => setViewMode('grid')}
-            className={`p-1.5 sm:p-2.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-[var(--gold)] text-black' : 'text-[var(--text-muted)] hover:text-[var(--gold)]'}`}
+            className={`p-1.5 sm:p-2.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-[var(--gold)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--gold)]'}`}
             title="Grid View"
           >
             <LayoutGrid size={14} className="sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => setViewMode('list')}
-            className={`p-1.5 sm:p-2.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[var(--gold)] text-black' : 'text-[var(--text-muted)] hover:text-[var(--gold)]'}`}
+            className={`p-1.5 sm:p-2.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[var(--gold)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--gold)]'}`}
             title="List View"
           >
             <List size={14} className="sm:w-4 sm:h-4" />

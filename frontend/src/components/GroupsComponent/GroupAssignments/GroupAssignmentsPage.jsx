@@ -377,7 +377,7 @@ export default function GroupAssignmentsPage() {
               }}
               className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase transition-all whitespace-nowrap ${
                 activeTab === "homeworks"
-                  ? "bg-[var(--gold)] text-black shadow-lg shadow-[var(--gold-glow)]"
+                  ? "bg-[var(--gold)] text-white shadow-lg shadow-[var(--gold-glow)]"
                   : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-white border border-[var(--border-glass)]"
               }`}
             >
@@ -386,7 +386,7 @@ export default function GroupAssignmentsPage() {
               <span
                 className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
                   activeTab === "homeworks"
-                    ? "bg-black/20 text-black"
+                    ? "bg-white/20 text-white"
                     : "bg-white/5 text-[var(--text-muted)]"
                 }`}
               >
@@ -427,7 +427,7 @@ export default function GroupAssignmentsPage() {
               }}
               className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase transition-all whitespace-nowrap ${
                 activeTab === "history"
-                  ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/30"
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
                   : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-white border border-[var(--border-glass)]"
               }`}
             >
@@ -436,7 +436,7 @@ export default function GroupAssignmentsPage() {
               <span
                 className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
                   activeTab === "history"
-                    ? "bg-black/20 text-black"
+                    ? "bg-white/20 text-white"
                     : "bg-white/5 text-[var(--text-muted)]"
                 }`}
               >
@@ -512,7 +512,7 @@ export default function GroupAssignmentsPage() {
               {!isCreatingHomework && (
                 <button
                   onClick={() => setIsCreatingHomework(true)}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] text-black text-xs font-black tracking-wide uppercase hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-[var(--gold-glow)]"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] text-white text-xs font-black tracking-wide uppercase hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-[var(--gold-glow)]"
                 >
                   <Plus size={16} />
                   <span>+ Yangi Vazifa</span>
@@ -674,7 +674,7 @@ export default function GroupAssignmentsPage() {
                   <button
                     type="submit"
                     disabled={createHomeworkMutation.isPending}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[var(--gold)] text-black text-xs font-black uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-[var(--gold-glow)] disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[var(--gold)] text-white text-xs font-black uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-[var(--gold-glow)] disabled:opacity-50"
                   >
                     {createHomeworkMutation.isPending ? (
                       <>
@@ -716,7 +716,7 @@ export default function GroupAssignmentsPage() {
                 {!searchTerm && !isCreatingHomework && (
                   <button
                     onClick={() => setIsCreatingHomework(true)}
-                    className="mt-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] text-black text-xs font-black tracking-wider uppercase hover:opacity-90 transition-all"
+                    className="mt-2 px-5 py-2.5 rounded-xl bg-[var(--gold)] text-white text-xs font-black tracking-wider uppercase hover:opacity-90 transition-all"
                   >
                     + Birinchi vazifani qo'shish
                   </button>
@@ -818,7 +818,7 @@ export default function GroupAssignmentsPage() {
 
                           <button
                             onClick={() => navigate(`../homeworks/${hw.id}?branch=${branchId}`)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--gold-dim)] text-[var(--gold)] hover:bg-[var(--gold)] hover:text-black text-xs font-black uppercase tracking-wider transition-all"
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--gold-dim)] text-[var(--gold)] hover:bg-[var(--gold)] hover:text-white text-xs font-black uppercase tracking-wider transition-all"
                           >
                             <span>Tekshirish</span>
                             <ChevronRight size={14} />

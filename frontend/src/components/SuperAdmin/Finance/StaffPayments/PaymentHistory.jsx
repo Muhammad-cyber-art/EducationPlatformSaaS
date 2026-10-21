@@ -106,7 +106,7 @@ const PaymentHistory = ({
                 </div>
 
                 {!data.is_paid ? (
-                    <button onClick={() => dispatch(setPayModal(true))} className="w-full py-3.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-black font-black text-[10px] capitalize tracking-widest flex items-center justify-center gap-2 shadow-[0_10px_30px_rgba(184,134,11,0.2)] transition-all active:scale-[0.98]">
+                    <button onClick={() => dispatch(setPayModal(true))} className="w-full py-3.5 rounded-xl bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white font-black text-[10px] capitalize tracking-widest flex items-center justify-center gap-2 shadow-[0_10px_30px_rgba(184,134,11,0.2)] transition-all active:scale-[0.98]">
                         To'lovni tasdiqlash
                     </button>
                 ) : (

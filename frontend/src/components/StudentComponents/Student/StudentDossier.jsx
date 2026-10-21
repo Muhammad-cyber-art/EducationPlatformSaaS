@@ -124,7 +124,7 @@ const StudentDossier = ({ studentData, canConfirmPayment, dispatch }) => {
             onClick={() =>
               dispatch({ type: "TOGGLE_CUSTOM_PAYMENT", payload: true })
             }
-            className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[var(--gold)] text-black text-[10px] font-black capitalize tracking-widest active:scale-95 transition-all shadow-lg"
+            className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[var(--gold)] text-white text-[10px] font-black capitalize tracking-widest active:scale-95 transition-all shadow-lg"
           >
             <Save size={14} /> Qo'shimcha summa kiritish
           </button>

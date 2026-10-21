@@ -379,7 +379,7 @@ const MockTestDetails = () => {
                 />
                 <button
                   onClick={handleSetMaxScore}
-                  className="h-10 px-6 bg-[var(--gold)] text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-lg"
+                  className="h-10 px-6 bg-[var(--gold)] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-lg"
                 >
                   OK
                 </button>
@@ -388,7 +388,7 @@ const MockTestDetails = () => {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="lux-btn !bg-emerald-500 hover:!bg-emerald-600 !text-black !h-12 !px-8 !rounded-2xl !text-[11px] !font-black !uppercase !tracking-widest shadow-[0_10px_20px_rgba(16,185,129,0.2)] active:scale-95 disabled:opacity-50 flex items-center gap-3 transition-all"
+                className="lux-btn !bg-emerald-500 hover:!bg-emerald-600 !text-white !h-12 !px-8 !rounded-2xl !text-[11px] !font-black !uppercase !tracking-widest shadow-[0_10px_20px_rgba(16,185,129,0.2)] active:scale-95 disabled:opacity-50 flex items-center gap-3 transition-all"
               >
                 {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                 Saqlash

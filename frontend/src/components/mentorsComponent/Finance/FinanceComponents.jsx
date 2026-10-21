@@ -14,7 +14,7 @@ import {
 export const FinanceHeader = ({ month }) => (
   <div className="flex flex-col md:flex-row items-center justify-between gap-6">
     <div className="flex items-center gap-6">
-      <div className="w-16 h-16 bg-gradient-to-br from-[var(--gold)] to-[var(--gold-dim)] rounded-3xl shadow-[0_0_30px_#b8860b20] flex items-center justify-center text-black">
+      <div className="w-16 h-16 bg-gradient-to-br from-[var(--gold)] to-[var(--gold-dim)] rounded-3xl shadow-[0_0_30px_#b8860b20] flex items-center justify-center text-white">
         <DollarSign size={32} strokeWidth={2.5} />
       </div>
       <div>
@@ -299,7 +299,7 @@ export const ErrorState = ({ error, onBack }) => (
     </p>
     <button
       onClick={onBack}
-      className="mt-8 px-8 py-4 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl text-[10px] font-black text-white hover:bg-[var(--gold)] hover:text-black transition-all capitalize tracking-[0.2em]"
+      className="mt-8 px-8 py-4 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl text-[10px] font-black text-white hover:bg-[var(--gold)] hover:text-white transition-all capitalize tracking-[0.2em]"
     >
       Orqaga qaytish
     </button>

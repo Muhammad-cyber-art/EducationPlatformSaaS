@@ -103,7 +103,7 @@ const AdminExpenses = () => {
             </div>
             <button 
                 onClick={() => queryClient.invalidateQueries(['admin-expenses'])}
-                className="px-8 py-3 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl text-[var(--gold)] font-black text-[10px] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-black transition-all"
+                className="px-8 py-3 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl text-[var(--gold)] font-black text-[10px] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-white transition-all"
             >
                 Qayta yuklash
             </button>
@@ -129,7 +129,7 @@ const AdminExpenses = () => {
                 <div className="flex items-center gap-4">
                     <button 
                         onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-3 px-6 py-3 bg-[var(--gold)] text-black rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-[0_10px_25px_rgba(184,134,11,0.3)] hover:scale-[1.02] active:scale-95 transition-all"
+                        className="flex items-center gap-3 px-6 py-3 bg-[var(--gold)] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-[0_10px_25px_rgba(184,134,11,0.3)] hover:scale-[1.02] active:scale-95 transition-all"
                     >
                         <Plus size={16} strokeWidth={3} />
                         Qo'shish
@@ -323,7 +323,7 @@ const AdminExpenses = () => {
                             <button 
                                 type="submit" 
                                 disabled={createMutation.isLoading}
-                                className="w-full py-5 bg-[var(--gold)] text-black rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                                className="w-full py-5 bg-[var(--gold)] text-white rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
                             >
                                 {createMutation.isLoading ? <Loader2 className="animate-spin" size={20} /> : "Saqlash"}
                             </button>
