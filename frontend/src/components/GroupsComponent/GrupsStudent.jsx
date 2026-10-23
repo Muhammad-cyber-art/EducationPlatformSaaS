@@ -1,13 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import api from "../../tokenUpdater/updater";
 import toast from "react-hot-toast";
-import { Smartphone, Check, X as XIcon, User, Send, ShieldCheck, ArrowRightLeft, Trash2, MoreVertical } from "lucide-react";
+import { Smartphone, Check, X as XIcon, User, Send, ShieldCheck, ArrowRightLeft, Trash2, MoreVertical, Snowflake, Sun } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import StudentTransferModal from "./GroupDetails/StudentTransferModal";
 import { useState, useRef, useEffect } from "react";
+import { db } from "../../db/db";
 
 // 3 nuqta dropdown menu komponenti
-function StudentActionMenu({ item, onColor, onTransfer, onDelete, menuOpenId, setMenuOpenId }) {
+function StudentActionMenu({ item, onColor, onTransfer, onDelete, onToggleFreeze, menuOpenId, setMenuOpenId }) {
   const menuRef = useRef(null);
   const colorInputRef = useRef(null);
   const desktopColorInputRef = useRef(null);
@@ -49,6 +50,23 @@ function StudentActionMenu({ item, onColor, onTransfer, onDelete, menuOpenId, se
           </div>
         </div>
 
+        {/* Muzlatish / Eritish tugmasi */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFreeze && onToggleFreeze(item); }}
+          className={`w-9 h-9 rounded-xl border flex items-center justify-center hover:scale-105 active:scale-95 transition-all ${
+            item.is_frozen
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.35)] hover:bg-amber-500/30'
+              : 'bg-sky-500/10 text-sky-400 border-sky-400/25 hover:bg-sky-500/20 hover:border-sky-400/50'
+          }`}
+          title={item.is_frozen ? "Muzdan chiqarish (Eritish)" : "O'quvchini muzlatish"}
+        >
+          {item.is_frozen ? (
+            <Sun size={15} className="text-amber-400 animate-pulse" />
+          ) : (
+            <Snowflake size={14} className="text-sky-400" />
+          )}
+        </button>
+
         <button
           onClick={(e) => { e.stopPropagation(); onTransfer(item); }}
           className="w-9 h-9 bg-[var(--gold-dim)] text-[var(--gold)] rounded-xl border border-[var(--gold)]/20 flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
@@ -78,10 +96,29 @@ function StudentActionMenu({ item, onColor, onTransfer, onDelete, menuOpenId, se
 
         {isOpen && (
           <div
-            className="absolute right-0 top-full mt-1.5 w-52 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 origin-top-right"
+            className="absolute right-0 top-full mt-1.5 w-56 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 origin-top-right"
             style={{ zIndex: 99999 }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Muzlatish / Muzdan chiqarish (Eritish) */}
+            <button
+              onClick={() => { onToggleFreeze && onToggleFreeze(item); setMenuOpenId(null); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-b border-[var(--border-glass)]/40 ${
+                item.is_frozen 
+                  ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300" 
+                  : "hover:bg-sky-500/10 text-sky-400"
+              }`}
+            >
+              {item.is_frozen ? (
+                <Sun size={15} className="shrink-0 text-amber-400" />
+              ) : (
+                <Snowflake size={14} className="shrink-0 text-sky-400" />
+              )}
+              <span className="text-[10px] font-black capitalize tracking-wider">
+                {item.is_frozen ? "☀️ Muzdan chiqarish (Eritish)" : "❄️ Muzlatish"}
+              </span>
+            </button>
+
             {/* Rang berish */}
             <div
               className="relative flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold)]/5 transition-colors cursor-pointer border-b border-[var(--border-glass)]/40"
@@ -171,6 +208,60 @@ export default function GroupsStudent({
       toast.success("O'quvchi guruhdan olib tashlandi");
     } catch (err) {
       toast.error(err.response?.data?.detail || "O'chirishda xatolik yuz berdi");
+    }
+  };
+
+  const handleToggleFreeze = async (student) => {
+    const isCurrentlyFrozen = Boolean(student.is_frozen);
+    const actionText = isCurrentlyFrozen 
+      ? "muzdan chiqarmoqchimisiz (eritmoqchimisiz)" 
+      : "muzlatib qo'ymoqchimisiz";
+    if (!confirm(`"${student.full_name}" ni guruhda ${actionText}?`)) return;
+
+    // 1. Optimistik UI yangilash (Darhol foydalanuvchiga ko'rinishi uchun)
+    const updateStudentFreezeInList = (old) => {
+      if (!old) return old;
+      const toggle = (list) => list.map(s => Number(s.id) === Number(student.id) ? { ...s, is_frozen: !isCurrentlyFrozen } : s);
+      if (Array.isArray(old)) return toggle(old);
+      if (old.results && Array.isArray(old.results)) return { ...old, results: toggle(old.results) };
+      return old;
+    };
+    queryClient.setQueriesData({ queryKey: ['group-students'] }, updateStudentFreezeInList);
+    queryClient.setQueriesData({ queryKey: ['group-detail'] }, updateStudentFreezeInList);
+
+    try {
+      const res = await api.post(`/groups/groups/${groupId}/toggle-freeze-student/`, {
+        student_id: student.id
+      });
+
+      // 2. Offline / Dexie query cache'ni darhol yangilash
+      try {
+        const cacheKey = `group-students_${groupId}`;
+        const cached = (await db.query_cache.get(cacheKey)) || (await db.query_cache.get(`group-students_${Number(groupId)}`));
+        if (cached?.data && Array.isArray(cached.data)) {
+          const updated = cached.data.map(s => Number(s.id) === Number(student.id) ? { ...s, is_frozen: !isCurrentlyFrozen } : s);
+          await db.query_cache.put({ ...cached, data: updated });
+        }
+      } catch (_) {}
+
+      // 3. Tanstack Query keshlarini to'liq qayta yangilash (Invalidate)
+      queryClient.invalidateQueries({ queryKey: ['group-students', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['group-students', String(groupId)] });
+      queryClient.invalidateQueries({ queryKey: ['group-students', Number(groupId)] });
+      queryClient.invalidateQueries({ queryKey: ['group-students'] });
+      queryClient.invalidateQueries({ queryKey: ['group-detail', String(groupId)] });
+      queryClient.invalidateQueries({ queryKey: ['group-detail', Number(groupId)] });
+      queryClient.invalidateQueries({ queryKey: ['group-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      if (onAttendanceChange) onAttendanceChange();
+
+      const successMsg = res.data?.detail || res.data?.status || (isCurrentlyFrozen ? "O'quvchi muzdan chiqarildi (eritildi)" : "O'quvchi muzlatildi");
+      toast.success(successMsg, { icon: isCurrentlyFrozen ? '☀️' : '❄️' });
+    } catch (err) {
+      // Xatolik bo'lsa orqaga qaytarish
+      queryClient.invalidateQueries({ queryKey: ['group-students'] });
+      queryClient.invalidateQueries({ queryKey: ['group-detail'] });
+      toast.error(err.response?.data?.detail || err.response?.data?.error || "Amalni bajarishda xatolik yuz berdi");
     }
   };
 
@@ -277,6 +368,19 @@ export default function GroupsStudent({
         };
 
         const renderPaymentBadge = (compact = false) => {
+          if (item.is_frozen) {
+            return (
+              <div
+                className={`inline-flex items-center gap-1.5 rounded-lg font-black uppercase border shrink-0 transition-all bg-sky-500/15 text-sky-300 border-sky-400/40 shadow-[0_0_10px_rgba(56,189,248,0.2)] ${
+                  compact ? "px-2 py-0.5 text-[8px] tracking-wide" : "px-3 py-1 text-[8px] tracking-widest"
+                }`}
+                title="O'quvchi muzlatilgan — to'lov kvitansiyalari yaratilmaydi"
+              >
+                <Snowflake size={10} className="animate-pulse shrink-0 text-sky-400" />
+                <span>Muzlatilgan</span>
+              </div>
+            );
+          }
           const isPaid = Boolean(item.current_payment_status);
           return (
             <div
@@ -302,11 +406,18 @@ export default function GroupsStudent({
           return (
             <tr
               key={item.id || index}
-              className="group hover:bg-[var(--bg-void)]/40 transition-all border-b border-[var(--border-glass)]/20 use-dynamic-border-left"
-              style={item.color && item.color !== '#ffffff' ? { 
+              className={`group transition-all border-b use-dynamic-border-left ${
+                item.is_frozen
+                  ? 'bg-sky-500/10 hover:bg-sky-500/15 border-sky-400/30 shadow-[inset_0_0_20px_rgba(56,189,248,0.12)]'
+                  : 'hover:bg-[var(--bg-void)]/40 border-[var(--border-glass)]/20'
+              }`}
+              style={item.is_frozen ? { 
+                borderLeft: '6px solid #38bdf8',
+                '--card-color': '#38bdf8'
+              } : (item.color && item.color !== '#ffffff' ? { 
                 borderLeft: `6px solid ${item.color}`,
                 '--card-color': item.color
-              } : {}}
+              } : {})}
             >
               <td className="px-4 py-3 text-center relative group/mark">
                 <div
@@ -326,16 +437,29 @@ export default function GroupsStudent({
               </td>
               <td className="px-4 py-3">
                 <div
-                  onClick={() => navigate(`students/${item.id}?branch=${currentBranchId}`)}
+                  onClick={() => navigate(`students/${item.id}${currentBranchId && currentBranchId !== 'null' && currentBranchId !== 'undefined' ? `?branch=${currentBranchId}` : ''}`)}
                   className="flex items-center gap-3 cursor-pointer group/user"
                 >
-                  <div className="w-8 h-8 shrink-0 rounded-lg bg-[var(--bg-void)] border border-[var(--border-glass)] group-hover/user:border-[var(--gold)]/50 flex items-center justify-center text-[var(--gold)] font-bold transition-all overflow-hidden shadow-inner">
+                  <div className={`w-8 h-8 shrink-0 rounded-lg border flex items-center justify-center font-bold transition-all overflow-hidden shadow-inner ${
+                    item.is_frozen
+                      ? 'bg-sky-500/20 border-sky-400/50 text-sky-300'
+                      : 'bg-[var(--bg-void)] border-[var(--border-glass)] text-[var(--gold)] group-hover/user:border-[var(--gold)]/50'
+                  }`}>
                     {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <User size={14} />}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="text-[13px] font-black text-[var(--text-primary)] group-hover:text-[var(--gold)] transition-colors capitalize tracking-tight leading-tight whitespace-nowrap overflow-hidden">
-                      {item.full_name}
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className={`text-[13px] font-black transition-colors capitalize tracking-tight leading-tight whitespace-nowrap overflow-hidden ${
+                        item.is_frozen ? 'text-sky-200 group-hover:text-sky-300' : 'text-[var(--text-primary)] group-hover:text-[var(--gold)]'
+                      }`}>
+                        {item.full_name}
+                      </h4>
+                      {item.is_frozen && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_8px_rgba(56,189,248,0.25)]">
+                          <Snowflake size={9} /> Muzlatilgan
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[8px] font-black text-[var(--text-muted)] capitalize tracking-widest mt-0.5 opacity-60">ID:{item.id}</p>
                   </div>
                 </div>
@@ -363,7 +487,22 @@ export default function GroupsStudent({
                 </div>
               </td>
               <td className="px-4 py-3 text-center">
-                {canEdit && isLessonDay ? (
+                {item.is_frozen ? (
+                  <div className="flex items-center justify-center gap-1.5">
+                    <div className="h-8 px-3 rounded-xl bg-sky-500/20 text-sky-200 border border-sky-400/40 flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest shadow-[0_0_10px_rgba(56,189,248,0.25)] select-none" title="O'quvchi muzlatilgan — davomat olinmaydi">
+                      <Snowflake size={12} className="text-sky-300 shrink-0 animate-pulse" />
+                      <span>Muzlatilgan</span>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleFreeze(item); }}
+                      className="h-8 px-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex items-center gap-1 text-[9px] font-black tracking-wider transition-all hover:scale-105 active:scale-95 shadow-sm"
+                      title="Muzdan chiqarish (Eritish)"
+                    >
+                      <Sun size={11} className="text-amber-400" />
+                      <span>Eritish</span>
+                    </button>
+                  </div>
+                ) : canEdit && isLessonDay ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
                     className={`h-9 px-6 rounded-xl text-[9px] font-black capitalize tracking-[0.2em] flex items-center gap-2 transition-all shadow-md active:scale-90 ${isPresent === true
@@ -395,6 +534,7 @@ export default function GroupsStudent({
                   onColor={handleColorChange}
                   onTransfer={handleOpenTransfer}
                   onDelete={handleDeleteStudent}
+                  onToggleFreeze={handleToggleFreeze}
                   menuOpenId={menuOpenId}
                   setMenuOpenId={setMenuOpenId}
                 />
@@ -405,11 +545,15 @@ export default function GroupsStudent({
 
         return (
           <div key={item.id || index}
-               className={`lux-card !p-2.5 mb-2 group transition-all shadow-md relative overflow-visible use-dynamic-border-left ${markedStudents[item.id] ? 'border-[var(--gold)] bg-[var(--gold)]/5' : 'border-[var(--border-glass)]/30 hover:border-[var(--gold)]/40'}`}
+               className={`lux-card !p-2.5 mb-2 group transition-all shadow-md relative overflow-visible use-dynamic-border-left ${
+                 item.is_frozen
+                   ? 'bg-sky-500/10 hover:bg-sky-500/15 !border-sky-400/40 shadow-[0_0_18px_rgba(56,189,248,0.18)]'
+                   : markedStudents[item.id] ? 'border-[var(--gold)] bg-[var(--gold)]/5' : 'border-[var(--border-glass)]/30 hover:border-[var(--gold)]/40'
+               }`}
                style={{
                  zIndex: menuOpenId === item.id ? 9999 : 1,
-                 borderLeft: item.color && item.color !== '#ffffff' ? `6px solid ${item.color}` : undefined,
-                 '--card-color': item.color && item.color !== '#ffffff' ? item.color : undefined
+                 borderLeft: item.is_frozen ? '6px solid #38bdf8' : (item.color && item.color !== '#ffffff' ? `6px solid ${item.color}` : undefined),
+                 '--card-color': item.is_frozen ? '#38bdf8' : (item.color && item.color !== '#ffffff' ? item.color : undefined)
                }}
           >
             <div className="flex items-center justify-between gap-3">
@@ -424,13 +568,20 @@ export default function GroupsStudent({
                 </div>
 
                 <div
-                  onClick={() => navigate(`students/${item.id}?branch=${currentBranchId}`)}
+                  onClick={() => navigate(`students/${item.id}${currentBranchId && currentBranchId !== 'null' && currentBranchId !== 'undefined' ? `?branch=${currentBranchId}` : ''}`)}
                   className="flex-1 min-w-0 cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h4 className="text-[13px] font-black text-[var(--text-primary)] capitalize tracking-tight leading-tight">
+                    <h4 className={`text-[13px] font-black capitalize tracking-tight leading-tight ${
+                      item.is_frozen ? 'text-sky-200' : 'text-[var(--text-primary)]'
+                    }`}>
                       {item.full_name}
                     </h4>
+                    {item.is_frozen && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_8px_rgba(56,189,248,0.25)]">
+                        <Snowflake size={9} /> Muzlatilgan
+                      </span>
+                    )}
                     {renderPaymentBadge(true)}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -452,7 +603,22 @@ export default function GroupsStudent({
                   </div>
                 </div>
 
-                {canEdit && isLessonDay ? (
+                {item.is_frozen ? (
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-8 px-2.5 rounded-xl bg-sky-500/20 text-sky-200 border border-sky-400/40 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider shadow-[0_0_10px_rgba(56,189,248,0.2)] select-none" title="O'quvchi muzlatilgan — davomat olinmaydi">
+                      <Snowflake size={11} className="text-sky-300 shrink-0" />
+                      <span>Muzlatilgan</span>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleFreeze(item); }}
+                      className="h-8 px-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex items-center gap-1 text-[9px] font-black tracking-wider transition-all hover:scale-105 active:scale-95 shadow-sm"
+                      title="Muzdan chiqarish (Eritish)"
+                    >
+                      <Sun size={11} className="text-amber-400" />
+                      <span>Eritish</span>
+                    </button>
+                  </div>
+                ) : canEdit && isLessonDay ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
                     className={`h-9 px-5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 text-[9px] font-black capitalize tracking-widest ${isPresent === true
@@ -483,6 +649,7 @@ export default function GroupsStudent({
                   onColor={handleColorChange}
                   onTransfer={handleOpenTransfer}
                   onDelete={handleDeleteStudent}
+                  onToggleFreeze={handleToggleFreeze}
                   menuOpenId={menuOpenId}
                   setMenuOpenId={setMenuOpenId}
                 />

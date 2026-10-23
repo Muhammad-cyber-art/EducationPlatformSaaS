@@ -351,20 +351,21 @@ def generate_monthly_payments(month_date=None):
         _, last_day = calendar.monthrange(month_date.year, month_date.month)
         month_end = date(month_date.year, month_date.month, last_day)
 
-        # Shu oyda faol bo'lgan yoki shu oy davomida ko'chirilgan/chiqqan studentlar
+        # Shu oyda faol bo'lgan yoki shu oy davomida ko'chirilgan/chiqqan studentlar (ushbu guruhda muzlatilmagan)
         from groups.models import GroupEnrollment
         active_enr_ids = GroupEnrollment.objects.filter(
             group=group,
             joined_at__date__lte=month_end,
             student__is_active=True,
-            student__is_archived=False
+            student__is_archived=False,
+            is_frozen=False,
         ).filter(
             Q(is_active=True) | Q(left_at__date__gte=month_date)
         ).values_list('student_id', flat=True)
 
         eligible_students = group.students.filter(
             Q(id__in=active_enr_ids) |
-            Q(group=group, joined_at__date__lte=month_end, is_active=True, is_archived=False)
+            Q(group=group, joined_at__date__lte=month_end, is_active=True, is_archived=False, enrollments__group=group, enrollments__is_frozen=False)
         ).distinct()
 
         for student in eligible_students:

@@ -341,16 +341,40 @@ SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'same-origin'
 
-# Cache Configuration (Redis)
-REDIS_CACHE_URL = os.getenv('REDIS_URL', os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/1'))
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': REDIS_CACHE_URL,
-        'KEY_PREFIX': 'education_saas',
-        'TIMEOUT': 300,
+# Cache Configuration (Redis bilan, agar Redis mavjud bo'lmasa LocMemCache ga xavfsiz fallback)
+REDIS_CACHE_URL = os.getenv('REDIS_URL', os.getenv('CELERY_BROKER_URL', ''))
+def _is_redis_available(url):
+    if not url:
+        return False
+    try:
+        import socket
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        host = p.hostname or 'localhost'
+        port = p.port or 6379
+        s = socket.create_connection((host, port), timeout=0.2)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+if REDIS_CACHE_URL and _is_redis_available(REDIS_CACHE_URL):
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_CACHE_URL,
+            'KEY_PREFIX': 'education_saas',
+            'TIMEOUT': 300,
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'education_saas_locmem',
+            'TIMEOUT': 300,
+        }
+    }
 
 # Celery Configuration
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
@@ -361,6 +385,12 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_TASK_DEFAULT_QUEUE = 'default'
+CELERY_BROKER_CONNECTION_TIMEOUT = 1.0
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = False
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'socket_timeout': 1.0,
+    'socket_connect_timeout': 1.0,
+}
 
 CELERY_TASK_ROUTES = {
     'telegram_bot.reports_bot_logic.*': {'queue': 'heavy_reports'},

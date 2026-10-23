@@ -8,10 +8,20 @@ from django.db import transaction
 
 
 def is_valid_for_notification(student, group=None):
-    """Guruh yoki o'quvchi arxivlangan bo'lsa xabar yubormaslikni tekshirish"""
+    """Guruh yoki o'quvchi arxivlangan yoki muzlatilgan bo'lsa xabar yubormaslikni tekshirish"""
     if group and getattr(group, 'is_archived', False):
         return False
     if student and getattr(student, 'is_archived', False):
+        return False
+    if group and student:
+        try:
+            from groups.models import GroupEnrollment
+            enr = GroupEnrollment.objects.filter(student=student, group=group).first()
+            if enr:
+                return not getattr(enr, 'is_frozen', False)
+        except Exception:
+            pass
+    if student and getattr(student, 'is_frozen', False):
         return False
     return True
 

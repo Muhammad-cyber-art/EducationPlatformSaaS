@@ -211,6 +211,7 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
     const attendanceArray = Array.isArray(attendanceData) ? attendanceData : [];
 
     const attendances = students
+      .filter((s) => !s.is_frozen)
       .map((s) => {
         const studentId = Number(s.id);
         const localValue = mergedAttendanceForDate[studentId];

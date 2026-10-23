@@ -629,6 +629,8 @@ class StudentNestedSerializer(serializers.ModelSerializer):
             student=obj, is_active=True
         ).values_list('group_id', flat=True)
         active_groups = Group.objects.filter(id__in=active_group_ids)
+        if not active_groups.exists() and obj.group and not getattr(obj, 'is_archived', False):
+            active_groups = [obj.group]
         return GroupNestedSerializer(active_groups, many=True, context=self.context).data
 
     @extend_schema_field(serializers.DictField())
@@ -772,9 +774,11 @@ class GroupSerializer(serializers.ModelSerializer):
         result = []
         for student in students_qs:
             payment_info = payment_map.get(student.id)
-            # Enrollment sanasini olish
             enrollment = student.enrollments.filter(group=obj).first()
             joined_at = enrollment.joined_at if enrollment else student.joined_at
+            is_frozen = bool(enrollment.is_frozen if enrollment else student.is_frozen)
+            frozen_at = (enrollment.frozen_at or student.frozen_at) if enrollment else student.frozen_at
+            frozen_reason = (enrollment.frozen_reason or student.frozen_reason) if enrollment else student.frozen_reason
 
             # Iso formatda chiroyli ko'rinishga keltirish (Frontend split('T')[0] uchun)
             joined_at_str = joined_at.isoformat() if joined_at else None
@@ -811,6 +815,9 @@ class GroupSerializer(serializers.ModelSerializer):
                     "current_payment_status": is_paid_status,
                     "current_payment_id": payment_info.get("id") if payment_info else None,
                     "joined_at": joined_at_str,
+                    "is_frozen": is_frozen,
+                    "frozen_at": frozen_at.isoformat() if frozen_at else None,
+                    "frozen_reason": frozen_reason or "",
                 }
             )
         return result
@@ -1118,6 +1125,9 @@ class WaitingStudentSerializer(serializers.ModelSerializer):
 class StudentGroupListSerializer(serializers.ModelSerializer):
     current_payment_status = serializers.SerializerMethodField()
     current_payment_id = serializers.SerializerMethodField()
+    is_frozen = serializers.SerializerMethodField()
+    frozen_at = serializers.SerializerMethodField()
+    frozen_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -1133,6 +1143,9 @@ class StudentGroupListSerializer(serializers.ModelSerializer):
             "current_payment_status",
             "current_payment_id",
             "joined_at",
+            "is_frozen",
+            "frozen_at",
+            "frozen_reason",
         )
 
     def get_current_payment_status(self, obj):
@@ -1149,3 +1162,24 @@ class StudentGroupListSerializer(serializers.ModelSerializer):
     def get_joined_at(self, obj) -> str:
         enrollment_map = self.context.get("enrollment_map", {})
         return enrollment_map.get(obj.id)
+
+    def get_is_frozen(self, obj) -> bool:
+        frozen_map = self.context.get("frozen_map", {})
+        if obj.id in frozen_map:
+            return bool(frozen_map[obj.id].get("is_frozen", False))
+        return bool(getattr(obj, "is_frozen", False))
+
+    def get_frozen_at(self, obj):
+        frozen_map = self.context.get("frozen_map", {})
+        if obj.id in frozen_map and frozen_map[obj.id].get("frozen_at"):
+            val = frozen_map[obj.id]["frozen_at"]
+            return val.isoformat() if hasattr(val, "isoformat") else str(val)
+        val = getattr(obj, "frozen_at", None)
+        return val.isoformat() if hasattr(val, "isoformat") else (str(val) if val else None)
+
+    def get_frozen_reason(self, obj) -> str:
+        frozen_map = self.context.get("frozen_map", {})
+        if obj.id in frozen_map:
+            return frozen_map[obj.id].get("frozen_reason", "") or ""
+        return getattr(obj, "frozen_reason", "") or ""
+

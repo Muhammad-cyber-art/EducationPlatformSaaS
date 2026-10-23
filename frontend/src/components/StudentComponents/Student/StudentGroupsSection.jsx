@@ -10,8 +10,20 @@ const StudentGroupsSection = ({
     unenrollMutation,
     generatePaymentMutation,
     navigate,
-    dispatch
+    dispatch,
+    userRole
 }) => {
+    const handleGroupClick = (group) => {
+        if (userRole === "super_admin") {
+            const bId = group.branch_id || group.branch?.id || studentData?.branch_id || 1;
+            navigate(`/super_admin/branch/${bId}/groups/${group.id}`);
+        } else if (userRole === "mentor") {
+            navigate(`/mentor/groups/${group.id}`);
+        } else {
+            navigate(`/admin/groups/${group.id}`);
+        }
+    };
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {groups?.map(group => {
@@ -37,7 +49,7 @@ const StudentGroupsSection = ({
                         {/* TOP: GROUP INFO */}
                         <div 
                             className="p-4 sm:p-5 flex justify-between items-start cursor-pointer hover:bg-[var(--gold)]/5 transition-colors"
-                            onClick={() => navigate(`/admin/groups/${group.id}`)}
+                            onClick={() => handleGroupClick(group)}
                         >
                             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] shrink-0 shadow-inner">

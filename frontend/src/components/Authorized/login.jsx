@@ -14,7 +14,27 @@ export default function Login() {
   const user_info = get_user_info();
   const navigate = useNavigate();
 
+  // 1. URL parametrlari orqali avtomatik login (CEO Impersonation SSO)
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get("access_token") || params.get("token");
+    const refreshFromUrl = params.get("refresh_token") || params.get("refresh");
+    if (tokenFromUrl) {
+      localStorage.setItem("access_token", tokenFromUrl);
+      if (refreshFromUrl) {
+        localStorage.setItem("refresh_token", refreshFromUrl);
+      }
+      try {
+        const decoded = jwtDecode(tokenFromUrl);
+        if (decoded?.role) {
+          window.location.href = `/${decoded.role}`;
+          return;
+        }
+      } catch (e) {}
+      window.location.href = "/super_admin";
+      return;
+    }
+
     if (user_info) {
       navigate(`/${user_info.role}`);
     }

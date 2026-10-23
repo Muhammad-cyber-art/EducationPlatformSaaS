@@ -10,7 +10,7 @@ from django.http import HttpResponse
 
 import logging
 import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from datetime import timedelta
 
@@ -311,17 +311,53 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 cell.fill = header_fill
                 cell.alignment = center_align
 
+            frozen_fill = PatternFill(start_color="BAE6FD", end_color="BAE6FD", fill_type="solid")
+            frozen_font = Font(color="0369A1", bold=True)
+            cell_border = Border(
+                left=Side(style='thin', color='D9D9D9'),
+                right=Side(style='thin', color='D9D9D9'),
+                top=Side(style='thin', color='D9D9D9'),
+                bottom=Side(style='thin', color='D9D9D9')
+            )
+
+            for cell in header_row:
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center_align
+                cell.border = cell_border
+
+            from groups.models import GroupEnrollment
+            frozen_student_ids = set(GroupEnrollment.objects.filter(group=group, is_frozen=True).values_list('student_id', flat=True))
+
             for row_num, student in enumerate(students, 3):
-                ws.cell(row=row_num, column=1).value = row_num - 2
-                ws.cell(row=row_num, column=2).value = student.full_name
-                ws.cell(row=row_num, column=3).value = student.phone or "-"
-                ws.cell(row=row_num, column=4).value = student.parent_phone or "-"
+                is_student_frozen = student.id in frozen_student_ids or getattr(student, 'is_frozen', False)
+                name_val = f"{student.full_name} ❄️ (Muzlatilgan)" if is_student_frozen else student.full_name
+
+                c1 = ws.cell(row=row_num, column=1, value=row_num - 2)
+                c2 = ws.cell(row=row_num, column=2, value=name_val)
+                c3 = ws.cell(row=row_num, column=3, value=student.phone or "-")
+                c4 = ws.cell(row=row_num, column=4, value=student.parent_phone or "-")
+
+                for c in [c1, c2, c3, c4]:
+                    c.border = cell_border
+                    if is_student_frozen:
+                        c.fill = frozen_fill
+                if is_student_frozen:
+                    c2.font = frozen_font
                 
                 joined_at = student.joined_at.date() if student.joined_at else None
                 
                 for col_idx, d in enumerate(date_list, 5):
                     cell = ws.cell(row=row_num, column=col_idx)
+                    cell.border = cell_border
                     
+                    if is_student_frozen:
+                        cell.value = "❄️"
+                        cell.font = frozen_font
+                        cell.fill = frozen_fill
+                        cell.alignment = center_align
+                        continue
+
                     att_record = att_data.get(student.id, {}).get(str(d))
                     
                     if att_record:

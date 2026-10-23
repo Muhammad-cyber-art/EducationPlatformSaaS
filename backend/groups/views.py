@@ -277,6 +277,56 @@ class GroupViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=400)
 
+    @action(detail=True, methods=['post'], url_path='toggle-freeze-student')
+    def toggle_freeze_student(self, request, pk=None):
+        group = self.get_object()
+        student_id = request.data.get('student_id')
+        reason = request.data.get('reason', '')
+        if isinstance(reason, str):
+            reason = reason.strip()
+
+        if not student_id:
+            return Response({"error": "student_id ko'rsatilmadi", "detail": "student_id ko'rsatilmadi"}, status=400)
+
+        # 1. Enrollmentni topish yoki fallback orqali olish
+        enrollment = GroupEnrollment.objects.filter(group=group, student_id=student_id).first()
+        if not enrollment:
+            student = Student.objects.filter(id=student_id).first()
+            if not student:
+                return Response({"error": "O'quvchi ushbu guruhda topilmadi", "detail": "O'quvchi ushbu guruhda topilmadi"}, status=404)
+            enrollment, _ = GroupEnrollment.objects.get_or_create(group=group, student=student)
+        else:
+            if not enrollment.is_active:
+                enrollment.is_active = True
+
+        # 2. Muzlatish / Eritish (Toggle)
+        now_freeze = not enrollment.is_frozen
+        enrollment.is_frozen = now_freeze
+        enrollment.frozen_at = timezone.now() if now_freeze else None
+        enrollment.frozen_reason = reason if now_freeze else ""
+        enrollment.save(update_fields=['is_active', 'is_frozen', 'frozen_at', 'frozen_reason'])
+
+        # 3. Student modelida ham sinxron saqlash (barcha faol guruhlari muzlagandagina True bo'ladi)
+        student = enrollment.student
+        all_active_enrs = list(GroupEnrollment.objects.filter(student=student, is_active=True))
+        if all_active_enrs:
+            student.is_frozen = all(e.is_frozen for e in all_active_enrs)
+        else:
+            student.is_frozen = now_freeze
+        student.frozen_at = enrollment.frozen_at if student.is_frozen else None
+        student.frozen_reason = enrollment.frozen_reason if student.is_frozen else ""
+        student.save(update_fields=['is_frozen', 'frozen_at', 'frozen_reason'])
+
+        action_word = "muzlatildi" if now_freeze else "muzdan chiqarildi (eritildi)"
+        msg = f"O'quvchi muvaffaqiyatli {action_word}"
+        return Response({
+            "status": msg,
+            "detail": msg,
+            "is_frozen": now_freeze,
+            "frozen_at": enrollment.frozen_at.isoformat() if enrollment.frozen_at else None,
+            "frozen_reason": enrollment.frozen_reason
+        }, status=200)
+
     @action(detail=True, methods=['post'], url_path='bulk-unenroll')
     def bulk_unenroll(self, request, pk=None):
         group = self.get_object()
@@ -367,13 +417,26 @@ class GroupViewSet(viewsets.ModelViewSet):
         
         payment_map = {p['student_id']: p for p in payments}
         
-        # Enrollment sanalarini olish
-        enrollment_map = {e.student_id: e.joined_at for e in group.enrollments.all()}
+        # Enrollment sanalarini va muzlatilganlik holatini olish
+        enrollments = list(group.enrollments.all())
+        enrollment_map = {e.student_id: e.joined_at for e in enrollments}
+        frozen_map = {
+            e.student_id: {
+                'is_frozen': e.is_frozen,
+                'frozen_at': e.frozen_at,
+                'frozen_reason': e.frozen_reason
+            }
+            for e in enrollments
+        }
         
         serializer = StudentGroupListSerializer(
             students, 
             many=True, 
-            context={'payment_map': payment_map, 'enrollment_map': enrollment_map}
+            context={
+                'payment_map': payment_map, 
+                'enrollment_map': enrollment_map,
+                'frozen_map': frozen_map
+            }
         )
         return Response(serializer.data)
 
@@ -667,12 +730,21 @@ class GroupViewSet(viewsets.ModelViewSet):
             group_enrollment_map = {
                 e.student_id: e.joined_at for e in active_enrollments
             }
+            group_frozen_map = {
+                e.student_id: {
+                    'is_frozen': e.is_frozen,
+                    'frozen_at': e.frozen_at,
+                    'frozen_reason': e.frozen_reason
+                }
+                for e in active_enrollments
+            }
             students_list = StudentGroupListSerializer(
                 group_students,
                 many=True,
                 context={
                     'payment_map': group_payment_map,
-                    'enrollment_map': group_enrollment_map
+                    'enrollment_map': group_enrollment_map,
+                    'frozen_map': group_frozen_map
                 }
             ).data
 
@@ -693,9 +765,35 @@ class GroupViewSet(viewsets.ModelViewSet):
         if all_active_student_ids:
             students_queryset = Student.objects.filter(
                 id__in=all_active_student_ids
-            ).select_related('group', 'branch')
+            ).select_related('group', 'branch').prefetch_related('enrollments__group')
 
             for st in students_queryset:
+                active_enrollments = [e for e in st.enrollments.all() if e.is_active and not e.group.is_archived]
+                groups_data = [
+                    {
+                        'id': e.group.id,
+                        'name': e.group.name,
+                        'group_type': e.group.group_type,
+                        'subject': e.group.subject,
+                        'monthly_price': str(e.group.monthly_price),
+                        'days': e.group.days,
+                        'days_display': getattr(e.group, 'days_display', ''),
+                        'is_faol': e.group.is_faol,
+                    }
+                    for e in active_enrollments
+                ]
+                group_data = groups_data[0] if groups_data else (
+                    {
+                        'id': st.group.id,
+                        'name': st.group.name,
+                        'group_type': st.group.group_type,
+                        'subject': st.group.subject,
+                        'monthly_price': str(st.group.monthly_price),
+                        'days': st.group.days,
+                        'days_display': getattr(st.group, 'days_display', ''),
+                        'is_faol': st.group.is_faol,
+                    } if st.group else None
+                )
                 student_profiles.append({
                     'id': st.id,
                     'full_name': st.full_name,
@@ -703,8 +801,14 @@ class GroupViewSet(viewsets.ModelViewSet):
                     'image': st.image.url if st.image else None,
                     'status': st.status or 'regular',
                     'color': st.color or '#ffffff',
+                    'group': group_data,
+                    'groups': groups_data,
                     'group_id': st.group_id,
                     'branch_id': st.branch_id,
+                    'joined_at': st.joined_at.isoformat() if st.joined_at else None,
+                    'parent_name': st.parent_name or '',
+                    'parent_phone': st.parent_phone or '',
+                    'notes': st.notes or '',
                     'telegram_id': st.telegram_id,
                     'parent_telegram_id': st.parent_telegram_id,
                     'current_payment_status': payment_map.get((st.id, st.group_id), {}).get('is_paid', False),

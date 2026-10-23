@@ -52,7 +52,8 @@ def get_or_create_attendance_records(group, requested_date, view_only=False):
         group=group,
         joined_at__date__lte=requested_date,
         student__is_archived=False,
-        student__is_active=True
+        student__is_active=True,
+        is_frozen=False
     ).filter(
         models.Q(is_active=True) | models.Q(left_at__date__gte=requested_date)
     ).select_related('student')
@@ -166,6 +167,10 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
     attendance_map = {att.student_id: att for att in existing_attendances}
     valid_student_ids = active_student_ids | set(attendance_map.keys())
 
+    frozen_student_ids = set(
+        GroupEnrollment.objects.filter(group=group, is_frozen=True).values_list('student_id', flat=True)
+    )
+
     to_create = []
     to_update = []
     updated_ids = []
@@ -183,6 +188,10 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
 
             # Dublikat student_id kelganda qayta ishlamaymiz (500 xatosini oldini olish)
             if student_id in processed_student_ids:
+                continue
+
+            # Muzlatilgan student uchun guruh ichida davomat yozilmaydi
+            if student_id in frozen_student_ids:
                 continue
 
             # Faqat shu kunga aloqador studentlar qayta ishlanadi
@@ -236,7 +245,7 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             
             transaction.on_commit(trigger_finance_recalc)
 
-    # Xabarnomalarni yuborish (Celery orqali asinxron, muvaffaqiyatsiz bo'lsa fallback fonda)
+    # Xabarnomalarni butunlay asinxron fonda yuborish (HTTP javobni 0ms ham kutdirmaydi)
     from django.db import connection
     schema_name = getattr(connection, 'schema_name', None)
 
@@ -244,25 +253,50 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
         from django.utils import timezone
         today = timezone.localdate()
         if requested_date == today:
-            try:
-                from telegram_bot.tasks import send_attendance_notifications_task
-                send_attendance_notifications_task.delay(updated_ids, schema_name=schema_name)
-            except Exception:
-                import threading
+            import threading
+            import time
 
-                def _fallback_send():
+            def _dispatch_notifications(att_ids, current_schema):
+                sent_via_celery = False
+                try:
+                    from telegram_bot.tasks import send_attendance_notifications_task
+                    send_attendance_notifications_task.apply_async(
+                        args=[att_ids],
+                        kwargs={'schema_name': current_schema},
+                        retry=False,
+                        connect_timeout=0.5
+                    )
+                    sent_via_celery = True
+                except Exception:
+                    sent_via_celery = False
+
+                if not sent_via_celery:
                     try:
                         from telegram_bot.signals import send_attendance_notification
-                        atts = Attendance.objects.filter(id__in=updated_ids)
-                        for a in atts:
-                            try:
-                                send_attendance_notification(a, async_send=False)
-                            except Exception:
-                                pass
+                        from tenants.utils import tenant_schema_context
+
+                        def _send():
+                            atts = Attendance.objects.filter(id__in=att_ids).select_related('student', 'group')
+                            for a in atts:
+                                try:
+                                    send_attendance_notification(a, async_send=False)
+                                    time.sleep(0.04)
+                                except Exception:
+                                    pass
+
+                        if current_schema:
+                            with tenant_schema_context(current_schema):
+                                _send()
+                        else:
+                            _send()
                     except Exception:
                         pass
 
-                threading.Thread(target=_fallback_send, daemon=True).start()
+            threading.Thread(
+                target=_dispatch_notifications,
+                args=(list(updated_ids), schema_name),
+                daemon=True
+            ).start()
 
     # Guruhda faol yoki shu kuni davomati bo'lgan studentlarning davomatini qaytaramiz
     visible_ids = valid_student_ids | processed_student_ids | set(existing_attendances.values_list('student_id', flat=True))

@@ -266,6 +266,11 @@ class Student(models.Model):
     is_archived = models.BooleanField(default=False, verbose_name="Arxivlangan")
     archived_at = models.DateTimeField(null=True, blank=True)
 
+    # Muzlatish (Freeze) maydonlari
+    is_frozen = models.BooleanField(default=False, verbose_name="Muzlatilgan")
+    frozen_at = models.DateTimeField(null=True, blank=True, verbose_name="Muzlatilgan sana")
+    frozen_reason = models.CharField(max_length=255, blank=True, null=True, verbose_name="Muzlatish sababi")
+
     # Yangi FIELDS: O'quvchi statusi va individual narxi
     STUDENT_STATUS = [
         ("regular", "Oddiy"),
@@ -582,6 +587,9 @@ class GroupEnrollment(models.Model):
     )
     joined_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+    is_frozen = models.BooleanField(default=False, verbose_name="Guruhda muzlatilgan")
+    frozen_at = models.DateTimeField(null=True, blank=True, verbose_name="Muzlatilgan vaqt")
+    frozen_reason = models.CharField(max_length=255, blank=True, null=True, verbose_name="Muzlatish sababi")
     left_at = models.DateTimeField(
         null=True,
         blank=True,

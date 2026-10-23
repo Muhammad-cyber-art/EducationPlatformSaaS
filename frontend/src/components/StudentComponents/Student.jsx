@@ -149,8 +149,12 @@ export default function StudentProfilePage() {
       const match = branchGroups.find((g) => String(g.id) === String(group_id));
       if (match) return [match];
     }
+    if (studentData?.group_id && branchGroups && Array.isArray(branchGroups)) {
+      const match = branchGroups.find((g) => String(g.id) === String(studentData.group_id));
+      if (match) return [match];
+    }
     return [];
-  }, [studentData?.groups, studentData?.group, group_id, branchGroups]);
+  }, [studentData?.groups, studentData?.group, studentData?.group_id, group_id, branchGroups]);
   const primaryGroup = useMemo(() => groups[0] || {}, [groups]);
   const paymentsArray = useMemo(
     () => (Array.isArray(paymentsAllGroups) ? paymentsAllGroups : []),
@@ -394,6 +398,7 @@ export default function StudentProfilePage() {
                 generatePaymentMutation,
                 handlePaymentConfirm,
                 navigate,
+                userRole,
               }}
               canConfirmPayment={permissions.canConfirmPayment}
             />

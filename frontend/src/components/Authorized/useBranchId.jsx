@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { get_user_info } from "./getRole";
 import api from "../../tokenUpdater/updater";
@@ -14,7 +14,13 @@ import { cacheUserMe, getCachedUserMe } from "../../db/db";
  */
 export function useCurrentBranch() {
   const [searchParams] = useSearchParams();
-  const urlBranchId = searchParams.get("branch"); // ?branch=8
+  const routeParams = useParams();
+  const rawUrlBranch = searchParams.get("branch");
+  const urlBranchId = (rawUrlBranch && rawUrlBranch !== "null" && rawUrlBranch !== "undefined")
+    ? rawUrlBranch
+    : null;
+  const routeBranchId = routeParams?.branch_id || routeParams?.b_id;
+  const effectiveBranchParam = urlBranchId || (routeBranchId && routeBranchId !== "null" && routeBranchId !== "undefined" ? routeBranchId : null);
   const dispatch = useDispatch();
 
   const { data: userMe } = useQuery({
@@ -47,23 +53,32 @@ export function useCurrentBranch() {
     return fromToken;
   }, [userMe]);
 
-  // URL dan kelgan branch ID
-  const requestedBranchId = urlBranchId ? Number(urlBranchId) : null;
+  // URL yoki marshrut parametrlaridan kelgan branch ID
+  const parsedBranchId = effectiveBranchParam ? Number(effectiveBranchParam) : null;
+  const requestedBranchId = (parsedBranchId && !isNaN(parsedBranchId)) ? parsedBranchId : null;
 
-  // Ruxsat borligini tekshirish
+  // Ruxsat borligini tekshirish (super_admin barcha filiallarga to'liq ruxsatga ega)
+  const isSuperAdmin = (userInfo?.role || "").toLowerCase() === "super_admin";
   const hasAccessToRequested = useMemo(() => {
     if (!userInfo) return false;
+    if (isSuperAdmin) return true;
     return (
       !requestedBranchId ||
       requestedBranchId === userInfo.branch_id ||
       Boolean(userInfo.accessible_branches?.some((b) => b.branch_id === requestedBranchId))
     );
-  }, [userInfo, requestedBranchId]);
+  }, [userInfo, requestedBranchId, isSuperAdmin]);
 
-  // Agar ruxsat yo'q bo'lsa — asosiy branch ga tushamiz
-  const finalBranchId = userInfo
-    ? (hasAccessToRequested && requestedBranchId ? requestedBranchId : userInfo.branch_id)
-    : null;
+  // Agar ruxsat bor bo'lsa requested, aks holda userning asosiy branchi, agar u ham bo'lmasa localStorage dan fallback
+  const finalBranchId = useMemo(() => {
+    if (!userInfo) return null;
+    if (hasAccessToRequested && requestedBranchId) return requestedBranchId;
+    if (userInfo.branch_id) return userInfo.branch_id;
+    const stored = localStorage.getItem("active_branch_id") || localStorage.getItem("branch_id");
+    const numStored = stored ? Number(stored) : null;
+    if (numStored && !isNaN(numStored)) return numStored;
+    return null;
+  }, [userInfo, hasAccessToRequested, requestedBranchId]);
 
   // Filial nomini topish
   const finalBranchName = useMemo(() => {

@@ -213,22 +213,52 @@ class AttendanceOfflineService {
             const studentId = Number(profile.id);
 
             const existing = await db.students.get(studentId);
-            await db.students.put({
+            let existingCached = null;
+            try {
+              existingCached = await db.query_cache.get(`nested_students_${studentId}`);
+            } catch (_) {}
+
+            const mergedProfile = {
+              ...(existingCached?.data || {}),
               ...(existing || {}),
               ...profile,
+              groups: (profile.groups && profile.groups.length > 0)
+                ? profile.groups
+                : (existingCached?.data?.groups || existing?.groups || []),
+              group: profile.group || existingCached?.data?.group || existing?.group || null,
+              joined_at: profile.joined_at || existingCached?.data?.joined_at || existing?.joined_at || null,
+              parent_name: profile.parent_name || existingCached?.data?.parent_name || existing?.parent_name || "",
+              parent_phone: profile.parent_phone || existingCached?.data?.parent_phone || existing?.parent_phone || "",
+              notes: profile.notes || existingCached?.data?.notes || existing?.notes || "",
+            };
+
+            await db.students.put({
+              ...(existing || {}),
+              ...mergedProfile,
               id: studentId,
               updated_at: nowIso,
             });
 
             await db.query_cache.put({
               query_key: `nested_students_${studentId}`,
-              data: profile,
+              data: mergedProfile,
               updated_at: nowIso,
             });
 
             if (this.queryClient) {
-              this.queryClient.setQueryData(['student', String(studentId)], profile);
-              this.queryClient.setQueryData(['student', Number(studentId)], profile);
+              const safeUpdate = (prev) => {
+                if (!prev) return mergedProfile;
+                return {
+                  ...mergedProfile,
+                  ...prev,
+                  groups: (prev.groups && Array.isArray(prev.groups) && prev.groups.length > 0)
+                    ? prev.groups
+                    : mergedProfile.groups,
+                  group: prev.group || mergedProfile.group,
+                };
+              };
+              this.queryClient.setQueryData(['student', String(studentId)], safeUpdate);
+              this.queryClient.setQueryData(['student', Number(studentId)], safeUpdate);
             }
           }
         }

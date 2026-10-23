@@ -91,12 +91,17 @@ export default function CEOTenantDetail() {
     setImpersonating(true);
     try {
       const res = await dispatch(impersonateTenant(tenant.id)).unwrap();
-      localStorage.setItem('access_token', res.access);
-      localStorage.setItem('refresh_token', res.refresh);
+      const sub = tenant.primary_domain?.split('.')[0] || tenant.schema_name?.replace('tenant_', '') || 'subdomain';
+      const tenantDomain = `${sub}.chronous.uz`;
+      const protocol = window.location.protocol || 'http:';
+      const port = window.location.port && !['80', '443'].includes(window.location.port) ? `:${window.location.port}` : '';
+
       localStorage.setItem('tenant_schema', res.tenant.schema_name);
       localStorage.setItem('tenant_name', res.tenant.name);
+
       toast.success(`${res.tenant.name} markazi super admini sifatida kirdingiz!`);
-      window.open('/super_admin', '_blank');
+      // Subdomenga SSO tokeni orqali to'g'ridan-to'g'ri kirish
+      window.open(`${protocol}//${tenantDomain}${port}/login?access_token=${res.access}&refresh_token=${res.refresh}`, '_blank');
     } catch (err) {
       toast.error(typeof err === 'string' ? err : 'Tizimga kirishda xatolik yuz berdi');
     } finally {
