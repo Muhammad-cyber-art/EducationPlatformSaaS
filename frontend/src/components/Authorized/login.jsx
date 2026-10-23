@@ -93,9 +93,12 @@ export default function Login() {
       localStorage.setItem("tenant_schema", data.schema_name);
       localStorage.setItem("tenant_name", data.name);
 
-      // Agar localhost muhitida bo'lsa, subdomenga to'g'ridan-to'g'ri o'tamiz
-      const port = window.location.port ? `:${window.location.port}` : "";
-      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      // Agar chronous.uz yoki localhost muhitida bo'lsa, subdomenga to'g'ridan-to'g'ri o'tamiz
+      const port = window.location.port && !['80', '443'].includes(window.location.port) ? `:${window.location.port}` : "";
+      const protocol = window.location.protocol || "http:";
+      if (window.location.hostname.includes("chronous.uz")) {
+        window.location.href = `${protocol}//${cleanSub}.chronous.uz${port}/login`;
+      } else if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
         // Avval subdomen.localhost ni ochishga urinib ko'rish
         window.location.href = `http://${cleanSub}.localhost${port}/login`;
       } else {
@@ -118,7 +121,8 @@ export default function Login() {
     try {
       const headers = {};
       if (subdomain) {
-        headers["X-Tenant-Domain"] = `${subdomain}.localhost`;
+        const domainSuffix = window.location.hostname.includes("chronous.uz") ? "chronous.uz" : "localhost";
+        headers["X-Tenant-Domain"] = `${subdomain}.${domainSuffix}`;
         headers["X-Tenant-Subdomain"] = subdomain;
       }
 

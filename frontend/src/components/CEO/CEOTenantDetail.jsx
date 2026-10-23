@@ -675,11 +675,13 @@ export default function CEOTenantDetail() {
 
               <button
                 onClick={() => {
-                  const sub = tenant.primary_domain?.split('.')[0] || tenant.schema_name?.replace('tenant_', '');
-                  const port = window.location.port ? `:${window.location.port}` : '';
+                  const sub = tenant.primary_domain?.split('.')[0] || tenant.schema_name?.replace('tenant_', '') || 'subdomain';
+                  const tenantDomain = `${sub}.chronous.uz`;
+                  const protocol = window.location.protocol || 'http:';
+                  const port = window.location.port && !['80', '443'].includes(window.location.port) ? `:${window.location.port}` : '';
                   localStorage.setItem('tenant_schema', tenant.schema_name);
                   localStorage.setItem('tenant_name', tenant.name);
-                  window.open(`http://${sub}.localhost${port}/login`, '_blank');
+                  window.open(`${protocol}//${tenantDomain}${port}/login`, '_blank');
                 }}
                 className="px-4 py-2.5 rounded-xl font-medium text-xs flex items-center gap-2 transition-all"
                 style={{
@@ -689,7 +691,7 @@ export default function CEOTenantDetail() {
                 }}
               >
                 <Globe size={14} />
-                Subdomen orqali login ({tenant.primary_domain?.split('.')[0] || 'subdomain'}.localhost)
+                Subdomen orqali login ({tenant.primary_domain?.split('.')[0] || tenant.schema_name?.replace('tenant_', '') || 'subdomain'}.chronous.uz)
               </button>
             </div>
           </>

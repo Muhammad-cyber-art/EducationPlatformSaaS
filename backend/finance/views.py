@@ -533,8 +533,14 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
         related_id_prefix = f"STP-{pk}-INS-"
         ft = FinanceTransaction.objects.filter(related_id__startswith=related_id_prefix, status='completed').first()
+        cancelled_ft = FinanceTransaction.objects.filter(related_id__startswith=related_id_prefix, status='cancelled').first()
 
         if not payment and not ft:
+            if cancelled_ft:
+                return Response(
+                    {"detail": "Ushbu to'lov bekor qilingan — uni tasdiqlab bo'lmaydi."},
+                    status=400
+                )
             return Response(
                 {"detail": "To'lov topilmadi yoki tranzaksiya mavjud emas."},
                 status=404
@@ -542,6 +548,11 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
         if payment:
             if not payment.is_paid and payment.paid_amount <= 0:
+                if cancelled_ft:
+                    return Response(
+                        {"detail": "Ushbu to'lov bekor qilingan — uni tasdiqlab bo'lmaydi."},
+                        status=400
+                    )
                 return Response(
                     {"detail": "To'lov hali amalga oshirilmagan — tasdiqlab bo'lmaydi."},
                     status=400

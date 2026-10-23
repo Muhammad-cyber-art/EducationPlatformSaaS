@@ -317,7 +317,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
 
                 {/* Footer */}
                 <div className="p-6 bg-[var(--bg-void)] border-t border-[var(--gold)]/10 flex gap-3">
-                    {isSuperAdmin && !payment.payment_details?.is_verified && (
+                    {isSuperAdmin && !payment.payment_details?.is_verified && payment.status !== 'cancelled' && (
                         <button 
                             onClick={() => onVerify(payment.payment_details?.original_payment_id || payment.id)} 
                             className="flex-1 h-12 bg-emerald-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-emerald-500 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"

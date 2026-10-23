@@ -672,6 +672,7 @@ class ResolveSubdomainView(APIView):
         domain_obj = Domain.objects.select_related('tenant').filter(
             Q(domain=subdomain) |
             Q(domain=f"{subdomain}.localhost") |
+            Q(domain=f"{subdomain}.chronous.uz") |
             Q(domain__istartswith=f"{subdomain}.") |
             Q(tenant__schema_name=f"tenant_{subdomain}") |
             Q(tenant__schema_name=subdomain)

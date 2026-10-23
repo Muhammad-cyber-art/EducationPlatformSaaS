@@ -84,7 +84,7 @@ export default function CEOSubdomainForbidden() {
               className="w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-semibold text-sm text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] transition-all"
             >
               <ExternalLink size={16} />
-              Markaziy CEO paneliga o'tish (localhost)
+              Markaziy CEO paneliga o'tish
             </a>
           </div>
         </div>

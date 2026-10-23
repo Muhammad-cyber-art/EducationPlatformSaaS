@@ -139,7 +139,8 @@ const Kassa = () => {
                 }
             }
         } catch (error) {
-            toast.error(error.response?.data?.detail || "Tasdiqlashda xatolik");
+            const msg = error.response?.data?.detail || error.response?.data?.error || error.response?.data?.message || "Tasdiqlashda xatolik";
+            toast.error(msg);
         }
     };
 
