@@ -69,6 +69,7 @@ export const useBranchFinance = () => {
     finance: data?.finance,
     branch: data?.branch,
     groups: data?.groups,
+    adminExpenses: data?.admin_expenses || [],
     selectedYear,
     selectedMonth,
     setSelectedYear,

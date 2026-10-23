@@ -1,6 +1,7 @@
-import axios from"axios";
-import toast from"react-hot-toast";
-import { jwtDecode } from"jwt-decode";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { jwtDecode } from "jwt-decode";
+import notify from "../utils/toastNotify";
 
 /**
  * Sozlamalar:
@@ -249,18 +250,11 @@ api.interceptors.response.use(
  }
  }
 
- // --- GLOBAL ERROR HANDLING ---
- const isNetworkFailure = !error.response || error.code === "ERR_NETWORK" || error.code === "ECONNABORTED";
- if (!isNetworkFailure && status >= 400 && status !== 401) {
- const message = error.response?.data?.detail ||
- error.response?.data?.message ||
-"Tizimda kutilmagan xatolik yuz berdi";
+  // --- SMART ERROR HANDLING ---
+  // Arzimagan yoki vaqtinchalik xatolarda (401 auth refresh, 429 rate limit, 503 busy, network reconnect)
+  // qizil error emas, muloyim kutish yoki ogohlantirish ko'rsatiladi
+  notify.apiError(error);
 
- // Faqat bitta toast chiqishi uchun (agar ko'p parallel so'rovlar bo'lsa)
- toast.error(message, {
- id:'global-api-error',
- });
- }
 
  return Promise.reject(error);
  }

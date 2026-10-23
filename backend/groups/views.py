@@ -317,6 +317,18 @@ class GroupViewSet(viewsets.ModelViewSet):
         student.frozen_reason = enrollment.frozen_reason if student.is_frozen else ""
         student.save(update_fields=['is_frozen', 'frozen_at', 'frozen_reason'])
 
+        if now_freeze:
+            # Muzlatilgan o'quvchining ushbu guruhdagi topshirilmagan (not_submitted) vazifalarini tozalash
+            try:
+                from homework_attends.models import HomeworkSubmission
+                HomeworkSubmission.objects.filter(
+                    student=student,
+                    homework__group=group,
+                    status=HomeworkSubmission.NOT_SUBMITTED
+                ).delete()
+            except Exception:
+                pass
+
         action_word = "muzlatildi" if now_freeze else "muzdan chiqarildi (eritildi)"
         msg = f"O'quvchi muvaffaqiyatli {action_word}"
         return Response({

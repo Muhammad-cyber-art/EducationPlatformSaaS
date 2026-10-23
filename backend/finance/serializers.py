@@ -1134,7 +1134,8 @@ class BranchFinanceDetailSerializer(serializers.Serializer):
     stats = serializers.DictField()
     finance = serializers.DictField()
     groups = serializers.ListField()
-    period = serializers.DictField()
+    period = serializers.DictField(required=False)
+    admin_expenses = serializers.ListField(required=False)
 
 
 class FinanceTransactionSerializer(serializers.ModelSerializer):

@@ -80,16 +80,18 @@ def send_homework_notification_task(homework_id, bot_token=None):
         logger.warning(f"Homework {homework_id} topilmadi.")
         return
 
-    # Guruhdagi faol o'quvchilar
+    # Guruhdagi faol o'quvchilar (muzlatilmagan)
     active_student_ids = GroupEnrollment.objects.filter(
         group=hw.group,
-        is_active=True
+        is_active=True,
+        is_frozen=False,
     ).values_list('student_id', flat=True)
 
     students = hw.group.students.filter(
         id__in=active_student_ids,
         is_archived=False,
-        is_active=True
+        is_active=True,
+        is_frozen=False,
     )
 
     all_chat_ids = set()

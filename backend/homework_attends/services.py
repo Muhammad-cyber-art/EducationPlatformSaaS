@@ -167,9 +167,8 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
     attendance_map = {att.student_id: att for att in existing_attendances}
     valid_student_ids = active_student_ids | set(attendance_map.keys())
 
-    frozen_student_ids = set(
-        GroupEnrollment.objects.filter(group=group, is_frozen=True).values_list('student_id', flat=True)
-    )
+    frozen_enrollments = GroupEnrollment.objects.filter(group=group, is_frozen=True)
+    frozen_map = {e.student_id: (e.frozen_at.date() if e.frozen_at else None) for e in frozen_enrollments}
 
     to_create = []
     to_update = []
@@ -190,9 +189,11 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             if student_id in processed_student_ids:
                 continue
 
-            # Muzlatilgan student uchun guruh ichida davomat yozilmaydi
-            if student_id in frozen_student_ids:
-                continue
+            # Muzlatilgan student uchun muzlatilgan kundan boshlab davomat yozilmaydi
+            if student_id in frozen_map:
+                frozen_date = frozen_map[student_id]
+                if frozen_date is None or requested_date >= frozen_date:
+                    continue
 
             # Faqat shu kunga aloqador studentlar qayta ishlanadi
             if student_id not in valid_student_ids:
@@ -374,16 +375,18 @@ def create_homework_with_submissions(serializer, user, group):
     with transaction.atomic():
         homework = serializer.save(mentor=user, group=group)
         
-        # Faqat guruhda FAOL bo'lgan, arxivlanmagan va aktiv o'quvchilar
+        # Faqat guruhda FAOL va MUZLATILMAGAN o'quvchilar
         active_student_ids = GroupEnrollment.objects.filter(
             group=group,
-            is_active=True
+            is_active=True,
+            is_frozen=False,
         ).values_list('student_id', flat=True)
         
         students = group.students.filter(
             id__in=active_student_ids,
             is_archived=False,
-            is_active=True
+            is_active=True,
+            is_frozen=False,
         )
         
         submissions = [

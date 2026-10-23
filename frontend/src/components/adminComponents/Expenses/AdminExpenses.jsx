@@ -6,6 +6,7 @@ import {
     X, Loader2, AlertCircle, FileText, ChevronRight, TrendingDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import notify from '../../../utils/toastNotify';
 import { useCurrentBranch } from '../../Authorized/useBranchId';
 import AmountInput from '../../Common/AmountInput';
 
@@ -49,7 +50,7 @@ const AdminExpenses = () => {
                 branch: currentBranchId
             });
         },
-        onError: () => toast.error("Saqlashda xatolik yuz berdi")
+        onError: (err) => notify.apiError(err, "Saqlashda noaniqlik yuz berdi. Iltimos, qayta urining")
     });
 
     // Delete Expense Mutation
@@ -57,8 +58,9 @@ const AdminExpenses = () => {
         mutationFn: (id) => api.delete(`/finance/admin-expenses/${id}/`),
         onSuccess: () => {
             queryClient.invalidateQueries(['admin-expenses']);
-            toast.success("O'chirildi");
-        }
+            notify.success("Chiqim o'chirildi");
+        },
+        onError: (err) => notify.apiError(err, "O'chirishda noaniqlik yuz berdi")
     });
 
     const filteredExpenses = useMemo(() => {
@@ -75,7 +77,7 @@ const AdminExpenses = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!newExpense.title || !newExpense.amount || !newExpense.date) {
-            return toast.error("Barcha maydonlarni to'ldiring");
+            return notify.warn("Iltimos, barcha maydonlarni to'ldiring");
         }
         createMutation.mutate({
             ...newExpense,
@@ -92,18 +94,18 @@ const AdminExpenses = () => {
 
     if (isError) return (
         <div className="flex flex-col items-center justify-center py-40 gap-6">
-            <div className="p-4 rounded-3xl bg-red-500/10 border border-red-500/20 text-red-500">
+            <div className="p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-500">
                 <AlertCircle size={48} />
             </div>
             <div className="text-center space-y-2">
-                <h3 className="text-xl font-black text-white capitalize">Xatolik yuz berdi</h3>
+                <h3 className="text-xl font-black text-white capitalize">Ma'lumotlar yangilanmoqda</h3>
                 <p className="text-xs text-[var(--text-muted)] font-bold max-w-xs mx-auto">
-                    Ma'lumotlarni yuklashda muammo yuzaga keldi. Iltimos, internet aloqasini tekshiring va qaytadan urunib ko'ring.
+                    Aloqa vaqtincha sekinlashgan bo'lishi mumkin. Iltimos, biroz kuting yoki qayta urinib ko'ring.
                 </p>
             </div>
             <button 
                 onClick={() => queryClient.invalidateQueries(['admin-expenses'])}
-                className="px-8 py-3 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl text-[var(--gold)] font-black text-[10px] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-white transition-all"
+                className="px-8 py-3 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl text-[var(--gold)] font-black text-[10px] uppercase tracking-widest hover:bg-[var(--gold)] hover:text-white transition-all active:scale-95"
             >
                 Qayta yuklash
             </button>

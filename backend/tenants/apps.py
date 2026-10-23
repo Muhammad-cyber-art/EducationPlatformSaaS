@@ -7,5 +7,6 @@ class TenantsConfig(AppConfig):
     verbose_name = "Multi-Tenant Management"
 
     def ready(self):
-        """App yuklanganda signal va boshqa setup ishlari."""
-        pass
+        """App yuklanganda pooling xavfsizlik signallarini ulash."""
+        from tenants.signals import register_pooling_signals
+        register_pooling_signals()

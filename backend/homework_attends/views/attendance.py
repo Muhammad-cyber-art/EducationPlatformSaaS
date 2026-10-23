@@ -327,10 +327,23 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 cell.border = cell_border
 
             from groups.models import GroupEnrollment
-            frozen_student_ids = set(GroupEnrollment.objects.filter(group=group, is_frozen=True).values_list('student_id', flat=True))
+            enrollments = GroupEnrollment.objects.filter(group=group, student__in=students)
+            enr_map = {e.student_id: e for e in enrollments}
 
             for row_num, student in enumerate(students, 3):
-                is_student_frozen = student.id in frozen_student_ids or getattr(student, 'is_frozen', False)
+                enr = enr_map.get(student.id)
+                is_student_frozen = False
+                frozen_date = None
+
+                if enr and enr.is_frozen:
+                    is_student_frozen = True
+                    if enr.frozen_at:
+                        frozen_date = enr.frozen_at.date()
+                elif getattr(student, 'is_frozen', False):
+                    is_student_frozen = True
+                    if getattr(student, 'frozen_at', None):
+                        frozen_date = student.frozen_at.date()
+
                 name_val = f"{student.full_name} ❄️ (Muzlatilgan)" if is_student_frozen else student.full_name
 
                 c1 = ws.cell(row=row_num, column=1, value=row_num - 2)
@@ -351,7 +364,20 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     cell = ws.cell(row=row_num, column=col_idx)
                     cell.border = cell_border
                     
+                    # Muzlatilgan kunlar mantiqi:
+                    # Muzlatilgunga qadar bo'lgan kunlarda davomat saqlanadi,
+                    # Muzlatilgandan keyingi kunlarda (d >= frozen_date) qor belgisi (❄️) tursin
+                    is_day_frozen = False
                     if is_student_frozen:
+                        if frozen_date:
+                            if d >= frozen_date:
+                                is_day_frozen = True
+                        else:
+                            # Agar aniq frozen_date topilmasa, mavjud davomat yozuvi bo'lmasa qor belgisi
+                            if not att_data.get(student.id, {}).get(str(d)):
+                                is_day_frozen = True
+
+                    if is_day_frozen:
                         cell.value = "❄️"
                         cell.font = frozen_font
                         cell.fill = frozen_fill
@@ -414,15 +440,42 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
         # JSON Response
         report_data = []
+        from groups.models import GroupEnrollment
+        json_enrollments = GroupEnrollment.objects.filter(group=group, student__in=students)
+        json_enr_map = {e.student_id: e for e in json_enrollments}
+
         for student in students:
             history = []
             joined_at = student.joined_at.date() if student.joined_at else None
+            enr = json_enr_map.get(student.id)
+            is_student_frozen = False
+            frozen_date = None
+
+            if enr and enr.is_frozen:
+                is_student_frozen = True
+                if enr.frozen_at:
+                    frozen_date = enr.frozen_at.date()
+            elif getattr(student, 'is_frozen', False):
+                is_student_frozen = True
+                if getattr(student, 'frozen_at', None):
+                    frozen_date = student.frozen_at.date()
+
             for d in date_list:
                 date_str = str(d)
                 att_record = att_data.get(student.id, {}).get(date_str)
                 
-                # BUG #6 FIX: 'att_status' nomini ishlatamiz — 'status' DRF moduli bilan to'qnashmaslik uchun
-                if joined_at and d < joined_at:
+                is_day_frozen = False
+                if is_student_frozen:
+                    if frozen_date:
+                        if d >= frozen_date:
+                            is_day_frozen = True
+                    else:
+                        if not att_record:
+                            is_day_frozen = True
+
+                if is_day_frozen:
+                    att_status = "frozen"
+                elif joined_at and d < joined_at:
                     att_status = "not_joined"
                 elif att_record:
                     if not att_record.get('is_confirmed'):
@@ -443,6 +496,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             report_data.append({
                 "student_id": student.id,
                 "student_name": student.full_name,
+                "is_frozen": is_student_frozen,
+                "frozen_at": frozen_date.isoformat() if frozen_date else None,
                 "attendance": history
             })
 

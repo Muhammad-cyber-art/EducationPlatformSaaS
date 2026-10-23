@@ -62,14 +62,23 @@ class GroupAttendanceReport(BaseReportService):
         frozen_font = Font(color="0369A1", bold=True)
 
         from groups.models import GroupEnrollment
-        frozen_student_ids = set(GroupEnrollment.objects.filter(group=self.group, is_frozen=True).values_list('student_id', flat=True))
+        enrollments = GroupEnrollment.objects.filter(group=self.group, student__in=students)
+        enr_map = {e.student_id: e for e in enrollments}
 
         for row_num, student in enumerate(students, 3):
-            # Guruh doirasida muzlatilganligini tekshiramiz
-            if frozen_student_ids:
-                is_student_frozen = student.id in frozen_student_ids
-            else:
-                is_student_frozen = (student.id in frozen_student_ids) or (getattr(student, 'is_frozen', False) and not GroupEnrollment.objects.filter(student=student, group=self.group).exists())
+            enr = enr_map.get(student.id)
+            is_student_frozen = False
+            frozen_date = None
+
+            if enr and enr.is_frozen:
+                is_student_frozen = True
+                if enr.frozen_at:
+                    frozen_date = enr.frozen_at.date()
+            elif getattr(student, 'is_frozen', False):
+                is_student_frozen = True
+                if getattr(student, 'frozen_at', None):
+                    frozen_date = student.frozen_at.date()
+
             name_val = f"{student.full_name} ❄️ (Muzlatilgan)" if is_student_frozen else student.full_name
 
             c1 = ws.cell(row=row_num, column=1, value=row_num - 2)
@@ -77,24 +86,36 @@ class GroupAttendanceReport(BaseReportService):
             c3 = ws.cell(row=row_num, column=3, value=student.phone or "-")
             c4 = ws.cell(row=row_num, column=4, value=student.parent_phone or "-")
 
+            for c in [c1, c2, c3, c4]:
+                c.border = self.border
+                if is_student_frozen:
+                    c.fill = frozen_fill
             if is_student_frozen:
-                c1.fill = frozen_fill
-                c2.fill = frozen_fill
-                c3.fill = frozen_fill
-                c4.fill = frozen_fill
                 c2.font = frozen_font
             
             joined_at = student.joined_at.date() if student.joined_at else None
             
             for col_idx, d in enumerate(date_list, 5):
                 cell = ws.cell(row=row_num, column=col_idx)
+                cell.border = self.border
                 
+                # Muzlatilgan kunlar mantiqi:
+                # Muzlatilgunga qadar bo'lgan kunlarda davomat saqlanadi,
+                # Muzlatilgandan keyingi kunlarda (d >= frozen_date) qor belgisi (❄️) tursin
+                is_day_frozen = False
                 if is_student_frozen:
+                    if frozen_date:
+                        if d >= frozen_date:
+                            is_day_frozen = True
+                    else:
+                        if not att_data.get(student.id, {}).get(str(d)):
+                            is_day_frozen = True
+
+                if is_day_frozen:
                     cell.value = "❄️"
                     cell.font = frozen_font
                     cell.fill = frozen_fill
                     cell.alignment = center_align
-                    cell.border = self.border
                     continue
 
                 att_record = att_data.get(student.id, {}).get(str(d))

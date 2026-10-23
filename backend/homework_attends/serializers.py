@@ -44,12 +44,22 @@ class HomeworkListSerializer(serializers.ModelSerializer):
         
     @extend_schema_field(serializers.DictField())
     def get_stats(self, obj) -> dict:
-        total = getattr(obj, 'total_submissions', None)
-        if total is None:
-            total = obj.submissions.count()
-        completed = getattr(obj, 'completed_submissions', None)
-        if completed is None:
-            completed = obj.submissions.filter(status='full').count()
+        from groups.models import GroupEnrollment
+        active_student_ids = set(
+            GroupEnrollment.objects.filter(
+                group=obj.group,
+                is_active=True,
+                is_frozen=False,
+            ).values_list('student_id', flat=True)
+        )
+        valid_subs = obj.submissions.filter(
+            student_id__in=active_student_ids,
+            student__is_active=True,
+            student__is_archived=False,
+            student__is_frozen=False,
+        )
+        total = valid_subs.count()
+        completed = valid_subs.filter(status='full').count()
         return {
             "total": total,
             "completed": completed
@@ -66,11 +76,15 @@ class HomeworkDetailSerializer(serializers.ModelSerializer):
         active_student_ids = set(
             GroupEnrollment.objects.filter(
                 group=obj.group,
-                is_active=True
+                is_active=True,
+                is_frozen=False,
             ).values_list('student_id', flat=True)
         )
         submissions = obj.submissions.filter(
-            student_id__in=active_student_ids
+            student_id__in=active_student_ids,
+            student__is_active=True,
+            student__is_archived=False,
+            student__is_frozen=False,
         ).select_related('student')
         return HomeworkSubmissionSerializer(submissions, many=True).data
 

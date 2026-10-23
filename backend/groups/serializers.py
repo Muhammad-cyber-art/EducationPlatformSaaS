@@ -594,6 +594,9 @@ class StudentNestedSerializer(serializers.ModelSerializer):
     groups = serializers.SerializerMethodField()
     branch_id = serializers.IntegerField(source="group.branch.id", read_only=True)
     finance_profile = serializers.SerializerMethodField()
+    is_frozen = serializers.SerializerMethodField()
+    frozen_at = serializers.SerializerMethodField()
+    frozen_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -618,20 +621,51 @@ class StudentNestedSerializer(serializers.ModelSerializer):
             "joined_at",
             "include_in_mentor_salary",
             "finance_profile",
+            "is_frozen",
+            "frozen_at",
+            "frozen_reason",
         )
         read_only_fields = ("joined_at",)
+
+    def get_is_frozen(self, obj) -> bool:
+        from .models import GroupEnrollment
+        enr_frozen = GroupEnrollment.objects.filter(student=obj, is_active=True, is_frozen=True).exists()
+        return bool(enr_frozen or getattr(obj, 'is_frozen', False))
+
+    def get_frozen_at(self, obj):
+        from .models import GroupEnrollment
+        enr = GroupEnrollment.objects.filter(student=obj, is_active=True, is_frozen=True).first()
+        dt = (enr.frozen_at if enr and enr.frozen_at else None) or getattr(obj, 'frozen_at', None)
+        return dt.isoformat() if dt else None
+
+    def get_frozen_reason(self, obj):
+        from .models import GroupEnrollment
+        enr = GroupEnrollment.objects.filter(student=obj, is_active=True, is_frozen=True).first()
+        return (enr.frozen_reason if enr and enr.frozen_reason else "") or getattr(obj, 'frozen_reason', "") or ""
 
     def get_groups(self, obj) -> list:
         """Faqat is_active=True bo'lgan enrollmentlardagi guruhlarni qaytaradi.
         Bu o'quvchi ko'chirilgandan keyin eski guruhini ko'rsatib qolmasligini ta'minlaydi."""
         from .models import GroupEnrollment
-        active_group_ids = GroupEnrollment.objects.filter(
+        active_enrs = GroupEnrollment.objects.filter(
             student=obj, is_active=True
-        ).values_list('group_id', flat=True)
-        active_groups = Group.objects.filter(id__in=active_group_ids)
-        if not active_groups.exists() and obj.group and not getattr(obj, 'is_archived', False):
-            active_groups = [obj.group]
-        return GroupNestedSerializer(active_groups, many=True, context=self.context).data
+        ).select_related('group', 'group__mentor', 'group__branch')
+
+        result = []
+        for enr in active_enrs:
+            g_data = GroupNestedSerializer(enr.group, context=self.context).data
+            g_data['is_frozen'] = bool(enr.is_frozen)
+            g_data['frozen_at'] = enr.frozen_at.isoformat() if enr.frozen_at else None
+            g_data['frozen_reason'] = enr.frozen_reason or ""
+            result.append(g_data)
+
+        if not result and obj.group and not getattr(obj, 'is_archived', False):
+            g_data = GroupNestedSerializer(obj.group, context=self.context).data
+            g_data['is_frozen'] = bool(getattr(obj, 'is_frozen', False))
+            g_data['frozen_at'] = obj.frozen_at.isoformat() if getattr(obj, 'frozen_at', None) else None
+            g_data['frozen_reason'] = getattr(obj, 'frozen_reason', '') or ''
+            result.append(g_data)
+        return result
 
     @extend_schema_field(serializers.DictField())
     def get_finance_profile(self, obj) -> dict:

@@ -21,6 +21,7 @@ from finance.utils import (
 )
 
 from .models import (
+    AdminExpense,
     EmployeeAdvance,
     EmployeePayment,
     FinanceTransaction,
@@ -831,6 +832,13 @@ def get_finance_dashboard_stats(user, month, year):
             transaction_filter, transaction_type="expense"
         ).aggregate(total=Sum("amount"))["total"]
     )
+    admin_exp_filter = Q(date__month=month, date__year=year)
+    if user.role == "admin":
+        admin_exp_filter &= Q(branch=user.branch)
+    total_admin_expense = _to_decimal(
+        AdminExpense.objects.filter(admin_exp_filter).aggregate(total=Sum("amount"))["total"]
+    )
+    total_expense += total_admin_expense
     unpaid_payments = Payment.objects.filter(payment_filter, is_paid=False)
     # TUZATILDI (BUG-N1-1): Avval loop ichida har bir payment uchun alohida
     # remaining_amount property hisoblanardi (N+1 muammo).
@@ -884,6 +892,18 @@ def get_finance_dashboard_stats(user, month, year):
                     branch_map[b_id]["income"] = val
                 else:
                     branch_map[b_id]["expense"] = val
+
+        # Filiallar bo'yicha operatsion (admin) chiqimlarni ham xarajatlarga qo'shish
+        admin_exp_branch_qs = (
+            AdminExpense.objects.filter(date__month=month, date__year=year)
+            .values("branch_id")
+            .annotate(total=Sum("amount"))
+        )
+        for stat in admin_exp_branch_qs:
+            b_id = stat["branch_id"]
+            if b_id in branch_map:
+                val = float(stat["total"] or 0)
+                branch_map[b_id]["expense"] += val
 
         for b_id in branch_map:
             branch_map[b_id]["profit"] = (
@@ -1200,7 +1220,7 @@ def get_branch_finance_stats(branch_id, month, year):
             ).aggregate(total=Sum("amount"))["total"]
         )
 
-        expenses = _to_decimal(
+        ledger_expenses = _to_decimal(
             FinanceTransaction.objects.filter(
                 branch=branch,
                 date__month=month,
@@ -1209,6 +1229,29 @@ def get_branch_finance_stats(branch_id, month, year):
                 is_verified=True,
             ).aggregate(total=Sum("amount"))["total"]
         )
+
+        # Adminlar qilgan operatsion chiqimlar (AdminExpense)
+        admin_expenses_qs = AdminExpense.objects.filter(
+            branch=branch,
+            date__month=month,
+            date__year=year
+        ).select_related('marked_by').order_by('-date', '-created_at')
+
+        admin_expenses_total = _to_decimal(admin_expenses_qs.aggregate(total=Sum("amount"))["total"])
+        total_branch_expenses = ledger_expenses + admin_expenses_total
+
+        admin_expenses_list = [
+            {
+                "id": exp.id,
+                "title": exp.title,
+                "amount": float(exp.amount),
+                "date": str(exp.date),
+                "description": exp.description or "",
+                "marked_by": (exp.marked_by.get_full_name() or exp.marked_by.username) if exp.marked_by else "Admin",
+                "created_at": exp.created_at.strftime("%Y-%m-%d %H:%M") if exp.created_at else None,
+            }
+            for exp in admin_expenses_qs
+        ]
 
         attendance_refunds = aggregate_attendance_refunds(year, month, branch=branch)
         attendance_refunds_paid = aggregate_attendance_refunds(
@@ -1245,9 +1288,12 @@ def get_branch_finance_stats(branch_id, month, year):
                 "attendance_refunds_paid": attendance_refunds_paid,
                 "refund_share_percent": refund_share_percent,
                 "real_revenue": float(received_income),
-                "expenses": float(expenses),
-                "net_profit": float(received_income) - float(expenses),
+                "expenses": float(total_branch_expenses),
+                "admin_expenses_total": float(admin_expenses_total),
+                "ledger_expenses_total": float(ledger_expenses),
+                "net_profit": float(received_income) - float(total_branch_expenses),
             },
+            "admin_expenses": admin_expenses_list,
             "groups": groups_detail,
         }
     except Exception as e:
@@ -1345,6 +1391,15 @@ def get_monthly_branch_trends(user, end_month, end_year, months_back=6):
             bucket[key] = {"income": Decimal("0"), "expense": Decimal("0")}
         tx_type = row["transaction_type"]
         bucket[key][tx_type] = _to_decimal(row["total"])
+
+    admin_aggregated = AdminExpense.objects.filter(
+        branch_id__in=branch_ids, date__gte=start_date, date__lte=end_date,
+    ).values("branch_id", "date__year", "date__month").annotate(total=Sum("amount"))
+    for row in admin_aggregated:
+        key = (row["date__year"], row["date__month"], row["branch_id"])
+        if key not in bucket:
+            bucket[key] = {"income": Decimal("0"), "expense": Decimal("0")}
+        bucket[key]["expense"] += _to_decimal(row["total"])
 
     month_payload = []
     for year, month in month_points:

@@ -454,6 +454,10 @@ class Student(models.Model):
             passed_lessons = [d for d in passed_lessons if d >= joined_date]
         if enrollment and enrollment.left_at:
             passed_lessons = [d for d in passed_lessons if d <= enrollment.left_at.date()]
+        if enrollment and enrollment.is_frozen and enrollment.frozen_at:
+            passed_lessons = [d for d in passed_lessons if d < enrollment.frozen_at.date()]
+        elif getattr(self, 'is_frozen', False) and getattr(self, 'frozen_at', None):
+            passed_lessons = [d for d in passed_lessons if d < self.frozen_at.date()]
 
         total_passed = len(passed_lessons)
 

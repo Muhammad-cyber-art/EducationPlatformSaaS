@@ -1,5 +1,5 @@
 import React from "react";
-import { User, Camera, ShieldCheck, Activity, Send, Phone, Clock, Unplug } from "lucide-react";
+import { User, Camera, ShieldCheck, Activity, Send, Phone, Clock, Unplug, Snowflake } from "lucide-react";
 import { getPaymentStatus } from "./paymentStatus";
 
 const StudentProfileHeader = ({
@@ -14,9 +14,16 @@ const StudentProfileHeader = ({
   disconnectBotMutation
 }) => {
   const payStatus = getPaymentStatus(primaryPayment);
+  const isFrozen = Boolean(studentData?.is_frozen);
   
-  // Choose ring color based on payment status
-  const ringColor = payStatus.key === 'paid' ? 'ring-emerald-500/50' : payStatus.key === 'partial' ? 'ring-amber-500/50' : 'ring-rose-500/50';
+  // Choose ring color based on frozen and payment status
+  const ringColor = isFrozen
+    ? 'ring-sky-400 ring-4 shadow-lg shadow-sky-400/30'
+    : payStatus.key === 'paid'
+    ? 'ring-emerald-500/50'
+    : payStatus.key === 'partial'
+    ? 'ring-amber-500/50'
+    : 'ring-rose-500/50';
 
   return (
     <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 pb-6 border-b border-[var(--border-glass)] relative">
@@ -24,8 +31,16 @@ const StudentProfileHeader = ({
       {/* Avatar Container */}
       <div className="relative group/avatar shrink-0 mt-2 sm:mt-0">
         <div
-          className={`w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-[var(--bg-panel)] p-1 ring-2 ring-offset-4 ring-offset-[var(--bg-void)] ${ringColor} transition-all duration-300 shadow-xl`}
+          className={`w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-[var(--bg-panel)] p-1 ring-2 ring-offset-4 ring-offset-[var(--bg-void)] ${ringColor} transition-all duration-300 shadow-xl relative`}
         >
+          {isFrozen && (
+            <div 
+              className="absolute top-0 right-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-sky-500/50 border-2 border-[var(--bg-void)] z-20"
+              title="O'quvchi muzlatilgan"
+            >
+              <Snowflake size={15} />
+            </div>
+          )}
           <div className="w-full h-full rounded-full overflow-hidden bg-[var(--bg-void)] flex items-center justify-center relative">
             {previewImage ? (
               <img src={previewImage} className="w-full h-full object-cover" alt="" />
@@ -63,9 +78,17 @@ const StudentProfileHeader = ({
               placeholder="O'quvchi ism-sharifi..."
             />
           ) : (
-            <h1 className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight capitalize">
-              {studentData?.full_name || "Noma'lum o'quvchi"}
-            </h1>
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight capitalize">
+                {studentData?.full_name || "Noma'lum o'quvchi"}
+              </h1>
+              {isFrozen && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-sky-500/10 border border-sky-400/40 text-sky-300 text-xs font-black uppercase tracking-wider backdrop-blur-md shadow-sm shadow-sky-500/15">
+                  <Snowflake size={13} className="text-sky-400" />
+                  Muzlatilgan
+                </span>
+              )}
+            </div>
           )}
         </div>
 
@@ -119,6 +142,32 @@ const StudentProfileHeader = ({
             </div>
           )}
         </div>
+
+        {/* Muzlatilgan holat xabarnomasi */}
+        {!isEditing && isFrozen && (
+          <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-sky-500/15 via-sky-500/5 to-transparent border border-sky-400/30 backdrop-blur-md flex items-start sm:items-center gap-3.5 shadow-sm text-left">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/30 flex items-center justify-center shrink-0">
+              <Snowflake size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-sky-200">
+                  O'quvchi Faoliyati Muzlatilgan
+                </h4>
+                {studentData?.frozen_at && (
+                  <span className="text-[10px] text-sky-300/80 font-mono bg-sky-500/20 px-2 py-0.5 rounded border border-sky-400/20">
+                    {new Date(studentData.frozen_at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-sky-100/75 font-medium mt-0.5">
+                {studentData?.frozen_reason
+                  ? `Sabab: "${studentData.frozen_reason}"`
+                  : "Ushbu o'quvchi vaqtincha muzlatilgan. Darslar davomati va to'lovlar hisoblanishi to'xtatilgan."}
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

@@ -246,11 +246,15 @@ if DB_ENGINE == 'postgresql':
             'USER': os.getenv('DB_USER', 'postgres'),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '0')),  # Multi-tenant schema xavfsizligi uchun 0
+            # Professional Connection Pooling (Signallar va Middleware orqali 100% schema-izolyatsiyalangan)
+            'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '60')),
             'CONN_HEALTH_CHECKS': True,
             'OPTIONS': {
                 'connect_timeout': 10,
+                'keepalives': 1,
+                'keepalives_idle': 30,
+                'keepalives_interval': 10,
+                'keepalives_count': 5,
             }
         }
     }

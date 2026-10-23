@@ -1,5 +1,5 @@
 import React from "react";
-import { GraduationCap, MoreVertical, LogIn, LogOut, CheckCircle2, XCircle, User, DollarSign, Clock } from "lucide-react";
+import { GraduationCap, MoreVertical, LogIn, LogOut, CheckCircle2, XCircle, User, DollarSign, Clock, Snowflake } from "lucide-react";
 import { getPaymentStatus, isCurrentMonthPayment } from "./paymentStatus";
 
 const StudentGroupsSection = ({
@@ -58,10 +58,15 @@ const StudentGroupsSection = ({
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[7px] sm:text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest leading-none mb-1">Guruh</p>
                                     <h3 className="text-sm sm:text-base font-black text-[var(--text-primary)] capitalize tracking-tight truncate">{group.name}</h3>
-                                    <div className="flex items-center gap-2 mt-1.5">
+                                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                         {(group.days_display || group.dars_kunlari || group.days) && (
                                             <span className="text-[8px] font-black px-2 py-0.5 rounded-full border text-[var(--gold)] bg-[var(--gold)]/10 border-[var(--gold)]/20" title={group.days_display_full || ""}>
                                                 {group.days_display || group.dars_kunlari || (group.days === 'even' ? 'Juft' : group.days === 'everyday' ? 'Har kuni' : 'Toq')}
+                                            </span>
+                                        )}
+                                        {Boolean(group.is_frozen || studentData?.is_frozen) && (
+                                            <span className="text-[8px] font-black px-2 py-0.5 rounded-full border text-sky-300 bg-sky-500/10 border-sky-400/30 flex items-center gap-1">
+                                                <Snowflake size={9} /> Muzlatilgan
                                             </span>
                                         )}
                                         <span className="text-[8px] font-bold text-[var(--text-muted)] flex items-center gap-1">

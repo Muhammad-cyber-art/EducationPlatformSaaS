@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import api from "../../tokenUpdater/updater";
 import toast from "react-hot-toast";
+import notify from "../../utils/toastNotify";
 import {
     Users, Briefcase,
     TrendingUp, Wallet,
@@ -90,8 +91,8 @@ export default function AdminPageFirst() {
     };
 
     useEffect(() => {
-        if (isFinanceError && hasFinancePerm) {
-            toast.error("Ma'lumotlarni sinxronlashda xatolik.");
+        if (isFinanceError && hasFinancePerm && typeof navigator !== 'undefined' && navigator.onLine) {
+            notify.wait("Filial moliyasi yangilanmoqda, biroz kuting...", { id: "branch-finance-sync" });
         }
     }, [isFinanceError, hasFinancePerm]);
 

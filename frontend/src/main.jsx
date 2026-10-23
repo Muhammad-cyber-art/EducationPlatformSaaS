@@ -38,7 +38,42 @@ createRoot(document.getElementById('root')).render(
  <ErrorBoundary>
  <Provider store={store}>
  <QueryClientProvider client={queryClient}>
- <Toaster position="top-center" reverseOrder={false} />
+  <Toaster 
+    position="top-center" 
+    reverseOrder={false}
+    toastOptions={{
+      duration: 3500,
+      style: {
+        background: '#0d0d0d',
+        color: '#f3f4f6',
+        border: '1px solid #27272a',
+        borderRadius: '14px',
+        padding: '12px 18px',
+        fontSize: '13px',
+        fontWeight: '600',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.6)',
+      },
+      success: {
+        iconTheme: {
+          primary: '#10b981',
+          secondary: '#000000',
+        },
+        style: {
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+        },
+      },
+      error: {
+        duration: 4500,
+        iconTheme: {
+          primary: '#ef4444',
+          secondary: '#ffffff',
+        },
+        style: {
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+        },
+      },
+    }}
+  />
  <App />
  </QueryClientProvider>
  </Provider>
