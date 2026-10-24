@@ -198,6 +198,11 @@ def tenant_schema_context(tenant_or_schema_name):
     if isinstance(tenant_or_schema_name, str):
         schema_name = tenant_or_schema_name
         tenant_obj = None
+        if schema_name and schema_name != "public":
+            try:
+                tenant_obj = TenantModel.objects.filter(schema_name=schema_name).first()
+            except Exception:
+                tenant_obj = None
     elif isinstance(tenant_or_schema_name, TenantModel):
         tenant_obj = tenant_or_schema_name
         schema_name = tenant_obj.schema_name

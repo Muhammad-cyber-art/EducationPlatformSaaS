@@ -11,6 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import re
 # BOT_TOKEN ni settings dan olish (settings.py da .env dan yuklanadi - fallback sifatida)
 GLOBAL_BOT_TOKEN = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
 
@@ -19,18 +20,91 @@ def get_tenant_bot_token(explicit_token=None):
     Joriy tenantga tegishli bot tokenni aniqlash.
     1. Agar explicit_token berilgan bo'lsa - uni ishlatadi.
     2. Agar joriy thread context'ida tenant bo'lsa va unda telegram_bot_token bo'lsa - uni oladi.
-    3. Aks holda fallback sifatida GLOBAL_BOT_TOKEN (settings dan) oladi.
+    3. Agar context bo'lmasa, joriy search_path bo'yicha bazadan qidiradi.
+    4. Aks holda fallback sifatida GLOBAL_BOT_TOKEN (settings dan) oladi.
     """
     if explicit_token:
-        return explicit_token
+        return explicit_token.strip()
     try:
         from tenants.context import get_current_tenant
         tenant = get_current_tenant()
         if tenant and getattr(tenant, 'telegram_bot_token', None):
-            return tenant.telegram_bot_token
+            return tenant.telegram_bot_token.strip()
     except Exception:
         pass
+
+    try:
+        from django.db import connection
+        from tenants.models import Tenant
+        with connection.cursor() as cur:
+            cur.execute("SHOW search_path")
+            row = cur.fetchone()
+            if row:
+                first_schema = row[0].split(',')[0].strip()
+                if first_schema.startswith('tenant_'):
+                    token = Tenant.objects.filter(schema_name=first_schema).values_list('telegram_bot_token', flat=True).first()
+                    if token and token.strip():
+                        return token.strip()
+    except Exception:
+        pass
+
     return GLOBAL_BOT_TOKEN
+
+
+def validate_telegram_bot_token(token: str) -> dict:
+    """
+    Telegram bot tokenini tekshirish (getMe API orqali).
+    Agar to'g'ri bo'lsa:
+      - bot haqida ma'lumot (username, first_name) qaytaradi
+      - avvalgi webhook bo'lsa, uni avtomatik o'chiradi (deleteWebhook),
+        shunda polling rejimida Conflict xatosi chiqmaydi.
+    """
+    if not token or not isinstance(token, str):
+        return {'ok': False, 'error': "Bot token bo'sh bo'lishi mumkin emas."}
+
+    token = token.strip()
+    if not re.match(r'^\d{8,12}:[A-Za-z0-9_-]{30,}$', token):
+        return {
+            'ok': False,
+            'error': "Bot token formati noto'g'ri. BotFather bergan tokenni to'liq kiriting (masalan: 123456789:ABC...)."
+        }
+
+    try:
+        url = f"https://api.telegram.org/bot{token}/getMe"
+        resp = requests.get(url, timeout=7)
+        data = resp.json()
+
+        if resp.status_code == 200 and data.get('ok'):
+            bot_info = data.get('result', {})
+            # Webhookni tozalash (conflict oldini olish uchun)
+            try:
+                requests.post(
+                    f"https://api.telegram.org/bot{token}/deleteWebhook",
+                    json={'drop_pending_updates': True},
+                    timeout=5
+                )
+            except Exception as del_err:
+                logger.warning(f"deleteWebhook tozalash xatoligi: {del_err}")
+
+            return {
+                'ok': True,
+                'bot_info': {
+                    'id': bot_info.get('id'),
+                    'username': bot_info.get('username'),
+                    'first_name': bot_info.get('first_name'),
+                }
+            }
+        else:
+            description = data.get('description', "Telegram API dan noto'g'ri javob qaytdi.")
+            return {
+                'ok': False,
+                'error': f"Telegram token xato: {description}"
+            }
+    except requests.exceptions.Timeout:
+        return {'ok': False, 'error': "Telegram serveri bilan bog'lanishda timeout yuz berdi. Qaytadan urinib ko'ring."}
+    except Exception as exc:
+        return {'ok': False, 'error': f"Telegram bilan bog'lanishda xatolik: {str(exc)}"}
+
 
 def get_student_telegram_ids(student):
     """

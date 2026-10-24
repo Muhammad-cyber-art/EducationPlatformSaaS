@@ -73,6 +73,11 @@ def build_bot_application(token, schema_name=None, tenant_name=None):
     async def _post_init(application):
         application.bot_data['tenant_schema'] = schema_name
         application.bot_data['tenant_name'] = tenant_name
+        try:
+            # Polling oldidan webhookni tozalash (Conflict: 409 oldini olish uchun)
+            await application.bot.delete_webhook(drop_pending_updates=True)
+        except Exception as wh_err:
+            logger.warning(f"[BOT_INIT] Webhook tozalash ogohlantirish ({schema_name}): {wh_err}")
         logger.info(
             f"[BOT_INIT] Bot tayyor | schema={schema_name!r} | tenant={tenant_name!r} | "
             f"bot_data tenant_schema={application.bot_data.get('tenant_schema')!r}"
@@ -140,7 +145,7 @@ class Command(BaseCommand):
                 if not tenant:
                     self.stdout.write(self.style.ERROR(f"XATO: Ko'rsatilgan o'quv markaz topilmadi (schema: {target_schema}, tenant: {target_tenant})!"))
                     return
-                
+
                 token = tenant.telegram_bot_token
                 if not token:
                     self.stdout.write(self.style.ERROR(f"XATO: '{tenant.name}' ({tenant.schema_name}) o'quv markazi uchun telegram_bot_token kiritilmagan!\nCEO paneldan o'quv markazni tahrirlab bot tokenni kiriting."))
@@ -151,89 +156,137 @@ class Command(BaseCommand):
                 app.run_polling(drop_pending_updates=True)
                 return
 
-            # 2. Argument berilmagan bo'lsa: Bazadagi barcha bot tokeni bor faol tenantlarni qidiramiz
-            import time
-            while True:
-                try:
-                    active_tenants = list(Tenant.objects.filter(is_active=True).exclude(Q(telegram_bot_token__isnull=True) | Q(telegram_bot_token='')))
-                except Exception as db_err:
-                    logger.warning(f"Tenantlarni bazadan o'qishda xatolik ({db_err}). Fallback tekshirilmoqda...")
-                    active_tenants = []
+            # 2. Argument berilmagan bo'lsa: Doimiy dinamik menejer (Barcha tenant botlarini real-vaqtda boshqaradi)
+            import asyncio
+            from asgiref.sync import sync_to_async
 
-                if active_tenants:
-                    break
+            async def run_multi_tenant_manager():
+                running_bots = {}  # {tenant_id: {'app': app, 'token': token, 'schema': schema, 'name': name}}
+                fallback_app = None
 
-                # Fallback: settings.TELEGRAM_BOT_TOKEN
-                fallback_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-                if fallback_token:
-                    self.stdout.write(self.style.WARNING("Ogohlantirish: O'quv markazlarda alohida bot token topilmadi. Fallback (.env / settings.TELEGRAM_BOT_TOKEN) ishlatilmoqda..."))
-                    app = build_bot_application(fallback_token, schema_name=None, tenant_name='Global')
-                    app.run_polling(drop_pending_updates=True)
-                    return
-
-                self.stdout.write(self.style.WARNING("OGOHLANTIRISH: Hech bir o'quv markazda telegram bot token topilmadi va settings.TELEGRAM_BOT_TOKEN ham bo'sh."))
-                self.stdout.write("Bot kutish rejimida (har 30 soniyada yangi tokenlar mavjudligi tekshiriladi)...")
-                time.sleep(30)
-
-        if len(active_tenants) == 1:
-            t = active_tenants[0]
-            self.stdout.write(self.style.SUCCESS(f">>> 1 ta faol bot topildi: '{t.name}' ({t.schema_name}). Ishga tushirilmoqda..."))
-            app = build_bot_application(t.telegram_bot_token, schema_name=t.schema_name, tenant_name=t.name)
-            app.run_polling(drop_pending_updates=True)
-            return
-
-        # 3. Bir nechta o'quv markaz botlari bo'lsa: ularni parallel polling qilamiz
-        self.stdout.write(self.style.SUCCESS(f">>> {len(active_tenants)} ta o'quv markaz botlari tayyorlanmoqda:"))
-        app_pairs = []
-        for t in active_tenants:
-            self.stdout.write(f"  • {t.name} (schema: {t.schema_name})")
-            try:
-                bot_app = build_bot_application(t.telegram_bot_token, schema_name=t.schema_name, tenant_name=t.name)
-                app_pairs.append((bot_app, t))
-            except Exception as build_err:
-                logger.error(f"'{t.name}' uchun bot ilovasini qurishda xatolik: {build_err}")
-        
-        import asyncio
-        async def run_all():
-            running_apps = []
-            for app, tenant_item in app_pairs:
-                try:
-                    await app.initialize()
-                    await app.start()
-                    await app.updater.start_polling(drop_pending_updates=True)
-                    running_apps.append((app, tenant_item))
-                    logger.info(f"Bot muvaffaqiyatli ishga tushdi: {tenant_item.name} ({tenant_item.schema_name})")
-                except Exception as bot_err:
-                    logger.error(
-                        f"XATO: '{tenant_item.name}' ({tenant_item.schema_name}) botini ishga tushirishda xatolik yuz berdi: "
-                        f"{bot_err}. Ushbu markaz boti o'tkazib yuborildi, boshqa botlar ishlashda davom etadi."
+                @sync_to_async
+                def get_active_tenants():
+                    from tenants.models import Tenant
+                    return list(
+                        Tenant.objects.filter(is_active=True)
+                        .exclude(Q(telegram_bot_token__isnull=True) | Q(telegram_bot_token=''))
+                        .values('id', 'name', 'schema_name', 'telegram_bot_token')
                     )
 
-            if not running_apps:
-                logger.error("Hech bir bot muvaffaqiyatli ishga tushmadi!")
-                return
+                async def start_bot(t_id, name, schema, token):
+                    try:
+                        app = build_bot_application(token, schema_name=schema, tenant_name=name)
+                        await app.initialize()
+                        await app.start()
+                        await app.updater.start_polling(drop_pending_updates=True)
+                        running_bots[t_id] = {
+                            'app': app,
+                            'token': token,
+                            'schema': schema,
+                            'name': name
+                        }
+                        logger.info(f"✅ Bot muvaffaqiyatli ishga tushdi: '{name}' (schema: {schema})")
+                        return True
+                    except Exception as exc:
+                        logger.error(f"❌ '{name}' ({schema}) botini ishga tushirishda xatolik: {exc}")
+                        return False
 
-            self.stdout.write(self.style.SUCCESS(f">>> {len(running_apps)} ta bot muvaffaqiyatli ishga tushdi va xabarlarni tinglamoqda..."))
-            stop_event = asyncio.Event()
-            try:
-                await stop_event.wait()
-            except (asyncio.CancelledError, KeyboardInterrupt):
-                pass
-            finally:
-                for app, tenant_item in running_apps:
+                async def stop_bot(t_id):
+                    info = running_bots.pop(t_id, None)
+                    if not info:
+                        return
+                    app = info['app']
+                    name = info['name']
                     try:
                         if app.updater and app.updater.running:
                             await app.updater.stop()
                         if app.running:
                             await app.stop()
                         await app.shutdown()
-                    except Exception as err:
-                        logger.error(f"Bot to'xtatishda xatolik ({tenant_item.name}): {err}")
+                        logger.info(f"🛑 Bot to'xtatildi: '{name}'")
+                    except Exception as exc:
+                        logger.error(f"Bot to'xtatishda xatolik ({name}): {exc}")
 
-        try:
-            asyncio.run(run_all())
+                logger.info(">>> Multi-tenant Telegram Bot menejeri faol. Dinamik monitoring boshlandi...")
+
+                try:
+                    while True:
+                        try:
+                            current_tenants = await get_active_tenants()
+                            current_tenant_ids = {t['id'] for t in current_tenants}
+
+                            # 1. O'chirilgan yoki tokeni olib tashlangan botlarni to'xtatish
+                            for t_id in list(running_bots.keys()):
+                                if t_id not in current_tenant_ids:
+                                    await stop_bot(t_id)
+
+                            # 2. Yangi qo'shilgan yoki tokeni yangilangan botlarni ishga tushirish
+                            for t_data in current_tenants:
+                                t_id = t_data['id']
+                                token = t_data['telegram_bot_token'].strip()
+                                schema = t_data['schema_name']
+                                name = t_data['name']
+
+                                if t_id in running_bots:
+                                    if running_bots[t_id]['token'] != token:
+                                        logger.info(f"🔄 '{name}' bot tokeni yangilandi, qayta ishga tushirilmoqda...")
+                                        await stop_bot(t_id)
+                                        await start_bot(t_id, name, schema, token)
+                                else:
+                                    await start_bot(t_id, name, schema, token)
+
+                            # 3. Fallback (.env dagi token) agar bitta ham tenant boti bo'lmasa
+                            if not running_bots:
+                                fallback_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '').strip()
+                                if fallback_token and not fallback_app:
+                                    try:
+                                        logger.info("Faol tenant botlari yo'q. Fallback (.env) boti ishga tushirilmoqda...")
+                                        fallback_app = build_bot_application(fallback_token, schema_name=None, tenant_name='Global')
+                                        await fallback_app.initialize()
+                                        await fallback_app.start()
+                                        await fallback_app.updater.start_polling(drop_pending_updates=True)
+                                    except Exception as fb_err:
+                                        logger.error(f"Fallback bot xatosi: {fb_err}")
+                            elif fallback_app:
+                                try:
+                                    if fallback_app.updater and fallback_app.updater.running:
+                                        await fallback_app.updater.stop()
+                                    if fallback_app.running:
+                                        await fallback_app.stop()
+                                    await fallback_app.shutdown()
+                                    fallback_app = None
+                                    logger.info("Tenant botlari ishga tushgani uchun fallback bot to'xtatildi.")
+                                except Exception:
+                                    pass
+
+                        except Exception as loop_err:
+                            logger.error(f"Multi-tenant bot menejeri monitoringida xatolik: {loop_err}")
+
+                        # Har 20 soniyada yangi tokenlar/o'zgarishlarni tekshirish
+                        await asyncio.sleep(20)
+
+                except (asyncio.CancelledError, KeyboardInterrupt):
+                    pass
+                finally:
+                    for t_id in list(running_bots.keys()):
+                        await stop_bot(t_id)
+                    if fallback_app:
+                        try:
+                            if fallback_app.updater and fallback_app.updater.running:
+                                await fallback_app.updater.stop()
+                            if fallback_app.running:
+                                await fallback_app.stop()
+                            await fallback_app.shutdown()
+                        except Exception:
+                            pass
+
+            asyncio.run(run_multi_tenant_manager())
+
         except KeyboardInterrupt:
-            self.stdout.write(self.style.SUCCESS("Botlar to'xtatildi."))
+            self.stdout.write(self.style.SUCCESS("Bot boshqaruvi to'xtatildi."))
+        except Exception as exc:
+            self.stdout.write(self.style.ERROR(f"Kutilmagan xatolik: {exc}"))
+            logger.error(f"runbot command xatosi: {exc}", exc_info=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start komandasi - ro'yxatdan o'tish jarayoni"""
@@ -305,17 +358,23 @@ def _internal_process_contact(clean_phone, chat_id):
         return norm_db.endswith(local_9) or local_9.endswith(norm_db)
 
     try:
-        # 1. Admin/Super Admin/Mentor/Teacher qidirish
-        all_users = UserModel.objects.select_related('branch').filter(
+        # 1. Admin/Super Admin/Mentor/Teacher qidirish (DB darajasida filtrlash)
+        user_query = Q(phone_number__endswith=local_9)
+        if len(norm_incoming) >= 7:
+            user_query |= Q(phone_number__icontains=norm_incoming)
+        for num in possible_numbers:
+            user_query |= Q(phone_number__icontains=num)
+
+        potential_users = UserModel.objects.select_related('branch').filter(
+            user_query,
             role__in=['admin', 'super_admin', 'mentor', 'teacher'],
             is_active=True,
             phone_number__isnull=False
         )
-        user_count = all_users.count()
-        logger.info(f"[PROCESS_CONTACT] Foydalanuvchilar (admin/mentor) soni: {user_count}")
-        for user in all_users:
+
+        for user in potential_users:
             if is_phone_match(user.phone_number):
-                logger.info(f"[PROCESS_CONTACT] Admin topildi: {user.username} [{user.role}]")
+                logger.info(f"[PROCESS_CONTACT] Xodim/Admin topildi: {user.username} [{user.role}]")
                 BotProfile.objects.filter(telegram_id=chat_id).exclude(user=user).delete()
                 profile, created = BotProfile.objects.update_or_create(
                     user=user,
@@ -326,25 +385,32 @@ def _internal_process_contact(clean_phone, chat_id):
                         'is_active': True
                     }
                 )
-                # UserModel bilan ham telegram_chat_id ni sinxronlashtirish
                 if user.telegram_chat_id != chat_id:
                     user.telegram_chat_id = chat_id
                     user.save(update_fields=['telegram_chat_id'])
                 return profile, 'admin_confirm_needed'
 
-        # 2. Student qidirish
-        all_students = Student.objects.filter(is_active=True)
-        student_count = all_students.count()
-        logger.info(f"[PROCESS_CONTACT] Faol o'quvchilar soni: {student_count}")
+        # 2. Student qidirish (DB darajasida filtrlash + prefetch_related bilan N+1 yo'qotilgan)
+        student_query = Q(phone__endswith=local_9) | Q(parent_phone__endswith=local_9)
+        if len(norm_incoming) >= 7:
+            student_query |= Q(phone__icontains=norm_incoming) | Q(parent_phone__icontains=norm_incoming)
+        for num in possible_numbers:
+            student_query |= Q(phone__icontains=num) | Q(parent_phone__icontains=num)
+
+        matching_students = list(
+            Student.objects.filter(student_query, is_active=True)
+            .select_related('group')
+            .prefetch_related('enrollments__group')
+        )
+        logger.info(f"[PROCESS_CONTACT] Mos o'quvchilar soni: {len(matching_students)}")
 
         found_student_names = []
         student_profile_created = False
         profile = None
 
-        for student in all_students:
+        for student in matching_students:
             phone_match = is_phone_match(student.phone)
             parent_match = is_phone_match(student.parent_phone)
-            logger.debug(f"[PROCESS_CONTACT]   student={student.full_name!r} phone={student.phone!r}(match={phone_match}) parent_phone={student.parent_phone!r}(match={parent_match})")
 
             if not phone_match and not parent_match:
                 continue
@@ -361,7 +427,6 @@ def _internal_process_contact(clean_phone, chat_id):
                 update_fields.append('parent_telegram_id')
             if update_fields:
                 student.save(update_fields=update_fields)
-                logger.info(f"[PROCESS_CONTACT] Student.{update_fields} yangilandi.")
 
             if not student_profile_created:
                 BotProfile.objects.filter(telegram_id=chat_id).exclude(student=student).delete()
@@ -374,26 +439,16 @@ def _internal_process_contact(clean_phone, chat_id):
                         'is_active': True
                     }
                 )
-                logger.info(f"[PROCESS_CONTACT] BotProfile {'yaratildi' if created else 'yangilandi'}: id={profile.id}")
                 student_profile_created = True
 
-            # Guruhlarni to'g'ri usulda olish (M2M reverse lookup xatosini oldini olish)
-            try:
-                from groups.models import GroupEnrollment
-                active_enrollment_groups = list(
-                    GroupEnrollment.objects.filter(
-                        student=student, is_active=True
-                    ).select_related('group').values_list('group__name', flat=True)
-                )
-            except Exception as ge:
-                logger.warning(f"[PROCESS_CONTACT] GroupEnrollment xatosi: {ge}")
-                active_enrollment_groups = []
+            # Guruhlarni prefetch qilingan xotiradan olish (N+1 yo'q)
+            active_enrollment_groups = [
+                enr.group.name for enr in student.enrollments.all()
+                if enr.is_active and getattr(enr, 'group', None) and getattr(enr.group, 'is_faol', True)
+            ]
 
-            if not active_enrollment_groups and student.group_id:
-                try:
-                    active_enrollment_groups = [student.group.name]
-                except Exception:
-                    active_enrollment_groups = []
+            if not active_enrollment_groups and student.group:
+                active_enrollment_groups = [student.group.name]
 
             if not active_enrollment_groups:
                 found_student_names.append(f"{student.full_name.strip()} (Guruhsiz)")

@@ -195,7 +195,12 @@ class TenantListCreateView(CEOAuthMixin, APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data    = serializer.validated_data
-        service = TenantProvisioningService()
+        raw_bot_token = data.get("telegram_bot_token", "")
+        if raw_bot_token and raw_bot_token.strip():
+            from telegram_bot.utils import validate_telegram_bot_token
+            check_res = validate_telegram_bot_token(raw_bot_token.strip())
+            if not check_res['ok']:
+                return Response({"telegram_bot_token": [check_res['error']]}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             result = service.provision(
@@ -209,7 +214,7 @@ class TenantListCreateView(CEOAuthMixin, APIView):
                 trial_days      = data.get("trial_days", 30),
                 city            = data.get("city", ""),
                 contact_phone   = data.get("contact_phone", ""),
-                telegram_bot_token = data.get("telegram_bot_token", ""),
+                telegram_bot_token = raw_bot_token.strip() if raw_bot_token else "",
             )
 
             tenant = result["tenant"]
@@ -281,7 +286,14 @@ class TenantDetailView(CEOAuthMixin, APIView):
             tenant.contact_phone = data["contact_phone"].strip()
         if "telegram_bot_token" in data:
             val = data["telegram_bot_token"]
-            tenant.telegram_bot_token = val.strip() if val and val.strip() else None
+            if val and val.strip():
+                from telegram_bot.utils import validate_telegram_bot_token
+                check_res = validate_telegram_bot_token(val.strip())
+                if not check_res['ok']:
+                    return Response({"telegram_bot_token": [check_res['error']]}, status=status.HTTP_400_BAD_REQUEST)
+                tenant.telegram_bot_token = val.strip()
+            else:
+                tenant.telegram_bot_token = None
 
         tenant.save()
 
