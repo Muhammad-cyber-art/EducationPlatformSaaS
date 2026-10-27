@@ -1,5 +1,4 @@
 import axios from "axios";
-import toast from "react-hot-toast";
 import { jwtDecode } from "jwt-decode";
 import notify from "../utils/toastNotify";
 
@@ -30,10 +29,10 @@ if (import.meta.env.DEV) {
 }
 
 // Asosiy api client (barcha so'rovlar shu orqali ketadi)
-// 15 soniya timeout: sekinroq tarmoq va analitika so'rovlarida asossiz timeout xatoliklarini oldini oladi
+// 25 soniya timeout: sekinroq mobil tarmoq (3G/4G) va analitika so'rovlarida asossiz timeout xatoliklarini oldini oladi
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 25000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -42,7 +41,7 @@ const api = axios.create({
 // Alohida client refresh so'rovi uchun (interceptorlarga tushmasin)
 const refreshClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 25000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -131,6 +130,19 @@ api.interceptors.request.use(
      error.code = 'ERR_NETWORK';
      error.isOffline = true;
      return Promise.reject(error);
+   }
+
+   // BUG FIX: Fayl yoki FormData yuborilayotganda Content-Type ni o'chiramiz.
+   // Axios / Brauzer o'zi avtomatik to'g'ri 'multipart/form-data; boundary=----...' ni o'rnatishi kerak.
+   // Aks holda Django REST Framework MultiPartParser boundary topolmay 400 xato qaytaradi.
+   // Shuningdek, sekin tarmoqda katta fayllar (25MB gacha) timeout bo'lmasligi uchun timeoutni 120 soniyaga uzaytiramiz.
+   if (config.data instanceof FormData) {
+     if (config.headers) {
+       delete config.headers['Content-Type'];
+     }
+     if (!config.timeout || config.timeout === 15000 || config.timeout === 25000) {
+       config.timeout = 120000; // 2 daqiqa
+     }
    }
 
    const token = getAccessToken();

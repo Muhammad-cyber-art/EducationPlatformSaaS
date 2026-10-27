@@ -19,9 +19,14 @@ const SyncStatusBadge = React.memo(function SyncStatusBadge() {
 
   useEffect(() => {
     if (!isSyncing) {
-      try {
-        setDbStatus(JSON.parse(localStorage.getItem('local_db_status') || 'null'));
-      } catch (_) {}
+      const timer = setTimeout(() => {
+        try {
+          setDbStatus(JSON.parse(localStorage.getItem('local_db_status') || 'null'));
+        } catch (_) {
+          // ignore parsing error
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isSyncing]);
 

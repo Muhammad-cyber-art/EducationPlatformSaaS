@@ -154,7 +154,7 @@ export default function StudentProfilePage() {
       if (match) return [match];
     }
     return [];
-  }, [studentData?.groups, studentData?.group, studentData?.group_id, group_id, branchGroups]);
+  }, [studentData, group_id, branchGroups]);
   const primaryGroup = useMemo(() => groups[0] || {}, [groups]);
   const paymentsArray = useMemo(
     () => (Array.isArray(paymentsAllGroups) ? paymentsAllGroups : []),

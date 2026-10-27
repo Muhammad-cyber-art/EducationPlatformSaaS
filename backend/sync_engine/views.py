@@ -159,7 +159,28 @@ class SyncEngineAPIView(APIView):
                             applied_queue_ids.append(queue_id)
                         continue
 
-                    # Hozircha faqat 'leads', 'attendance', 'cashier_payment', 'admin_expense' qo'llab-quvvatlanadi
+                    # 4. HOMEWORK SUBMISSION STATUS SINXRONIZATSIYASI
+                    if entity == 'homework_submission':
+                        try:
+                            from homework_attends.models import HomeworkSubmission
+                            sub_id = payload.get('submission_id')
+                            new_status = payload.get('status')
+                            if sub_id and new_status:
+                                sub = HomeworkSubmission.objects.filter(id=sub_id).first()
+                                if sub:
+                                    sub.status = new_status
+                                    if new_status == 'not_submitted':
+                                        sub.submitted_at = None
+                                    else:
+                                        sub.submitted_at = timezone.now()
+                                    sub.save()
+                            applied_queue_ids.append(queue_id)
+                        except Exception as hw_err:
+                            logger.exception(f"[SyncEngine] Homework submission status xato: {hw_err}")
+                            applied_queue_ids.append(queue_id)
+                        continue
+
+                    # Hozircha faqat 'leads', 'attendance', 'cashier_payment', 'admin_expense', 'homework_submission' qo'llab-quvvatlanadi
                     if entity != 'leads':
                         applied_queue_ids.append(queue_id)  # Noma'lum entity — ACK berib o'tamiz
                         continue

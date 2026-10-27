@@ -757,6 +757,8 @@ class GroupSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_last_3_lesson_dates(self, obj) -> list:
+        if self.context.get("exclude_heavy_fields") is True:
+            return []
         try:
             from homework_attends.services import get_last_3_lesson_dates
             dates = get_last_3_lesson_dates(obj)
@@ -778,8 +780,11 @@ class GroupSerializer(serializers.ModelSerializer):
         N+1 muammosini bartaraf etish: barcha to'lov ma'lumotlarini bitta so'rovda olamiz.
         Faqat guruhda faol (is_active=True) va arxivlanmagan o'quvchilar ro'yxatini qaytaramiz.
         """
+        if self.context.get("exclude_students") is True or self.context.get("exclude_heavy_fields") is True:
+            return []
+
         request = self.context.get("request")
-        if request and request.query_params.get("exclude_students") == "true":
+        if request and getattr(request, 'query_params', {}).get("exclude_students") == "true":
             return []
 
         from django.db.models import Q

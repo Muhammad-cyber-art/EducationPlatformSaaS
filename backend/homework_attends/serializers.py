@@ -44,6 +44,13 @@ class HomeworkListSerializer(serializers.ModelSerializer):
         
     @extend_schema_field(serializers.DictField())
     def get_stats(self, obj) -> dict:
+        # Zero N+1 optimizatsiyasi: agar queryset allaqachon Count('submissions') ni annotate qilgan bo'lsa
+        if hasattr(obj, 'total_submissions') and hasattr(obj, 'completed_submissions'):
+            return {
+                "total": obj.total_submissions,
+                "completed": obj.completed_submissions
+            }
+
         from groups.models import GroupEnrollment
         active_student_ids = set(
             GroupEnrollment.objects.filter(

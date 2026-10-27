@@ -38,6 +38,10 @@ class FinanceOfflineService {
    * Kassa va to'lovlar paketini orqa fonda yuklab, IndexedDB ga saqlash
    */
   async prefetchFinanceBundle() {
+    // 0. Agar login sahifasida bo'lsa — prefetch qilmaslik
+    if (typeof window !== 'undefined' && window.location.pathname.includes('/login')) {
+      return { success: false, reason: 'on_login_page' };
+    }
     if (this.isPrefetching) return { success: false, reason: 'already_running' };
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return { success: false, reason: 'offline' };
@@ -50,7 +54,11 @@ class FinanceOfflineService {
     this.notify('finance_prefetch_start', {});
 
     try {
-      const res = await api.get('/finance/offline-bundle/', { timeout: 30000 });
+      const storedBranch = typeof localStorage !== 'undefined'
+        ? (localStorage.getItem('active_branch_id') || localStorage.getItem('branch_id'))
+        : null;
+      const params = storedBranch ? { branch_id: storedBranch } : {};
+      const res = await api.get('/finance/offline-bundle/', { params, timeout: 30000 });
       const data = res.data;
       if (!data) return { success: false, reason: 'empty_response' };
 
@@ -262,23 +270,26 @@ class FinanceOfflineService {
       this.setQueryClient(queryClient);
     }
 
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this.initialized) return;
+    this.initialized = true;
 
-    // 1. Sahifa ochilgandan 3 soniya o'tib birinchi yuklash
+    // 1. Sahifa ochilgandan 16 soniya o'tib birinchi yuklash (attendanceBundle 6s da boshlanib tugashini kutadi)
     setTimeout(() => {
-      if (localStorage.getItem('access_token')) {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && localStorage.getItem('access_token')) {
         this.prefetchFinanceBundle();
       }
-    }, 3500);
+    }, 16000);
 
     // 2. Internet tiklanganda yangilash
-    window.addEventListener('online', () => {
+    //    BUG FIX: 7 soniya kutib — syncService (1.5s) tugatganidan keyin, attendanceService (10s) dan oldin
+    this._onlineHandler = () => {
       setTimeout(() => {
         if (localStorage.getItem('access_token')) {
           this.prefetchFinanceBundle();
         }
-      }, 4000);
-    });
+      }, 7000);
+    };
+    window.addEventListener('online', this._onlineHandler);
 
     // 3. Har 20 daqiqada orqa fonda yangilab turish
     if (this.intervalId) {
@@ -289,6 +300,19 @@ class FinanceOfflineService {
         this.prefetchFinanceBundle();
       }
     }, 20 * 60 * 1000);
+  }
+
+  destroy() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    if (this._onlineHandler && typeof window !== 'undefined') {
+      window.removeEventListener('online', this._onlineHandler);
+      this._onlineHandler = null;
+    }
+    this.listeners.clear();
+    this.initialized = false;
   }
 }
 

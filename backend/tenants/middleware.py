@@ -346,12 +346,22 @@ class TenantMiddleware(MiddlewareMixin):
         Raises:
             TenantNotFoundError: Agar topilmasa
         """
+        from django.core.cache import cache
         from tenants.models import Domain, Tenant
         from django.db.models import Q
+
+        # Tezkor kesh: har bir so'rovda PostgreSQL'ga ortiqcha so'rov yubormaslik (504 oldini olish)
+        cache_key = f"tenant_resolved_id_{host}"
+        cached_id = cache.get(cache_key)
+        if cached_id:
+            tenant = Tenant.objects.filter(id=cached_id).first()
+            if tenant:
+                return tenant
 
         # 1. Aniq to'liq domen bo'yicha qidirish (masalan: "najot.crm.uz", "maktab1.localhost")
         domain_obj = Domain.objects.select_related('tenant').filter(domain=host).first()
         if domain_obj:
+            cache.set(cache_key, domain_obj.tenant.id, timeout=300)
             return domain_obj.tenant
 
         # 2. Subdomen bo'yicha qidirish (masalan: "najot.localhost" -> subdomen "najot")
@@ -363,6 +373,7 @@ class TenantMiddleware(MiddlewareMixin):
                 Q(tenant__schema_name__icontains=subdomain)
             ).first()
             if domain_by_sub:
+                cache.set(cache_key, domain_by_sub.tenant.id, timeout=300)
                 return domain_by_sub.tenant
 
             tenant_by_schema = Tenant.objects.filter(
@@ -370,6 +381,7 @@ class TenantMiddleware(MiddlewareMixin):
                 Q(schema_name__icontains=subdomain)
             ).first()
             if tenant_by_schema:
+                cache.set(cache_key, tenant_by_schema.id, timeout=300)
                 return tenant_by_schema
 
         # Django test muhiti (host == 'testserver') uchun avtomatik test tenant

@@ -10,6 +10,7 @@ import { Provider } from'react-redux';
 import { store } from'./store';
 import { attendanceOfflineService } from './services/attendanceOfflineService';
 import { financeOfflineService } from './services/financeOfflineService';
+import { runFullCleanup } from './db/db';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,12 @@ const queryClient = new QueryClient({
 // Initialize background warm-cache prefetch for attendance and finance
 attendanceOfflineService.init(queryClient);
 financeOfflineService.init(queryClient);
+
+// Production: Ilova yuklanganda eskirgan IndexedDB yozuvlarini tozalash
+// (5 soniya kutib — sahifa renderiga xalaqit bermasligi uchun)
+setTimeout(() => {
+  runFullCleanup().catch(() => {});
+}, 5000);
 
 createRoot(document.getElementById('root')).render(
  <ErrorBoundary>

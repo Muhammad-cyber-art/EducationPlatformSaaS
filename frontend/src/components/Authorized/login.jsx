@@ -7,8 +7,6 @@ import LoginError from "../Errors/LoginError";
 import ThemeToggle from "../ThemeToggle";
 import { User, Lock, ArrowRight, ShieldCheck, Eye, EyeOff, Building2, Globe, ChevronLeft } from "lucide-react";
 import { extractSubdomain } from "../../utils/subdomain";
-import { attendanceOfflineService } from "../../services/attendanceOfflineService";
-import { financeOfflineService } from "../../services/financeOfflineService";
 
 export default function Login() {
   const user_info = get_user_info();
@@ -146,7 +144,7 @@ export default function Login() {
         headers["X-Tenant-Subdomain"] = subdomain;
       }
 
-      const res = await api.post("/login/", form, { headers });
+      const res = await api.post("/login/", form, { headers, timeout: 30000 });
       localStorage.setItem("access_token", res.data.access);
       localStorage.setItem("refresh_token", res.data.refresh);
       if (res.data.tenant?.schema_name) {
@@ -158,10 +156,6 @@ export default function Login() {
 
       const access = res.data.access;
       const payload = jwtDecode(access);
-
-      // Tizimga kirilganda orqa fonda davomat va moliya ma'lumotlarini oldindan yuklab olish
-      attendanceOfflineService.prefetchBundle().catch(() => { });
-      financeOfflineService.prefetchFinanceBundle().catch(() => { });
 
       let role = payload.role;
       if (payload.is_superuser) {
@@ -310,8 +304,10 @@ export default function Login() {
                     localStorage.removeItem("tenant_schema");
                     localStorage.removeItem("tenant_name");
                     // Root login sahifasiga qaytish
-                    const port = window.location.port ? `:${window.location.port}` : "";
-                    window.location.href = `http://localhost${port}/login`;
+                    const isProd = window.location.hostname.includes("chronous.uz");
+                    const rootDomain = isProd ? "chronous.uz" : "localhost";
+                    const port = !isProd && window.location.port && !['80', '443'].includes(window.location.port) ? `:${window.location.port}` : "";
+                    window.location.href = `${window.location.protocol}//${rootDomain}${port}/login`;
                   }}
                   className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--gold)] transition-colors"
                 >
@@ -357,7 +353,7 @@ export default function Login() {
                     />
                     <span className="px-3.5 py-3.5 text-xs font-mono font-bold shrink-0"
                       style={{ background: 'rgba(184, 134, 11, 0.1)', color: 'var(--gold)' }}>
-                      .localhost:5173
+                      {window.location.hostname.includes("chronous.uz") ? ".chronous.uz" : `.${window.location.host}`}
                     </span>
                   </div>
                 </div>

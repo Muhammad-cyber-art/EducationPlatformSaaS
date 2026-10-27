@@ -15,10 +15,7 @@ import ColumnTeachersGroups from './ColumnTeachersGroups';
 import GroupRoster from './GroupRoster';
 import StudentDetailDrawer from './StudentDetailDrawer';
 import QuickExpenseModal from './QuickExpenseModal';
-
-export const formatCurrency = (val) => {
-  return Number(val || 0).toLocaleString() + " UZS";
-};
+import { formatCurrency } from '../../../utils/formatCurrency';
 
 const getCurrentMonthStr = () => {
   const now = new Date();

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, useOutletContext } from "react
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
 import toast from "react-hot-toast";
+import { db } from "../../../db/db";
 import {
   BookOpen,
   Target,
@@ -92,12 +93,31 @@ export default function GroupAssignmentsPage() {
   // 1. Group info
   const { data: groupInfo } = useQuery({
     queryKey: ["group-details-header", group_id],
-    queryFn: () => api.get(`/groups/groups/${group_id}/`).then((r) => r.data),
+    queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        const cached = await db.query_cache.get(`group-detail_${group_id}`);
+        if (cached?.data) return cached.data;
+      }
+      try {
+        const r = await api.get(`/groups/groups/${group_id}/`);
+        db.query_cache.put({
+          query_key: `group-detail_${group_id}`,
+          data: r.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return r.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`group-detail_${group_id}`);
+        if (cached?.data) return cached.data;
+        throw err;
+      }
+    },
     staleTime: 1000 * 60 * 5,
     enabled: !!group_id,
   });
 
-  // 2. Homeworks list
+  // 2. Homeworks list (Offline-First cache bilan)
   const {
     data: homeworksData,
     isLoading: isHwLoading,
@@ -105,7 +125,26 @@ export default function GroupAssignmentsPage() {
     isFetching: isHwFetching,
   } = useQuery({
     queryKey: ["group-homeworks", group_id],
-    queryFn: () => api.get(`/homework_attends/homeworks/?group_id=${group_id}`).then((r) => r.data),
+    queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        const cached = await db.query_cache.get(`group-homeworks_${group_id}`);
+        if (cached?.data) return cached.data;
+      }
+      try {
+        const r = await api.get(`/homework_attends/homeworks/?group_id=${group_id}`);
+        db.query_cache.put({
+          query_key: `group-homeworks_${group_id}`,
+          data: r.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return r.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`group-homeworks_${group_id}`);
+        if (cached?.data) return cached.data;
+        throw err;
+      }
+    },
     staleTime: 1000 * 60 * 2,
     enabled: !!group_id,
   });
@@ -113,7 +152,7 @@ export default function GroupAssignmentsPage() {
     return Array.isArray(homeworksData) ? homeworksData : (homeworksData?.results || []);
   }, [homeworksData]);
 
-  // 3. Mock Tests list
+  // 3. Mock Tests list (Offline-First cache bilan)
   const {
     data: mockTestsData,
     isLoading: isMockLoading,
@@ -121,7 +160,26 @@ export default function GroupAssignmentsPage() {
     isFetching: isMockFetching,
   } = useQuery({
     queryKey: ["group-mock-tests", group_id],
-    queryFn: () => api.get(`/homework_attends/mock-tests/?group_id=${group_id}`).then((r) => r.data),
+    queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        const cached = await db.query_cache.get(`group-mock-tests_${group_id}`);
+        if (cached?.data) return cached.data;
+      }
+      try {
+        const r = await api.get(`/homework_attends/mock-tests/?group_id=${group_id}`);
+        db.query_cache.put({
+          query_key: `group-mock-tests_${group_id}`,
+          data: r.data,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        return r.data;
+      } catch (err) {
+        const cached = await db.query_cache.get(`group-mock-tests_${group_id}`);
+        if (cached?.data) return cached.data;
+        throw err;
+      }
+    },
     staleTime: 1000 * 60 * 2,
     enabled: !!group_id,
   });
@@ -148,9 +206,8 @@ export default function GroupAssignmentsPage() {
   // Create Homework
   const createHomeworkMutation = useMutation({
     mutationFn: async (formData) => {
-      const res = await api.post("/homework_attends/homeworks/", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // Axios FormData qabul qilganda Content-Type ni o'zi boundary bilan avtomatik o'rnatadi
+      const res = await api.post("/homework_attends/homeworks/", formData);
       return res.data;
     },
     onSuccess: () => {
@@ -163,6 +220,11 @@ export default function GroupAssignmentsPage() {
     },
     onError: (err) => {
       console.error("Vazifa yaratishda xato:", err);
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        toast.error("Vazifa va faylni yuklash uchun internet aloqasi talab qilinadi.");
+        return;
+      }
       const msg = err.response?.data?.file?.[0] || err.response?.data?.detail || "Vazifa yaratishda xatolik yuz berdi.";
       toast.error(msg);
     },

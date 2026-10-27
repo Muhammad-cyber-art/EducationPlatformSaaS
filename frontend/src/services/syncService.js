@@ -1,5 +1,5 @@
 import api from '../tokenUpdater/updater';
-import { db, requestPersistentStorage } from '../db/db';
+import { db, requestPersistentStorage, incrementSyncQueueRetry, runFullCleanup } from '../db/db';
 
 const SYNC_ENDPOINT = 'v1/sync/';
 const CHUNK_BATCH_SIZE = 500;
@@ -62,7 +62,14 @@ class SyncManager {
     window.addEventListener('online', () => {
       this.notify('network_status', { isOnline: true });
       // Kichik kechikish: tarmoq to'liq tiklangunga qadar kutish
-      setTimeout(() => this.synchronize(), 1500);
+      // BUG FIX: Ketma-ket (sequential) yuklash — 3 ta parallel og'ir so'rov o'rniga
+      setTimeout(async () => {
+        try {
+          await this.synchronize();
+        } catch (_) {}
+        // Attendance va Finance prefetch — syncService tugatgandan keyin
+        // (attendanceOfflineService va financeOfflineService o'zlarining 'online' listenerlariga ega)
+      }, 1500);
     });
 
     window.addEventListener('offline', () => {
@@ -117,6 +124,13 @@ class SyncManager {
         return { pushedCount: 0 };
       }
 
+      // BUG FIX: Server xatolik qaytarsa (500, 422, etc.), navbatdagi yozuvlarning
+      // retry_count ini oshiramiz. 5 martadan keyin "failed" ga o'tkaziladi.
+      for (const item of queueItems) {
+        try {
+          await incrementSyncQueueRetry(item.queue_id, 5);
+        } catch (_) {}
+      }
       this.notify('push_error', { error: error.message });
       throw error;
     }
@@ -266,6 +280,10 @@ class SyncManager {
       await this.pullChanges(onProgress);
 
       this.notify('sync_complete', { success: true });
+
+      // BUG FIX: Muvaffaqiyatli sinxronizatsiyadan keyin eskirgan yozuvlarni tozalash
+      runFullCleanup().catch(() => {});
+
       return { success: true };
     } catch (error) {
       if (import.meta.env.DEV) {

@@ -42,6 +42,11 @@ class AttendanceOfflineService {
    * Backenddan faqat davomatga tegishli barcha guruhlar va o'quvchilar ro'yxatini yuklab olish
    */
   async prefetchBundle(force = false) {
+    // 0. Agar login sahifasida bo'lsa — prefetch qilmaslik (serverni zo'riqtirmaslik va 504 oldini olish)
+    if (typeof window !== 'undefined' && window.location.pathname.includes('/login')) {
+      return { success: false, reason: 'on_login_page' };
+    }
+
     // 1. Agar foydalanuvchi tizimga kirmagan bo'lsa (token yo'q) — to'xtatish
     if (typeof localStorage === 'undefined' || !localStorage.getItem('access_token')) {
       return { success: false, reason: 'unauthenticated' };
@@ -183,6 +188,23 @@ class AttendanceOfflineService {
           if (!hasPendingQueue) {
             const todayAtts = item.today_attendances || [];
             if (todayAtts.length > 0) {
+              // BUG FIX: Eskirgan/avvalgi prefetch yozuvlarini o'chirib, toza yozish.
+              // Aks holda har 15 daqiqada local_id siz yangi dublikatlar qo'shilib,
+              // IndexedDB to'lib ketadi va brauzer xotirasi to'ladi (QuotaExceededError)!
+              try {
+                const oldRecs = await db.attendance_records
+                  .where('group_id')
+                  .equals(groupId)
+                  .filter((a) => a.date === current_date)
+                  .toArray();
+                if (oldRecs.length > 0) {
+                  const oldIds = oldRecs.map((r) => r.local_id).filter(Boolean);
+                  if (oldIds.length > 0) {
+                    await db.attendance_records.bulkDelete(oldIds);
+                  }
+                }
+              } catch (_) {}
+
               const mappedAtts = todayAtts.map((a) => ({
                 ...a,
                 group_id: groupId,
@@ -190,7 +212,7 @@ class AttendanceOfflineService {
                 updated_at: nowIso,
               }));
 
-              await db.attendance_records.bulkPut(mappedAtts);
+              await db.attendance_records.bulkAdd(mappedAtts);
             }
 
             await db.query_cache.put({
@@ -438,23 +460,27 @@ class AttendanceOfflineService {
       this.setQueryClient(queryClient);
     }
 
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this.initialized) return;
+    this.initialized = true;
 
-    // 1. Dastlabki yuklash (token mavjud bo'lsa)
+    // 1. Dastlabki yuklash (sahifa render bo'lib, dastlabki dashboard so'rovlari tinchishi uchun 6 soniya kutib)
     setTimeout(() => {
-      if (navigator.onLine && localStorage.getItem('access_token')) {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && navigator.onLine && localStorage.getItem('access_token')) {
         this.prefetchBundle();
       }
-    }, 2000);
+    }, 6000);
 
-    // 2. Internet tiklanganda avtomatik yangilash (syncService pending navbatni yuborib bo'lgach ishga tushadi)
-    window.addEventListener('online', () => {
+    // 2. Internet tiklanganda avtomatik yangilash
+    //    BUG FIX: 10 soniya kutib — syncService (1.5s) va financeService (4s) tugatganidan keyin
+    //    ketma-ket (sequential) ishlashi uchun. Parallel og'ir so'rovlar sekin tarmoqda timeout qiladi.
+    this._onlineHandler = () => {
       setTimeout(() => {
         if (localStorage.getItem('access_token')) {
           this.prefetchBundle();
         }
-      }, 6000);
-    });
+      }, 10000);
+    };
+    window.addEventListener('online', this._onlineHandler);
 
     // 3. Har 15 daqiqada yangilab borish
     if (this.intervalId) {
@@ -472,7 +498,12 @@ class AttendanceOfflineService {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    if (this._onlineHandler && typeof window !== 'undefined') {
+      window.removeEventListener('online', this._onlineHandler);
+      this._onlineHandler = null;
+    }
     this.listeners.clear();
+    this.initialized = false;
   }
 }
 

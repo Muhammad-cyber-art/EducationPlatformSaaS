@@ -31,6 +31,7 @@ export default defineConfig([
           caughtErrors: 'none',
         },
       ],
+      'no-empty': ['warn', { allowEmptyCatch: true }],
     },
   },
 ])

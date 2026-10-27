@@ -2309,7 +2309,20 @@ def offline_finance_bundle(request):
     # 6. Har bir filial uchun Cashier Desk ma'lumotlari (Roster, O'quvchilar, Qarzdorlar, Guruhlar)
     from finance.services import build_cashier_desk_dict
     cashier_desks = {}
-    target_branch_ids = allowed_branches if allowed_branches else [b.id for b in branch_qs]
+    req_branch_id = request.query_params.get('branch_id')
+    if req_branch_id:
+        try:
+            target_branch_ids = [int(req_branch_id)]
+        except (ValueError, TypeError):
+            target_branch_ids = allowed_branches if allowed_branches else [b.id for b in branch_qs]
+    elif request.user.branch_id:
+        # Foydalanuvchining o'z filiali birinchi o'rinda
+        target_branch_ids = [request.user.branch_id]
+        extra = [b for b in (allowed_branches or [b.id for b in branch_qs]) if b != request.user.branch_id][:2]
+        target_branch_ids.extend(extra)
+    else:
+        target_branch_ids = (allowed_branches if allowed_branches else [b.id for b in branch_qs])[:3]
+
     for b_id in target_branch_ids:
         desk_data = build_cashier_desk_dict(b_id, start_of_month, today)
         if desk_data:

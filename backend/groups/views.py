@@ -723,8 +723,11 @@ class GroupViewSet(viewsets.ModelViewSet):
             final_dates = [d.strftime('%Y-%m-%d') for d in sorted(all_dates) if d <= today]
             final_dates.reverse()
 
-            # 2. Guruhning to'liq ma'lumotlari (GroupSerializer orqali)
-            group_detail = GroupSerializer(group, context={'request': request}).data
+            # 2. Guruhning to'liq ma'lumotlari (GroupSerializer orqali, ortiqcha N+1 so'rovlarsiz)
+            group_detail = GroupSerializer(
+                group,
+                context={'request': request, 'exclude_students': True, 'exclude_heavy_fields': True}
+            ).data
             group_detail.pop('students', None)  # O'quvchilar alohida to'liq massivda bo'ladi
 
             # 3. Guruhdagi faol o'quvchilar ro'yxati (StudentGroupListSerializer orqali)

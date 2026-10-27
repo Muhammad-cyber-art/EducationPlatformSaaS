@@ -103,6 +103,162 @@ export async function requestPersistentStorage() {
 }
 
 // ==========================================
+// AVTOMATIK KESH TOZALASH (IndexedDB Memory Bomb oldini olish)
+// ==========================================
+
+/**
+ * Eskirgan query_cache yozuvlarini o'chirish.
+ * Default: 14 kundan eski cache yozuvlari tozalanadi.
+ * Bu funksiya ilova yuklanishida va prefetch tugaganidan keyin chaqirilishi kerak!
+ */
+export async function cleanupExpiredCache(maxAgeDays = 14) {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+    const cutoffIso = cutoff.toISOString();
+
+    const expiredCount = await db.query_cache
+      .where('updated_at')
+      .below(cutoffIso)
+      .delete();
+
+    if (expiredCount > 0) {
+      console.log(`[DB Cleanup] ${expiredCount} ta eskirgan query_cache yozuvi tozalandi (${maxAgeDays} kundan eski)`);
+    }
+    return expiredCount;
+  } catch (e) {
+    console.warn('[DB Cleanup] query_cache tozalashda xato:', e);
+    return 0;
+  }
+}
+
+/**
+ * Eskirgan attendance_records yozuvlarini o'chirish.
+ * Default: 45 kundan eski davomat yozuvlari tozalanadi.
+ * (Serverda saqlanganligi sababli, lokal keshda saqlash keraksiz)
+ */
+export async function cleanupOldAttendanceRecords(maxAgeDays = 45) {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+    const cutoffIso = cutoff.toISOString();
+
+    const expiredCount = await db.attendance_records
+      .where('updated_at')
+      .below(cutoffIso)
+      .delete();
+
+    if (expiredCount > 0) {
+      console.log(`[DB Cleanup] ${expiredCount} ta eski attendance_records tozalandi (${maxAgeDays} kundan eski)`);
+    }
+    return expiredCount;
+  } catch (e) {
+    console.warn('[DB Cleanup] attendance_records tozalashda xato:', e);
+    return 0;
+  }
+}
+
+/**
+ * Eskirgan davomat qoralamalarini tozalash.
+ * Default: 7 kundan eski qoralamalar o'chiriladi.
+ */
+export async function cleanupOldDrafts(maxAgeDays = 7) {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+    const cutoffIso = cutoff.toISOString();
+
+    const expiredCount = await db.attendance_drafts
+      .where('updated_at')
+      .below(cutoffIso)
+      .delete();
+
+    if (expiredCount > 0) {
+      console.log(`[DB Cleanup] ${expiredCount} ta eski attendance_drafts tozalandi`);
+    }
+    return expiredCount;
+  } catch (e) {
+    console.warn('[DB Cleanup] attendance_drafts tozalashda xato:', e);
+    return 0;
+  }
+}
+
+/**
+ * sync_queue dagi "failed" (5 martadan ko'p urinilgan) yozuvlarni tozalash.
+ * Default: 7 kundan eski failed yozuvlar o'chiriladi.
+ */
+export async function cleanupDeadLetterQueue(maxAgeDays = 7) {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+    const cutoffIso = cutoff.toISOString();
+
+    const deadLetters = await db.sync_queue
+      .where('status')
+      .equals('failed')
+      .filter((item) => item.created_at < cutoffIso)
+      .toArray();
+
+    if (deadLetters.length > 0) {
+      await db.sync_queue.bulkDelete(deadLetters.map((d) => d.queue_id));
+      console.log(`[DB Cleanup] ${deadLetters.length} ta dead-letter sync_queue yozuvi tozalandi`);
+    }
+    return deadLetters.length;
+  } catch (e) {
+    console.warn('[DB Cleanup] dead-letter tozalashda xato:', e);
+    return 0;
+  }
+}
+
+/**
+ * Barcha tozalash amallarini bitta chaqiruvda bajarish.
+ * Ilova yuklanganda va har bir muvaffaqiyatli sinxronizatsiyadan keyin chaqirilishi tavsiya etiladi.
+ */
+export async function runFullCleanup() {
+  // Bir-biridan mustaqil, har biri xavfsiz catch bilan himoyalangan
+  const results = await Promise.allSettled([
+    cleanupExpiredCache(14),
+    cleanupOldAttendanceRecords(45),
+    cleanupOldDrafts(7),
+    cleanupDeadLetterQueue(7),
+  ]);
+  const cleaned = results
+    .filter((r) => r.status === 'fulfilled')
+    .reduce((sum, r) => sum + (r.value || 0), 0);
+  if (cleaned > 0) {
+    console.log(`[DB Cleanup] Jami ${cleaned} ta eskirgan yozuv tozalandi`);
+  }
+}
+
+/**
+ * sync_queue yozuviga retry_count qo'shish va 5 martadan keyin "failed" ga o'tkazish.
+ * SyncManager.pushChanges() da server xatolik qaytarganda chaqiriladi.
+ */
+export async function incrementSyncQueueRetry(queueId, maxRetries = 5) {
+  try {
+    const item = await db.sync_queue.get(queueId);
+    if (!item) return null;
+
+    const retryCount = (item.retry_count || 0) + 1;
+    if (retryCount >= maxRetries) {
+      await db.sync_queue.update(queueId, {
+        status: 'failed',
+        retry_count: retryCount,
+        failed_at: new Date().toISOString(),
+      });
+      console.warn(`[SyncQueue] queue_id=${queueId} — ${maxRetries} marta muvaffaqiyatsiz, "failed" ga o'tkazildi`);
+      return 'failed';
+    } else {
+      await db.sync_queue.update(queueId, { retry_count: retryCount });
+      return 'retry';
+    }
+  } catch (e) {
+    console.warn('[SyncQueue] retry_count yangilashda xato:', e);
+    return null;
+  }
+}
+
+// ==========================================
 // DAVOMAT (ATTENDANCE) OFFLAYN METODLARI
 // ==========================================
 
