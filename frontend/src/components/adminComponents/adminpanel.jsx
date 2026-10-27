@@ -146,14 +146,26 @@ export default function AdminPanel() {
         };
         checkTime();
 
-        // Check notifications on mount and then every 30 seconds
+        // Check notifications on mount and periodically when tab is active
         fetchNotifications();
-        const notificationTimer = setInterval(fetchNotifications, 30000);
+        const notificationTimer = setInterval(() => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'visible' && navigator.onLine) {
+                fetchNotifications();
+            }
+        }, 120000); // Har 2 daqiqada (30s o'rniga), faqat tab ko'rinib turganda
         const timeTimer = setInterval(checkTime, 60000);
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && navigator.onLine) {
+                fetchNotifications();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             clearInterval(notificationTimer);
             clearInterval(timeTimer);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [dispatch, fetchNotifications]);
 

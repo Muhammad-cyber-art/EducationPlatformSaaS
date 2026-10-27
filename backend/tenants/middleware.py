@@ -350,30 +350,38 @@ class TenantMiddleware(MiddlewareMixin):
         from tenants.models import Domain, Tenant
         from django.db.models import Q
 
-        # Tezkor kesh: har bir so'rovda PostgreSQL'ga ortiqcha so'rov yubormaslik (504 oldini olish)
-        cache_key = f"tenant_resolved_id_{host}"
-        cached_id = cache.get(cache_key)
+        # 1. 0-SQL Tezkor Kesh: To'liq Tenant obyektini Redis keshidan tekshirish (Zero-DB Hit)
+        cache_obj_key = f"tenant_resolved_obj_{host}"
+        cached_tenant = cache.get(cache_obj_key)
+        if cached_tenant is not None:
+            return cached_tenant
+
+        # 2. Orqaga moslik: agar faqat ID keshda bo'lsa
+        cache_id_key = f"tenant_resolved_id_{host}"
+        cached_id = cache.get(cache_id_key)
         if cached_id:
             tenant = Tenant.objects.filter(id=cached_id).first()
             if tenant:
+                cache.set(cache_obj_key, tenant, timeout=600)
                 return tenant
 
-        # 1. Aniq to'liq domen bo'yicha qidirish (masalan: "najot.crm.uz", "maktab1.localhost")
+        # 3. Aniq to'liq domen bo'yicha qidirish (masalan: "najot.crm.uz", "maktab1.localhost")
         domain_obj = Domain.objects.select_related('tenant').filter(domain=host).first()
         if domain_obj:
-            cache.set(cache_key, domain_obj.tenant.id, timeout=300)
+            cache.set(cache_obj_key, domain_obj.tenant, timeout=600)
+            cache.set(cache_id_key, domain_obj.tenant.id, timeout=600)
             return domain_obj.tenant
 
-        # 2. Subdomen bo'yicha qidirish (masalan: "najot.localhost" -> subdomen "najot")
+        # 4. Subdomen bo'yicha qidirish (masalan: "najot.localhost" -> subdomen "najot")
         subdomain = host.split('.')[0].lower()
         if subdomain and subdomain not in ('localhost', '127', 'www', 'api', 'admin', 'ceo'):
-            # Domain jadvalida "najot.crm.uz" yoki "najot.localhost.uz" bo'lsa
             domain_by_sub = Domain.objects.select_related('tenant').filter(
                 Q(domain__istartswith=f"{subdomain}.") |
                 Q(tenant__schema_name__icontains=subdomain)
             ).first()
             if domain_by_sub:
-                cache.set(cache_key, domain_by_sub.tenant.id, timeout=300)
+                cache.set(cache_obj_key, domain_by_sub.tenant, timeout=600)
+                cache.set(cache_id_key, domain_by_sub.tenant.id, timeout=600)
                 return domain_by_sub.tenant
 
             tenant_by_schema = Tenant.objects.filter(
@@ -381,7 +389,8 @@ class TenantMiddleware(MiddlewareMixin):
                 Q(schema_name__icontains=subdomain)
             ).first()
             if tenant_by_schema:
-                cache.set(cache_key, tenant_by_schema.id, timeout=300)
+                cache.set(cache_obj_key, tenant_by_schema, timeout=600)
+                cache.set(cache_id_key, tenant_by_schema.id, timeout=600)
                 return tenant_by_schema
 
         # Django test muhiti (host == 'testserver') uchun avtomatik test tenant

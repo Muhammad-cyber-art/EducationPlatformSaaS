@@ -291,12 +291,17 @@ class FinanceOfflineService {
     };
     window.addEventListener('online', this._onlineHandler);
 
-    // 3. Har 20 daqiqada orqa fonda yangilab turish
+    // 3. Har 20 daqiqada orqa fonda yangilab turish (faqat tab ko'rinib turganda)
     if (this.intervalId) {
       clearInterval(this.intervalId);
     }
     this.intervalId = setInterval(() => {
-      if (typeof navigator !== 'undefined' && navigator.onLine && localStorage.getItem('access_token')) {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine &&
+        localStorage.getItem('access_token') &&
+        (typeof document === 'undefined' || document.visibilityState === 'visible')
+      ) {
         this.prefetchFinanceBundle();
       }
     }, 20 * 60 * 1000);

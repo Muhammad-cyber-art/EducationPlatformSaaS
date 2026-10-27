@@ -95,6 +95,16 @@ class Tenant(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+        try:
+            from django.core.cache import cache
+            for d in self.domains.all():
+                cache.delete(f"tenant_resolved_obj_{d.domain}")
+                cache.delete(f"tenant_resolved_id_{d.domain}")
+            sub = self.schema_name.replace("tenant_", "")
+            cache.delete(f"tenant_resolved_obj_{sub}")
+            cache.delete(f"tenant_resolved_id_{sub}")
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +149,26 @@ class Domain(models.Model):
     def __str__(self):
         marker = " [PRIMARY]" if self.is_primary else ""
         return f"{self.domain} → {self.tenant.name}{marker}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        try:
+            from django.core.cache import cache
+            cache.delete(f"tenant_resolved_obj_{self.domain}")
+            cache.delete(f"tenant_resolved_id_{self.domain}")
+        except Exception:
+            pass
+
+    def delete(self, *args, **kwargs):
+        dom = self.domain
+        res = super().delete(*args, **kwargs)
+        try:
+            from django.core.cache import cache
+            cache.delete(f"tenant_resolved_obj_{dom}")
+            cache.delete(f"tenant_resolved_id_{dom}")
+        except Exception:
+            pass
+        return res
 
 
 # ─────────────────────────────────────────────────────────────────────────────

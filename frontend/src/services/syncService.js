@@ -81,10 +81,15 @@ class SyncManager {
       clearInterval(this._intervalId);
     }
     this._intervalId = setInterval(() => {
-      if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine &&
+        !this.isSyncing &&
+        (typeof document === 'undefined' || document.visibilityState === 'visible')
+      ) {
         this.synchronize();
       }
-    }, 2 * 60 * 1000); // har 2 daqiqada
+    }, 2 * 60 * 1000); // har 2 daqiqada (faqat tab ko'rinib turganda)
   }
 
   /**

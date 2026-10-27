@@ -2196,26 +2196,34 @@ def offline_finance_bundle(request):
 
     from groups.models import Group
     from homework_attends.models import Attendance
-    from django.db.models import Count
+    from django.db.models import Count, Sum, Q
 
-    # 1. Bugungi operatsiyalar
-    today_incomes_qs = list(tx_qs.filter(date=today, transaction_type='income', category='student_fee')[:300])
-    today_expenses_qs = list(tx_qs.filter(date=today, transaction_type='expense')[:300])
+    # 1. Bugungi kassa statistikasini bevosita PostgreSQL DB darajasida hisoblash (0-RAM, o'ta tezkor)
+    today_stats_agg = tx_qs.filter(date=today).exclude(status='cancelled').aggregate(
+        total_income=Sum('amount', filter=Q(transaction_type='income', category='student_fee')),
+        total_verified=Sum('amount', filter=Q(transaction_type='income', category='student_fee', is_verified=True)),
+        total_withdrawn=Sum('amount', filter=Q(transaction_type='expense')),
+    )
+    total_today = today_stats_agg['total_income'] or Decimal('0')
+    total_verified = today_stats_agg['total_verified'] or Decimal('0')
+    total_withdrawn = today_stats_agg['total_withdrawn'] or Decimal('0')
 
-    # 2. Joriy oydagi barcha daromadlar (incomes)
+    # 2. Oflayn kesh uchun yetarli va ixcham hajmda tranzaksiyalarni olish (Over-fetchingni bartaraf etish)
+    today_incomes_qs = list(tx_qs.filter(date=today, transaction_type='income', category='student_fee')[:100])
+    today_expenses_qs = list(tx_qs.filter(date=today, transaction_type='expense')[:100])
+
     month_incomes_qs = list(tx_qs.filter(
         date__gte=start_of_month,
         date__lte=end_of_month,
         transaction_type='income',
         category='student_fee'
-    ).order_by('-date', '-id')[:500])
+    ).order_by('-date', '-id')[:150])
 
-    # 3. Joriy oydagi barcha xarajatlar (expenses)
     month_expenses_qs = list(tx_qs.filter(
         date__gte=start_of_month,
         date__lte=end_of_month,
         transaction_type='expense'
-    ).order_by('-date', '-id')[:500])
+    ).order_by('-date', '-id')[:150])
 
     # Tranzaksiyalardagi to'lovlarni (Payment) bitta so'rov bilan cache qilish (N+1 oldini olish)
     payment_ids = set()
@@ -2237,24 +2245,17 @@ def offline_finance_bundle(request):
     month_incomes = FinanceTransactionSerializer(month_incomes_qs, many=True, context=tx_context).data
     month_expenses = FinanceTransactionSerializer(month_expenses_qs, many=True, context=tx_context).data
 
-    total_today = sum(Decimal(str(p['amount'])) for p in today_incomes if p.get('status') != 'cancelled')
-    total_verified = sum(
-        Decimal(str(p['amount'])) for p in today_incomes 
-        if p.get('status') != 'cancelled' and (p.get('is_verified') or (p.get('payment_details') and p.get('payment_details', {}).get('is_verified')))
-    )
-    total_withdrawn = sum(Decimal(str(w['amount'])) for w in today_expenses if w.get('status') != 'cancelled')
-
-    # 4. Filiallar
+    # 3. Filiallar
     branch_qs = Branch.objects.filter(is_active=True)
     if allowed_branches:
         branch_qs = branch_qs.filter(id__in=allowed_branches)
     branches_data = [{'id': b.id, 'name': b.name} for b in branch_qs]
 
-    # 5. O'quvchilarning oxirgi to'lovlari (student-payments)
+    # 4. O'quvchilarning so'nggi to'lovlari (student-payments)
     payment_qs = Payment.objects.select_related('student', 'group', 'marked_by').order_by('-created_at')
     if allowed_branches:
         payment_qs = payment_qs.filter(student__branch_id__in=allowed_branches)
-    recent_payments = list(payment_qs[:300])
+    recent_payments = list(payment_qs[:100])
 
     # PaymentSerializer uchun lesson_dates va attendance keshini bitta bulk so'rovda tayyorlaymiz
     group_months = set()
@@ -2306,7 +2307,7 @@ def offline_finance_bundle(request):
     }
     student_payments = PaymentSerializer(recent_payments, many=True, context=pay_context).data
 
-    # 6. Har bir filial uchun Cashier Desk ma'lumotlari (Roster, O'quvchilar, Qarzdorlar, Guruhlar)
+    # 5. Faol filial uchun Cashier Desk ma'lumotlari (keraksiz 3 ta filialni paralel qurmamaslik)
     from finance.services import build_cashier_desk_dict
     cashier_desks = {}
     req_branch_id = request.query_params.get('branch_id')
@@ -2314,14 +2315,15 @@ def offline_finance_bundle(request):
         try:
             target_branch_ids = [int(req_branch_id)]
         except (ValueError, TypeError):
-            target_branch_ids = allowed_branches if allowed_branches else [b.id for b in branch_qs]
+            first_b = branch_qs.first()
+            target_branch_ids = [first_b.id] if first_b else []
     elif request.user.branch_id:
-        # Foydalanuvchining o'z filiali birinchi o'rinda
         target_branch_ids = [request.user.branch_id]
-        extra = [b for b in (allowed_branches or [b.id for b in branch_qs]) if b != request.user.branch_id][:2]
-        target_branch_ids.extend(extra)
+    elif allowed_branches:
+        target_branch_ids = allowed_branches[:1]
     else:
-        target_branch_ids = (allowed_branches if allowed_branches else [b.id for b in branch_qs])[:3]
+        first_b = branch_qs.first()
+        target_branch_ids = [first_b.id] if first_b else []
 
     for b_id in target_branch_ids:
         desk_data = build_cashier_desk_dict(b_id, start_of_month, today)
