@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCurrentBranch } from "../Authorized/useBranchId";
 import { get_user_info } from "../Authorized/getRole";
+import ThemeToggle from "../ThemeToggle";
 
 export default function SuperAdminSidebar() {
     const navigate = useNavigate();
@@ -98,14 +99,17 @@ export default function SuperAdminSidebar() {
 
             {/* FOOTER */}
             <div className="pt-6 border-t border-[var(--border-glass)] space-y-4">
-                <div className="p-3 bg-[var(--bg-void)]/50 rounded-xl border border-[var(--border-glass)] flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[var(--bg-panel)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)]">
-                        <UserCircle size={20} />
+                <div className="p-3 bg-[var(--bg-void)]/50 rounded-xl border border-[var(--border-glass)] flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-lg bg-[var(--bg-panel)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] shrink-0">
+                            <UserCircle size={20} />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold text-[var(--text-primary)] truncate">{userInfo?.username || "Super Admin"}</p>
+                            <p className="text-[8px] text-[var(--gold)] capitalize tracking-wider">Online</p>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xs font-bold text-[var(--text-primary)] truncate">{userInfo?.username || "Super Admin"}</p>
-                        <p className="text-[8px] text-[var(--gold)] capitalize tracking-wider">Online</p>
-                    </div>
+                    <ThemeToggle />
                 </div>
 
                 <button

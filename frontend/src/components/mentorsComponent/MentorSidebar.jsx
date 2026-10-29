@@ -1,9 +1,10 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Building2, UserCircle, Sparkles, LogOut, ShieldAlert, Zap, Circle, Sun, Moon, DollarSign, CalendarDays, Activity } from "lucide-react";
+import { LayoutDashboard, Building2, UserCircle, Sparkles, LogOut, ShieldAlert, Zap, Circle, DollarSign, CalendarDays, Activity } from "lucide-react";
 import { get_user_info } from "../Authorized/getRole";
 import api from "../../tokenUpdater/updater";
 import SyncStatusBadge from "../SyncStatusBadge";
+import ThemeToggle from "../ThemeToggle";
 
 
 export default function MentorSidebar() {
@@ -135,14 +136,17 @@ export default function MentorSidebar() {
 
             {/* PROFILE SECTION */}
             <div className="mt-auto pt-6 border-t border-[var(--border-glass)] flex flex-col gap-3">
-                <div className="px-1">
-                    <SyncStatusBadge />
+                <div className="px-1 flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                        <SyncStatusBadge />
+                    </div>
+                    <ThemeToggle />
                 </div>
                 <div
                     onClick={() => navigate(getLinkWithBranch("/mentor/profile"))}
-                    className={`flex items-center gap-4 px-4 py-4 mb-6 group cursor-pointer border rounded-2xl transition-all shadow-inner ${location.pathname === "/mentor/profile" ? 'bg-[var(--gold-dim)] border-[var(--gold)]/30' : 'bg-[var(--bg-void)]/40 border-[var(--border-glass)] hover:bg-[var(--gold-dim)] hover:border-[var(--gold)]/20'}`}
+                    className={`flex items-center gap-4 px-4 py-3.5 mb-2 group cursor-pointer border rounded-2xl transition-all shadow-inner ${location.pathname === "/mentor/profile" ? 'bg-[var(--gold-dim)] border-[var(--gold)]/30' : 'bg-[var(--bg-void)]/40 border-[var(--border-glass)] hover:bg-[var(--gold-dim)] hover:border-[var(--gold)]/20'}`}
                 >
-                    <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center overflow-hidden border border-[var(--border-glass)] group-hover:border-[var(--gold)]/40 transition-all shadow-xl">
+                    <div className="w-10 h-10 bg-[var(--bg-panel)] rounded-xl flex items-center justify-center overflow-hidden border border-[var(--border-glass)] group-hover:border-[var(--gold)]/40 transition-all shadow-xl">
                         <img
                             src={userMe?.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userMe?.first_name || 'Mentor'}&backgroundColor=000000`}
                             alt=""

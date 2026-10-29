@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 const ActionBtn = ({ icon }) => (
-    <button onClick={(e) => e.stopPropagation()} className="p-2 sm:p-2.5 bg-black/40 border border-[#2a2a2a] rounded-xl text-[var(--text-muted)] hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-all shadow-inner shrink-0">
+    <button onClick={(e) => e.stopPropagation()} className="p-2 sm:p-2.5 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl text-[var(--text-muted)] hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-all shadow-inner shrink-0">
         {icon}
     </button>
 );
@@ -30,14 +30,14 @@ const StaffList = ({
                         value={staffSearchQuery}
                         onChange={(e) => setStaffSearchQuery(e.target.value)}
                         placeholder="QIDIRISH..."
-                        className="w-full bg-black/40 border border-[#2a2a2a] hover:border-[var(--gold)]/30 focus:border-[var(--gold)]/50 rounded-2xl py-3.5 sm:py-5 pl-12 sm:pl-16 pr-6 text-white placeholder:text-white/5 outline-none transition-all text-xs sm:text-sm font-bold capitalize tracking-widest shadow-inner"
+                        className="w-full bg-[var(--bg-void)] border border-[var(--border-glass)] hover:border-[var(--gold)]/30 focus:border-[var(--gold)]/50 rounded-2xl py-3.5 sm:py-5 pl-12 sm:pl-16 pr-6 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-all text-xs sm:text-sm font-bold capitalize tracking-widest shadow-inner"
                     />
                 </div>
 
                 <button
                     onClick={handleRefreshPayments}
                     disabled={staffRefreshing}
-                    className="px-6 sm:px-8 py-3.5 sm:py-4 flex items-center justify-center gap-3 sm:gap-4 bg-[var(--bg-panel)]/40 border border-[#2a2a2a] hover:border-[var(--gold)]/30 rounded-2xl text-[9px] sm:text-[10px] font-black capitalize tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                    className="px-6 sm:px-8 py-3.5 sm:py-4 flex items-center justify-center gap-3 sm:gap-4 bg-[var(--bg-panel)]/40 border border-[var(--border-glass)] hover:border-[var(--gold)]/30 rounded-2xl text-[9px] sm:text-[10px] font-black capitalize tracking-widest transition-all active:scale-95 disabled:opacity-50 text-[var(--text-primary)]"
                 >
                     <RefreshCw size={16} className={staffRefreshing ? "animate-spin" : "text-[var(--gold)] sm:w-4 sm:h-4"} />
                     <span>{staffRefreshing ? "..." : "Oylik Ochish"}</span>

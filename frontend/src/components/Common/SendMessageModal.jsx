@@ -68,7 +68,7 @@ const SendMessageModal = ({ isOpen, onClose, groupId = null, branchId = null, sh
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-[var(--text-muted)] hover:text-white hover:bg-white/10 rounded-full transition-all active:scale-90"
+            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 rounded-full transition-all active:scale-90"
           >
             <X size={24} />
           </button>
@@ -105,7 +105,7 @@ const SendMessageModal = ({ isOpen, onClose, groupId = null, branchId = null, sh
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Xabaringizni bu yerga yozing..."
-              className="w-full bg-[#0a0a0a] border border-[var(--border-glass)] rounded-2xl p-5 text-sm font-bold text-white placeholder:text-gray-600 focus:border-[var(--gold)]/50 focus:ring-0 focus:outline-none transition-all resize-none shadow-inner"
+              className="w-full bg-[var(--input-bg)] border border-[var(--border-glass)] rounded-2xl p-5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--gold)]/50 focus:ring-0 focus:outline-none transition-all resize-none shadow-inner"
             />
           </div>
 
@@ -113,7 +113,7 @@ const SendMessageModal = ({ isOpen, onClose, groupId = null, branchId = null, sh
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 h-12 bg-transparent border border-[var(--border-glass)] text-[var(--text-muted)] hover:text-white hover:bg-white/5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-colors"
+              className="flex-1 h-12 bg-transparent border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-colors"
             >
               Bekor qilish
             </button>

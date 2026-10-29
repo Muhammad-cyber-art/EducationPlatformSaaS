@@ -11,6 +11,7 @@ import { store } from'./store';
 import { attendanceOfflineService } from './services/attendanceOfflineService';
 import { financeOfflineService } from './services/financeOfflineService';
 import { runFullCleanup } from './db/db';
+import { ThemeProvider, useTheme } from './ThemeContext';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,48 +42,61 @@ setTimeout(() => {
   runFullCleanup().catch(() => {});
 }, 5000);
 
+function ThemedToaster() {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  return (
+    <Toaster
+      position="top-center"
+      reverseOrder={false}
+      toastOptions={{
+        duration: 3500,
+        style: {
+          background: isDark ? '#0d0d0d' : '#ffffff',
+          color: isDark ? '#f3f4f6' : '#120f0d',
+          border: isDark ? '1px solid #27272a' : '1px solid rgba(150, 123, 79, 0.25)',
+          borderRadius: '14px',
+          padding: '12px 18px',
+          fontSize: '13px',
+          fontWeight: '600',
+          boxShadow: isDark
+            ? '0 10px 30px rgba(0, 0, 0, 0.6)'
+            : '0 10px 30px rgba(150, 123, 79, 0.15)',
+        },
+        success: {
+          iconTheme: {
+            primary: '#10b981',
+            secondary: isDark ? '#000000' : '#ffffff',
+          },
+          style: {
+            border: isDark ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(16, 185, 129, 0.4)',
+          },
+        },
+        error: {
+          duration: 4500,
+          iconTheme: {
+            primary: '#ef4444',
+            secondary: '#ffffff',
+          },
+          style: {
+            border: isDark ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(239, 68, 68, 0.4)',
+          },
+        },
+      }}
+    />
+  );
+}
+
 createRoot(document.getElementById('root')).render(
- <ErrorBoundary>
- <Provider store={store}>
- <QueryClientProvider client={queryClient}>
-  <Toaster 
-    position="top-center" 
-    reverseOrder={false}
-    toastOptions={{
-      duration: 3500,
-      style: {
-        background: '#0d0d0d',
-        color: '#f3f4f6',
-        border: '1px solid #27272a',
-        borderRadius: '14px',
-        padding: '12px 18px',
-        fontSize: '13px',
-        fontWeight: '600',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.6)',
-      },
-      success: {
-        iconTheme: {
-          primary: '#10b981',
-          secondary: '#000000',
-        },
-        style: {
-          border: '1px solid rgba(16, 185, 129, 0.3)',
-        },
-      },
-      error: {
-        duration: 4500,
-        iconTheme: {
-          primary: '#ef4444',
-          secondary: '#ffffff',
-        },
-        style: {
-          border: '1px solid rgba(239, 68, 68, 0.35)',
-        },
-      },
-    }}
-  />
- <App />
- </QueryClientProvider>
- </Provider>
- </ErrorBoundary>
-)
+  <ErrorBoundary>
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ThemedToaster />
+          <App />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </Provider>
+  </ErrorBoundary>
+);

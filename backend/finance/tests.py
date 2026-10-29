@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from branches.models import Branch
 from groups.models import Group, Student
 from finance.models import Payment, EmployeePayment, StaffProfile, FinanceTransaction
-from finance.utils import aggregate_attendance_refunds
+from finance.utils import aggregate_attendance_refunds, floor_amount
 from rest_framework.test import APITestCase
 from rest_framework import status
 from django.urls import reverse
@@ -373,3 +373,310 @@ class FinanceAbsentStudentsEndpointTests(APITestCase):
         self.assertEqual(tx.amount, Decimal('300000'))
         self.assertEqual(tx.payment_method, 'cash')
         self.assertEqual(tx.branch, self.branch)
+
+
+class CategoryFinanceAuditTests(TestCase):
+    def setUp(self):
+        self.branch = Branch.objects.create(name="Audit Branch")
+        self.super_admin = User.objects.create_user(username='audit_super', password='pw', role='super_admin')
+        self.mentor = User.objects.create_user(username='audit_mentor', password='pw', role='mentor', branch=self.branch)
+        self.payment_month = timezone.now().date().replace(day=1)
+
+    def test_category_a_organic_full_and_partial_payout(self):
+        """Kategoriya A: Oddiy talaba to'liq va qisman to'lov holati"""
+        group = Group.objects.create(
+            name="Organic Group",
+            branch=self.branch,
+            mentor=self.mentor,
+            monthly_price=Decimal('400000')
+        )
+        profile = StaffProfile.objects.create(
+            user=self.mentor,
+            salary_type='student_count',
+            per_student_amount=Decimal('230000')
+        )
+        s1 = Student.objects.create(full_name="Organic 1", group=group, status="regular")
+        GroupEnrollment.objects.get_or_create(student=s1, group=group, defaults={'is_active': True})
+
+        # 1. To'liq to'lov (400,000 UZS)
+        p1 = Payment.objects.create(
+            student=s1, group=group, month=self.payment_month,
+            amount=Decimal('400000'), paid_amount=Decimal('400000'), is_paid=True
+        )
+
+        sal_full = profile.calculate_salary_for_month(self.payment_month)
+        self.assertEqual(sal_full, Decimal('230000'))
+
+        # 2. Qisman to'lov (100,000 UZS)
+        p1.paid_amount = Decimal('100000')
+        p1.is_paid = False
+        p1.save()
+        if hasattr(profile, '_salary_memo'):
+            del profile._salary_memo
+
+        sal_part = profile.calculate_salary_for_month(self.payment_month)
+        self.assertLessEqual(sal_part, Decimal('100000'))
+        self.assertGreater(sal_part, Decimal('50000'))
+
+    def test_category_b_privileged_attendance_based(self):
+        """Kategoriya B: Imtiyozli (kelajak.uz) davomatga asoslangan to'lov"""
+        from finance.utils import calculate_attendance_based_mentor_share, floor_amount
+        group = Group.objects.create(
+            name="Privileged Group",
+            branch=self.branch,
+            mentor=self.mentor,
+            monthly_price=Decimal('400000'),
+            days='odd'
+        )
+        s = Student.objects.create(full_name="Privileged Student", group=group, status="discount")
+        GroupEnrollment.objects.get_or_create(student=s, group=group, defaults={'is_active': True})
+        Student.objects.filter(id=s.id).update(joined_at=self.payment_month)
+        GroupEnrollment.objects.filter(student=s, group=group).update(joined_at=self.payment_month)
+
+        lesson_dates = group.get_lesson_dates(self.payment_month.year, self.payment_month.month)
+        total_l = len(lesson_dates)
+        self.assertGreater(total_l, 0)
+
+        for d in lesson_dates[:8]:
+            Attendance.objects.create(student=s, group=group, date=d, is_present=True, marked_by=self.mentor)
+
+        t_base = Decimal('240000')
+        mentor_share = calculate_attendance_based_mentor_share(
+            student=s, group=group, month_date=self.payment_month,
+            per_student_amount=t_base, ignore_today_check=True
+        )
+        expected_raw = (t_base / Decimal(str(total_l))) * Decimal('8')
+        self.assertEqual(mentor_share, floor_amount(expected_raw))
+
+    def test_category_c_teacher_agreed_isolation(self):
+        """Kategoriya C: O'qituvchi kelishgan - O'qituvchi ulushi har doim 0 UZS, markaz 100% oladi"""
+        from finance.utils import get_teacher_negotiated_center_fee
+        group = Group.objects.create(
+            name="Teacher Agreed Group",
+            branch=self.branch,
+            mentor=self.mentor,
+            monthly_price=Decimal('400000')
+        )
+        profile = StaffProfile.objects.create(
+            user=self.mentor,
+            salary_type='student_count',
+            per_student_amount=Decimal('230000')
+        )
+
+        # Markazning operatsion ulushi: 400,000 - 230,000 = 170,000 UZS
+        center_fee = get_teacher_negotiated_center_fee(group)
+        self.assertEqual(center_fee, Decimal('170000'))
+
+        s = Student.objects.create(
+            full_name="Agreed Student",
+            group=group,
+            status="teacher_negotiated",
+            custom_fee=center_fee
+        )
+        GroupEnrollment.objects.get_or_create(student=s, group=group, defaults={'is_active': True})
+
+        Payment.objects.create(
+            student=s,
+            group=group,
+            month=self.payment_month,
+            amount=center_fee,
+            paid_amount=center_fee,
+            is_paid=True,
+            marked_by=self.super_admin
+        )
+
+        # 1. O'qituvchi oyligi 0 bo'lishi shart
+        salary = profile.calculate_salary_for_month(self.payment_month)
+        self.assertEqual(salary, Decimal('0'))
+
+        # 2. O'qituvchi jami daromadi 0 bo'lishi shart (status leakage yo'q!)
+        income = profile.calculate_monthly_income(self.payment_month)
+        self.assertEqual(income, Decimal('0'))
+
+        # 3. Kutilayotgan o'qituvchi oyligi 0 bo'lishi shart
+        exp_salary = profile.calculate_expected_monthly_income(self.payment_month)
+        self.assertEqual(exp_salary, Decimal('0'))
+
+
+class PrivilegedStudentsAPITests(APITestCase):
+    def setUp(self):
+        from finance.models import AttendanceAuditLog
+        from finance.utils import floor_amount
+        from homework_attends.models import Attendance
+
+        self.branch = Branch.objects.create(name="Tashkent Center")
+        self.admin = User.objects.create_user(username="admin_user", password="password123", role="admin", branch=self.branch)
+        self.super_admin = User.objects.create_user(username="super_user", password="password123", role="super_admin")
+        self.mentor = User.objects.create_user(username="mentor_priv", password="password123", role="mentor", branch=self.branch)
+
+        # 60% komissiyaga ega mentor profili
+        self.mentor_profile = StaffProfile.objects.create(
+            user=self.mentor,
+            salary_type="percentage",
+            commission_percentage=Decimal("60"),
+        )
+
+        self.group = Group.objects.create(
+            name="Frontend Kelajak",
+            branch=self.branch,
+            mentor=self.mentor,
+            monthly_price=Decimal("400000"),
+            custom_days=[0, 2, 4],
+        )
+
+        self.student = Student.objects.create(
+            full_name="Alisher Navoiy",
+            group=self.group,
+            branch=self.branch,
+            status="discount",  # Privileged / State-funded
+        )
+        self.enrollment = GroupEnrollment.objects.filter(
+            student=self.student, group=self.group
+        ).first()
+        if not self.enrollment:
+            self.enrollment = GroupEnrollment.objects.create(
+                student=self.student,
+                group=self.group,
+                is_active=True,
+                joined_at=timezone.now().date().replace(day=1),
+            )
+        else:
+            self.enrollment.joined_at = timezone.now().date().replace(day=1)
+            self.enrollment.is_active = True
+            self.enrollment.save(update_fields=["joined_at", "is_active"])
+
+        self.payment_month = timezone.now().date().replace(day=1)
+        self.lesson_dates = self.group.get_lesson_dates(self.payment_month.year, self.payment_month.month)
+        self.n_total = len(self.lesson_dates)
+
+        # Dastlab 5 ta darsga qatnashgan qilib belgilaymiz
+        for d in self.lesson_dates[:5]:
+            Attendance.objects.create(
+                student=self.student,
+                group=self.group,
+                date=d,
+                is_present=True,
+                marked_by=self.super_admin,
+            )
+
+    def test_privileged_students_list_api(self):
+        """GET /api/v1/finance/privileged-students/ hisoblangan maydonlarni qaytarishi kerak"""
+        self.client.force_authenticate(user=self.admin)
+        month_str = self.payment_month.strftime("%Y-%m")
+        url = f"/api/v1/finance/privileged-students/?month={month_str}"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertIn("summary", data)
+        self.assertIn("results", data)
+        self.assertEqual(len(data["results"]), 1)
+
+        row = data["results"][0]
+        self.assertEqual(row["student_id"], self.student.id)
+        self.assertEqual(row["student_name"], "Alisher Navoiy")
+        self.assertEqual(row["group_name"], "Frontend Kelajak")
+        self.assertEqual(row["n_total"], self.n_total)
+        self.assertEqual(row["attended_count"], 5)
+        self.assertEqual(row["teacher_salary_type"], "PERCENTAGE")
+        self.assertTrue(row["teacher_rate_display"].startswith("60"))
+
+        # Davlat qarzi = floor_amount((400,000 / n_total) * 5)
+        raw_daily = Decimal("400000") / Decimal(str(self.n_total))
+        expected_state_rec = int(floor_amount(raw_daily * Decimal("5")))
+        self.assertEqual(int(row["state_receivable_amount"]), expected_state_rec)
+
+        # O'qituvchi ulushi = floor_amount(Davlat qarzi * 60%)
+        expected_teacher = int(floor_amount(Decimal(str(expected_state_rec)) * Decimal("0.6")))
+        self.assertEqual(int(row["earned_teacher_share"]), expected_teacher)
+
+    def test_privileged_student_attendance_history_api(self):
+        """GET /api/v1/finance/privileged-students/{id}/attendance-history/ sessiyalar va auditni qaytarishi kerak"""
+        self.client.force_authenticate(user=self.admin)
+        month_str = self.payment_month.strftime("%Y-%m")
+        url = f"/api/v1/finance/privileged-students/{self.student.id}/attendance-history/?month={month_str}"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertEqual(data["student"]["id"], self.student.id)
+        self.assertEqual(len(data["sessions"]), self.n_total)
+        # 5 ta qatnashgan
+        present_count = sum(1 for s in data["sessions"] if s["is_present"])
+        self.assertEqual(present_count, 5)
+
+    def test_privileged_student_attendance_override_success(self):
+        """PATCH /api/v1/finance/privileged-students/{id}/attendance-override/ moliyani qayta hisoblab audit yozishi kerak"""
+        from finance.models import AttendanceAuditLog
+        from finance.utils import floor_amount
+        self.client.force_authenticate(user=self.admin)
+        month_str = self.payment_month.strftime("%Y-%m")
+        url = f"/api/v1/finance/privileged-students/{self.student.id}/attendance-override/"
+
+        payload = {
+            "month": month_str,
+            "group_id": self.group.id,
+            "new_attended_count": 8,
+            "reason_for_change": "Kelajak.uz Face ID kechikkan, monitoring tasdiqladi",
+        }
+        response = self.client.patch(url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertTrue(data["success"])
+        self.assertEqual(data["current"]["attended_count"], 8)
+        self.assertEqual(data["previous"]["attended_count"], 5)
+
+        # Audit log tekshiruvi
+        log = AttendanceAuditLog.objects.filter(student=self.student, month=self.payment_month).first()
+        self.assertIsNotNone(log)
+        self.assertEqual(log.modified_by, self.admin)
+        self.assertEqual(log.previous_attended_count, 5)
+        self.assertEqual(log.new_attended_count, 8)
+        self.assertEqual(log.reason_for_change, "Kelajak.uz Face ID kechikkan, monitoring tasdiqladi")
+
+        # Payment tekshiruvi
+        payment = Payment.objects.filter(student=self.student, group=self.group, month=self.payment_month).first()
+        self.assertIsNotNone(payment)
+        raw_daily = Decimal("400000") / Decimal(str(self.n_total))
+        expected_rec = int(floor_amount(raw_daily * Decimal("8")))
+        self.assertEqual(int(payment.amount), expected_rec)
+
+    def test_privileged_student_attendance_override_validation_error(self):
+        """N_attended > N_total bo'lganda 400 xatolik qaytishi kerak"""
+        self.client.force_authenticate(user=self.admin)
+        month_str = self.payment_month.strftime("%Y-%m")
+        url = f"/api/v1/finance/privileged-students/{self.student.id}/attendance-override/"
+
+        payload = {
+            "month": month_str,
+            "group_id": self.group.id,
+            "new_attended_count": self.n_total + 10,  # Cheklovdan yuqori
+            "reason_for_change": "Xato son",
+        }
+        response = self.client.patch(url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+
+    def test_floor_amount_exact_precision_large_sums(self):
+        """Katta pullarda (10,000 - 30,000 so'm) yetishmovchilik bo'lmasligi, 1 so'mgacha aniq Decimal hisoblanishi kerak"""
+        from finance.utils import floor_amount, _auto_floor_precision
+
+        # 1. _auto_floor_precision har doim 1 qaytarishi kerak
+        self.assertEqual(_auto_floor_precision(Decimal("3450000")), 1)
+        self.assertEqual(_auto_floor_precision(Decimal("15000000")), 1)
+
+        # 2. 12,539,999 UZS floor_amount da 12,530,000 ga kesilmasdan, 1 so'mgacha aniq saqlanishi kerak
+        amount = Decimal("12539999")
+        self.assertEqual(floor_amount(amount), Decimal("12539999"))
+        self.assertEqual(floor_amount(amount, precision=None), Decimal("12539999"))
+
+        # 3. Kunlik to'lovlar ko'paytmasida 10,000 - 30,000 so'm yo'qolmasligi
+        # Masalan: 400,000 / 12 = 33,333.33 UZS. 12 ta dars uchun = 400,000 UZS bo'lishi kerak (33,000 * 12 = 396,000 emas!)
+        daily = Decimal("400000") / Decimal("12")
+        total_12_lessons = floor_amount(daily * Decimal("12"))
+        self.assertEqual(total_12_lessons, Decimal("400000"))
+
+
+

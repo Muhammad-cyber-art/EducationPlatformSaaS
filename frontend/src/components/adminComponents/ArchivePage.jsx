@@ -144,11 +144,11 @@ export default function ArchivePage() {
               </button>
 
               {/* Close Button Integrated */}
-              <div className="w-[1px] h-8 bg-white/10 mx-2 hidden sm:block"></div>
+              <div className="w-[1px] h-8 bg-[var(--border-glass)] mx-2 hidden sm:block"></div>
 
               <button
                 onClick={() => setMarkedItems({})}
-                className="w-11 h-11 shrink-0 rounded-xl bg-white/5 text-white/40 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:text-white transition-all active:scale-95"
+                className="w-11 h-11 shrink-0 rounded-xl bg-[var(--bg-void)] text-[var(--text-muted)] border border-[var(--border-glass)] flex items-center justify-center hover:bg-[var(--gold)]/10 hover:text-[var(--text-primary)] transition-all active:scale-95"
                 title="Yopish"
               >
                 <X size={18} />

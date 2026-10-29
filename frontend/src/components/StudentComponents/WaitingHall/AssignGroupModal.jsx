@@ -21,10 +21,10 @@ const AssignGroupModal = ({
  <div className="p-8 border-b border-[var(--border-glass)] bg-[var(--bg-void)]/80 flex-shrink-0">
  <div className="flex justify-between items-center mb-4">
  <h3 className="text-2xl font-black gold-text capitalize">Guruh tanlash</h3>
- <button onClick={onClose} className="text-[var(--text-muted)] hover:text-white transition-colors"><X size={24} /></button>
+ <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"><X size={24} /></button>
  </div>
  <p className="text-[10px] text-[var(--text-secondary)] font-bold capitalize tracking-widest flex items-center gap-2">
- O'quvchi: <span className="text-white">{student.full_name}</span>
+ O'quvchi: <span className="text-[var(--text-primary)]">{student.full_name}</span>
  </p>
  </div>
 

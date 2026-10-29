@@ -1,4 +1,4 @@
-import { Users, UserCheck, Building2, ShieldCheck, MessageSquare, Download, Loader2, BookOpen, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, UserCheck, Building2, ShieldCheck, MessageSquare, Download, Loader2, BookOpen, Calendar, ChevronLeft, ChevronRight, Award } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '../../tokenUpdater/updater';
@@ -57,7 +57,12 @@ const SuperAdminDashboard = () => {
         enabled: !!branchId,
     });
 
-
+    const { data: specialStudentsData } = useQuery({
+        queryKey: ['branch-special-students-count', branchId],
+        queryFn: () => api.get(`/finance/privileged-students/?branch_id=${branchId}&page_size=1`).then(res => res.data),
+        enabled: !!branchId,
+        staleTime: 1000 * 60,
+    });
 
     const { data: growthData, isLoading: growthLoading } = useQuery({
         queryKey: ['growth-statistics', branchId],
@@ -72,6 +77,7 @@ const SuperAdminDashboard = () => {
     });
 
     const stats = branchFinance?.stats;
+    const specialCount = specialStudentsData?.meta?.total_count ?? specialStudentsData?.summary?.total_students ?? 0;
 
     const homeworkList = Array.isArray(weeklyHomeworks)
         ? weeklyHomeworks
@@ -121,11 +127,12 @@ const SuperAdminDashboard = () => {
             </div>
 
             {/* STATS MATRIX */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-6">
                 <StatCard onClick={() => navigate('admins')} title="Adminstratorlar" value={stats?.admins || 0} icon={<ShieldCheck size={16} />} trend="STAFF" delay="0" />
                 <StatCard onClick={() => navigate('mentors')} title="Mentorlar" value={stats?.mentors || 0} icon={<UserCheck size={16} />} trend="STAFF" delay="100" />
                 <StatCard onClick={() => navigate('all_students')} title="O'quvchilar" value={stats?.students || 0} icon={<Users size={16} />} trend="STUDENTS" delay="200" />
                 <StatCard onClick={() => navigate('groups')} title="Guruhlar" value={stats?.groups || 0} icon={<Building2 size={16} />} trend="GROUPS" delay="300" />
+                <StatCard onClick={() => navigate(`/super_admin/special-students?branch_id=${branchId}`)} title="Maxsus O'quvchilar" value={specialCount} icon={<Award size={16} />} trend="GRANT" delay="400" />
             </div>
 
             {/* ATTENDANCE, BOT STATS & BROADCAST MATRIX */}

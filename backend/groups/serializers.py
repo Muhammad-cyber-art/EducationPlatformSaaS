@@ -15,19 +15,27 @@ User = get_user_model()
 
 def _safe_attendance_metrics(group):
     """Attendance jadvali yoki query xato bersa ham serializer yiqilmasin."""
+    cached = getattr(group, '_cached_attendance_metrics', None)
+    if cached is not None:
+        return cached
     try:
         from django.utils import timezone
         from homework_attends.models import Attendance
 
         today = timezone.localdate()
         qs = Attendance.objects.filter(group=group, date=today)
-        return {
+        metrics = {
             "confirmed": qs.filter(marked_by__isnull=False).exists(),
             "present": qs.filter(is_present=True).count(),
             "absent": qs.filter(is_present=False).count(),
         }
     except Exception:
-        return {"confirmed": False, "present": 0, "absent": 0}
+        metrics = {"confirmed": False, "present": 0, "absent": 0}
+    try:
+        group._cached_attendance_metrics = metrics
+    except Exception:
+        pass
+    return metrics
 
 
 # Oddiy mentorlar ro'yxati uchun serializer
@@ -121,8 +129,16 @@ class GroupSimpleSerializer(serializers.ModelSerializer):
         try:
             if hasattr(obj, '_students_count'):
                 return obj._students_count
+            cached = getattr(obj, '_cached_students_count', None)
+            if cached is not None:
+                return cached
             # Faqat is_active=True bo'lgan o'quvchilarni sanaymiz
-            return obj.enrollments.filter(is_active=True).count()
+            count = obj.enrollments.filter(is_active=True).count()
+            try:
+                obj._cached_students_count = count
+            except Exception:
+                pass
+            return count
         except Exception:
             return 0
 
@@ -349,11 +365,13 @@ class StudentSerializer(serializers.ModelSerializer):
                             "negotiated",
                             "teacher_negotiated",
                         ]:
-                            base_price = (
-                                instance.custom_fee
-                                if instance.custom_fee is not None
-                                else Decimal("0")
-                            )
+                            if instance.custom_fee is not None:
+                                base_price = instance.custom_fee
+                            elif instance.status == "teacher_negotiated":
+                                from finance.utils import get_teacher_negotiated_center_fee
+                                base_price = get_teacher_negotiated_center_fee(new_group)
+                            else:
+                                base_price = Decimal("0")
                         else:
                             base_price = new_group.monthly_price
 

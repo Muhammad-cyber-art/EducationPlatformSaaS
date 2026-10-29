@@ -7,7 +7,6 @@ import { BranchTabsNav } from './BranchDetails/BranchTabsNav';
 import { FinanceOverviewTab } from './BranchDetails/tabs/FinanceOverviewTab';
 import { BranchExpensesTab } from './BranchDetails/tabs/BranchExpensesTab';
 import { GroupsAnalyticsTab } from './BranchDetails/tabs/GroupsAnalyticsTab';
-import { SpecialStudentsTab } from './BranchDetails/tabs/SpecialStudentsTab';
 import { Activity, ShieldCheck, Calendar } from 'lucide-react';
 
 export default function BranchFinance() {
@@ -34,7 +33,9 @@ export default function BranchFinance() {
   } = useBranchFinance();
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'finance';
+  const rawTab = searchParams.get('tab') || 'finance';
+  const validTabs = ['finance', 'expenses', 'groups'];
+  const activeTab = validTabs.includes(rawTab) ? rawTab : 'finance';
 
   const handleTabChange = (tabId) => {
     setSearchParams((prev) => {
@@ -158,13 +159,6 @@ export default function BranchFinance() {
           <GroupsAnalyticsTab
             groups={groups || []}
             formatNumber={formatNumber}
-          />
-        )}
-
-        {activeTab === 'special' && (
-          <SpecialStudentsTab
-            b_id={b_id}
-            branchName={branch.name}
           />
         )}
       </div>

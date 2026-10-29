@@ -29,7 +29,7 @@ export const SpecialStudentsTab = ({ b_id, branchName }) => {
           </div>
 
           <Link
-            to={`/super_admin/all-payments/branch-details/${b_id}/special-students`}
+            to={`/super_admin/special-students?branch_id=${b_id}`}
             className="flex items-center justify-center gap-2 px-6 py-3.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-lg shadow-purple-600/30 shrink-0 cursor-pointer"
           >
             <span>Dushbordni Ochish</span>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, TrendingDown, Layers, Users } from 'lucide-react';
+import { DollarSign, TrendingDown, Layers } from 'lucide-react';
 
 export const BranchTabsNav = ({
   activeTab,
@@ -29,13 +29,6 @@ export const BranchTabsNav = ({
       icon: <Layers size={15} />,
       badge: `${groupsCount} ta`,
       badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    },
-    {
-      id: 'special',
-      label: "Maxsus O'quvchilar",
-      icon: <Users size={15} />,
-      badge: 'Wallet',
-      badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
     },
   ];
 

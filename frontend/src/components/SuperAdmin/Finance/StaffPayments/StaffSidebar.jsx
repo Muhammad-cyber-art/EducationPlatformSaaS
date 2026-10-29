@@ -7,7 +7,7 @@ const CategoryBtn = ({ active, onClick, icon, label, shortLabel, count }) => (
  className={`w-full flex items-center justify-between p-2.5 sm:p-4 rounded-xl transition-all border ${
  active
  ?"bg-[var(--gold)] text-white border-transparent shadow-[var(--gold-glow)]"
- :"bg-transparent text-[var(--text-muted)] border-transparent hover:bg-white/5 hover:text-white"
+ :"bg-transparent text-[var(--text-muted)] border-transparent hover:bg-[var(--gold)]/10 hover:text-[var(--text-primary)]"
  }`}
  >
  <div className="flex items-center gap-2 sm:gap-4">

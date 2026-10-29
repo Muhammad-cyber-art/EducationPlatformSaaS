@@ -361,12 +361,12 @@ def generate_monthly_payments(month_date=None):
             student__is_archived=False,
             is_frozen=False,
         ).filter(
-            Q(is_active=True) | Q(left_at__date__gte=month_date)
+            Q(is_active=True, left_at__isnull=True) |
+            Q(left_at__date__gte=month_date, left_at__date__lte=month_end)
         ).values_list('student_id', flat=True)
 
         eligible_students = group.students.filter(
-            Q(id__in=active_enr_ids) |
-            Q(group=group, joined_at__date__lte=month_end, is_active=True, is_archived=False, enrollments__group=group, enrollments__is_frozen=False)
+            id__in=active_enr_ids
         ).distinct()
 
         for student in eligible_students:
@@ -379,6 +379,9 @@ def generate_monthly_payments(month_date=None):
             ]:
                 if student.custom_fee is not None:
                     base_price = student.custom_fee
+                elif student.status == "teacher_negotiated":
+                    from finance.utils import get_teacher_negotiated_center_fee
+                    base_price = get_teacher_negotiated_center_fee(group)
 
             if student.status == "discount":
                 # Imtiyozli student uchun davomatga asoslangan hisoblash
@@ -1152,9 +1155,11 @@ def get_branch_finance_stats(branch_id, month, year):
                     student_extra = extra_map.get(key, Decimal("0"))
 
                     if student.status == "teacher_negotiated":
-                        base_expected = Decimal(
-                            str(student.custom_fee or group.monthly_price or 0)
-                        )
+                        if student.custom_fee is not None:
+                            base_expected = Decimal(str(student.custom_fee))
+                        else:
+                            from finance.utils import get_teacher_negotiated_center_fee
+                            base_expected = get_teacher_negotiated_center_fee(group)
                     elif student.status == "discount":
                         base_expected = calculate_attendance_based_student_payment(
                             student, group, date(year, month, 1)
@@ -1666,7 +1671,11 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
         absences = max(0, passed_l - present_c)
 
         if student.status == 'teacher_negotiated':
-            base_fee = Decimal('0')
+            if student.custom_fee is not None:
+                base_fee = Decimal(str(student.custom_fee))
+            else:
+                from finance.utils import get_teacher_negotiated_center_fee
+                base_fee = get_teacher_negotiated_center_fee(group)
         elif student.status in ['low_income', 'negotiated'] and student.custom_fee is not None:
             base_fee = Decimal(str(student.custom_fee))
         elif student.status == 'discount':
@@ -1692,17 +1701,20 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
             pmt_id = None
             expected_amt = base_fee
             paid_amt = Decimal('0')
-            if student.status == 'teacher_negotiated':
-                remaining_amt = Decimal('0')
-                is_paid = True
-            else:
-                remaining_amt = base_fee
-                is_paid = False
+            remaining_amt = base_fee
+            is_paid = (base_fee <= Decimal('0'))
             is_partial = False
             pmt_method = None
             paid_at = None
 
         other_grps = [og for og in student_other_groups_map.get(student.id, []) if og['group_id'] != gid]
+
+        is_discount = (student.status == 'discount')
+        if is_discount:
+            # Imtiyozli (davlat granti) o'quvchidan kassada to'lov qabul qilinmaydi va kassa qarzdorligiga kiritilmaydi
+            remaining_amt = Decimal('0')
+            is_paid = True
+            is_partial = False
 
         student_data = {
             "student_id": student.id,
@@ -1711,6 +1723,7 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
             "parent_phone": student.parent_phone or "",
             "status": student.status,
             "status_display": student.get_status_display(),
+            "is_discount": is_discount,
             "custom_fee": float(student.custom_fee) if student.custom_fee is not None else None,
             "group_id": gid,
             "group_name": group.name,
@@ -1755,7 +1768,7 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
 
         g_item["students"].append(student_data)
 
-        if remaining_amt > 0 and student.status != 'teacher_negotiated':
+        if remaining_amt > 0 and not is_discount:
             debtors_list.append(student_data)
 
     debtors_list.sort(key=lambda d: d["remaining_amount"], reverse=True)
@@ -1813,5 +1826,554 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
             "total_debt_amount": float(all_branch_debt),
             "total_collected_month": float(all_branch_collected),
         }
+    }
+
+
+def build_student_calculation_detail_dict(payment, student_id, group_id=None):
+    """
+    Xodimning oylik maoshidagi aniq bitta o'quvchi bo'yicha to'liq arifmetik hisob-kitob tafsilotlari.
+    O'quvchining to'lagan puli, darslar davomati, stavkasi, qo'llanilgan formula va o'qituvchining
+    yakuniy ulushi bosqichma-bosqich, shaffof matematik amallar bilan qaytariladi.
+    """
+    from finance.models import MentorGroupSalaryConfig
+    from archivebase.models import ArchivedStudent
+
+    month_date = normalize_month(payment.month)
+    month_name_uz = {
+        1: "Yanvar", 2: "Fevral", 3: "Mart", 4: "Aprel", 5: "May", 6: "Iyun",
+        7: "Iyul", 8: "Avgust", 9: "Sentabr", 10: "Oktabr", 11: "Noyabr", 12: "Dekabr"
+    }
+    month_display = f"{month_name_uz.get(month_date.month, '')} {month_date.year}"
+
+    # 1. O'chirilgan/Arxivlangan o'quvchi tekshiruvi
+    is_archived_str = isinstance(student_id, str) and student_id.startswith("archived_")
+    if is_archived_str:
+        parts = student_id.split("_")
+        arch_id = parts[1] if len(parts) > 1 else None
+        arch = ArchivedStudent.objects.filter(id=arch_id).first() if arch_id else None
+        
+        target_payment_data = None
+        target_group_id = int(group_id) if group_id else None
+        if arch and arch.metadata and 'payments' in arch.metadata:
+            month_prefix = month_date.strftime("%Y-%m")
+            for p_dict in arch.metadata['payments']:
+                if (not target_group_id or p_dict.get('group') == target_group_id) and str(p_dict.get('month', '')).startswith(month_prefix):
+                    target_payment_data = p_dict
+                    target_group_id = p_dict.get('group')
+                    break
+        
+        grp = Group.objects.filter(id=target_group_id).first() if target_group_id else None
+        group_name = grp.name if grp else (target_payment_data.get('group_name') if target_payment_data else "Guruh")
+        group_price = float(grp.monthly_price) if grp else float(target_payment_data.get('amount') or 0.0 if target_payment_data else 0.0)
+        
+        paid_amt = float(target_payment_data.get('paid_amount') or 0.0) if target_payment_data else 0.0
+        contract_amt = float(target_payment_data.get('amount') or group_price) if target_payment_data else group_price
+        student_name = target_payment_data.get('student_full_name') or (arch.full_name if arch else "Arxivlangan O'quvchi")
+        
+        # O'qituvchi stavkasi
+        employee = payment.employee
+        cfg = MentorGroupSalaryConfig.objects.filter(mentor=employee, group=grp).first() if grp else None
+        profile = getattr(employee, 'staff_profile', None)
+        
+        if cfg:
+            sal_type = cfg.salary_type
+            comm_pct = float(cfg.commission_percentage)
+            per_st = float(cfg.per_student_amount)
+            src = f"Guruh bo'yicha maxsus stavka ({group_name})"
+        elif profile:
+            sal_type = profile.salary_type
+            comm_pct = float(profile.commission_percentage or 0)
+            per_st = float(profile.per_student_amount or 0)
+            src = "O'qituvchi profilidagi umumiy stavka"
+        else:
+            sal_type = 'fixed'
+            comm_pct = 0.0
+            per_st = 0.0
+            src = "Standart stavka"
+
+        if sal_type == 'percentage':
+            final_share = round(paid_amt * (comm_pct / 100.0))
+            f_template = "O'quvchi to'lagan summa × Foiz stavkasi"
+            f_math = f"{paid_amt:,.0f} UZS × {comm_pct}% = {final_share:,.0f} UZS"
+        else:
+            if paid_amt >= contract_amt and contract_amt > 0:
+                final_share = per_st
+                f_math = f"{paid_amt:,.0f} >= {contract_amt:,.0f} → {final_share:,.0f} UZS"
+            elif paid_amt > 0 and contract_amt > 0:
+                final_share = round(min(paid_amt, (per_st * paid_amt) / contract_amt))
+                f_math = f"({paid_amt:,.0f} ÷ {contract_amt:,.0f}) × {per_st:,.0f} = {final_share:,.0f} UZS"
+            else:
+                final_share = 0.0
+                f_math = "0 UZS"
+            f_template = "(To'langan summa ÷ Shartnoma narxi) × Stavka"
+
+        return {
+            'student': {
+                'id': student_id,
+                'name': f"{student_name} (Guruhdan o'chirilgan/Arxiv)",
+                'phone': getattr(arch, 'phone', '') or "",
+                'status': 'archived',
+                'status_label': "Guruhdan o'chirilgan",
+                'is_archived': True,
+                'color': "#9ca3af",
+            },
+            'group': {
+                'id': target_group_id,
+                'name': group_name,
+                'monthly_price': group_price,
+            },
+            'month': str(month_date),
+            'month_display': month_display,
+            'salary_config': {
+                'type': sal_type,
+                'type_label': "Foizli (%)" if sal_type == 'percentage' else "Stavka (so'm/o'quvchi)",
+                'rate': comm_pct if sal_type == 'percentage' else per_st,
+                'source': src,
+                'is_group_specific': bool(cfg),
+            },
+            'contract_and_payment': {
+                'standard_group_price': group_price,
+                'custom_fee': None,
+                'contract_amount': contract_amt,
+                'paid_amount': paid_amt,
+                'paid_at': str(target_payment_data.get('paid_at', '')).replace('T', ' ')[:16] if target_payment_data and target_payment_data.get('paid_at') else None,
+                'payment_method': target_payment_data.get('payment_method') if target_payment_data else "Kassa",
+                'is_partial': target_payment_data.get('is_partial', False) if target_payment_data else False,
+                'remaining_debt': max(0.0, contract_amt - paid_amt),
+                'refund_amount': float(target_payment_data.get('refund_amount') or 0.0) if target_payment_data else 0.0,
+                'refund_ignored': target_payment_data.get('refund_ignored', False) if target_payment_data else False,
+                'marked_by_name': "Tizim / Kassa",
+                'notes': "O'quvchi to'lovni amalga oshirgach arxivlangan. O'qituvchiga to'langan mablag'dan tegishli ulush saqlab qolingan.",
+            },
+            'attendance': {
+                'is_attendance_based': False,
+                'total_lessons': 0,
+                'present_count': 0,
+                'absent_count': 0,
+                'attendance_percentage': 0.0,
+                'lessons': [],
+            },
+            'arithmetic_calculation': {
+                'summary_title': "Arxivlangan o'quvchi to'lovidan o'qituvchi ulushi",
+                'formula_template': f_template,
+                'formula_math': f_math,
+                'final_share': final_share,
+                'steps': [
+                    {
+                        'step_number': 1,
+                        'title': "O'quvchi to'lovi (Arxivdan tiklangan)",
+                        'badge': "Arxiv to'lovi",
+                        'explanation': "O'quvchi guruhdan chiqarilishidan oldin amalga oshirgan to'lovi.",
+                        'math_formula': f"To'langan summa: {paid_amt:,.0f} UZS (Shartnoma: {contract_amt:,.0f} UZS)",
+                        'result': f"{paid_amt:,.0f} UZS",
+                        'highlight': False,
+                    },
+                    {
+                        'step_number': 2,
+                        'title': "O'qituvchi ulushi hisob-kitobi",
+                        'badge': "Yakuniy hisob",
+                        'explanation': f"{src}. O'quvchi arxivga olingan bo'lsa-da, uning to'lagan pulidan o'qituvchi ulushi to'liq hisoblangan.",
+                        'math_formula': f_math,
+                        'result': f"{final_share:,.0f} UZS",
+                        'highlight': True,
+                    }
+                ]
+            },
+            'transactions': []
+        }
+
+    # 2. Faol o'quvchini qidirish
+    st_id = int(student_id)
+    student = Student.objects.filter(id=st_id).select_related('group', 'branch').first()
+    if not student:
+        raise ValueError(f"O'quvchi ID={student_id} topilmadi.")
+
+    # Guruhni aniqlash
+    grp = None
+    if group_id:
+        grp = Group.objects.filter(id=group_id).select_related('mentor', 'branch').first()
+    if not grp and student.group:
+        grp = student.group
+
+    # Xodim va konfiguratsiya
+    employee = payment.employee
+    group_config = MentorGroupSalaryConfig.objects.filter(mentor=employee, group=grp).first() if grp else None
+    profile = getattr(employee, 'staff_profile', None)
+
+    if group_config:
+        salary_type = group_config.salary_type
+        commission_pct = float(group_config.commission_percentage)
+        per_student_amount = float(group_config.per_student_amount)
+        config_source = f"Guruh bo'yicha maxsus sozlangan stavka ({grp.name})"
+        is_custom_group = True
+    elif profile:
+        salary_type = profile.salary_type
+        commission_pct = float(profile.commission_percentage or 0)
+        per_student_amount = float(profile.per_student_amount or 0)
+        config_source = "O'qituvchi profilidagi umumiy stavka"
+        is_custom_group = False
+    else:
+        salary_type = 'fixed'
+        commission_pct = 0.0
+        per_student_amount = 0.0
+        config_source = "Standart stavka"
+        is_custom_group = False
+
+    # To'lov yozuvi
+    p = Payment.objects.filter(
+        student=student, group=grp,
+        month__year=month_date.year, month__month=month_date.month
+    ).select_related('marked_by').first() if grp else None
+
+    paid_amount = float(p.paid_amount or 0) if p else 0.0
+    refund_amount = float(p.refund_amount or 0) if p else 0.0
+    refund_ignored = p.refund_ignored if p else False
+    paid_at = p.paid_at.strftime("%Y-%m-%d %H:%M") if p and p.paid_at else None
+    payment_method = p.get_payment_method_display() if p else "Naqd"
+    is_partial = p.is_partial if p else False
+    marked_by_name = (p.marked_by.get_full_name() or p.marked_by.username) if p and p.marked_by else None
+    notes = p.notes if p else None
+
+    # Shartnoma summasi
+    monthly_price = float(grp.monthly_price) if grp else 0.0
+    custom_fee = float(student.custom_fee) if student.custom_fee is not None else None
+    status = student.status
+    status_label = student.get_status_display()
+    is_discount = status == "discount"
+    is_negotiated = status == "negotiated"
+    is_teacher_negotiated = status == "teacher_negotiated"
+
+    contract_base = monthly_price
+    if custom_fee is not None and status in ["low_income", "negotiated", "discount", "teacher_negotiated"]:
+        contract_base = custom_fee
+    elif is_teacher_negotiated:
+        std_teacher_share = (monthly_price * commission_pct / 100.0) if salary_type == 'percentage' else per_student_amount
+        contract_base = max(0.0, monthly_price - std_teacher_share)
+
+    # Darslar va davomat
+    lesson_dates = grp.get_lesson_dates(month_date.year, month_date.month) if grp else []
+    total_lessons = len(lesson_dates)
+    attendances = Attendance.objects.filter(
+        student=student, group=grp,
+        date__year=month_date.year, date__month=month_date.month,
+        marked_by__isnull=False
+    ).select_related('marked_by').order_by('date') if grp else []
+
+    att_by_date = {att.date: att for att in attendances}
+    present_count = 0
+    calendar_lessons = []
+    weekdays_uz = {0: "Dushanba", 1: "Seshanba", 2: "Chorshanba", 3: "Payshanba", 4: "Juma", 5: "Shanba", 6: "Yakshanba"}
+
+    for d in sorted(lesson_dates):
+        att_entry = att_by_date.get(d)
+        is_pres = att_entry.is_present if att_entry else False
+        if is_pres:
+            present_count += 1
+        calendar_lessons.append({
+            'date': d.strftime("%Y-%m-%d"),
+            'day': d.day,
+            'day_name': weekdays_uz.get(d.weekday(), ""),
+            'is_present': is_pres,
+            'is_manually_adjusted': att_entry.is_manually_adjusted if att_entry else False,
+            'marked_by': (att_entry.marked_by.get_full_name() or att_entry.marked_by.username) if att_entry and att_entry.marked_by else None,
+            'marked_at': att_entry.created_at.strftime("%Y-%m-%d %H:%M") if att_entry and hasattr(att_entry, 'created_at') and att_entry.created_at else None,
+        })
+
+    attendance_percent = round((present_count / total_lessons * 100.0), 1) if total_lessons > 0 else 0.0
+
+    # Audit loglari
+    from finance.models import AttendanceAuditLog
+    audit_logs_qs = AttendanceAuditLog.objects.filter(
+        student=student, group=grp, month=month_date
+    ).select_related('modified_by').order_by('-created_at') if grp else []
+    audit_logs_list = [
+        {
+            'id': al.id,
+            'modified_by': al.modified_by.get_full_name() or al.modified_by.username if al.modified_by else "Admin",
+            'created_at': al.created_at.strftime("%Y-%m-%d %H:%M") if al.created_at else None,
+            'previous_attended_count': al.previous_attended_count,
+            'new_attended_count': al.new_attended_count,
+            'total_planned_lessons': al.total_planned_lessons,
+            'previous_teacher_share': float(al.previous_teacher_share or 0),
+            'new_teacher_share': float(al.new_teacher_share or 0),
+            'previous_state_receivable': float(al.previous_state_receivable or 0),
+            'new_state_receivable': float(al.new_state_receivable or 0),
+            'reason_for_change': al.reason_for_change or "Sabab ko'rsatilmagan",
+        }
+        for al in audit_logs_qs
+    ]
+
+    # Tranzaksiyalar
+    tx_qs = FinanceTransaction.objects.filter(
+        student=student, group=grp,
+        date__year=month_date.year, date__month=month_date.month
+    ).order_by('-date') if grp else []
+    transactions_list = [
+        {
+            'id': tx.id,
+            'date': tx.date.strftime("%Y-%m-%d"),
+            'amount': float(tx.amount),
+            'transaction_type': tx.transaction_type,
+            'category': tx.get_category_display(),
+            'status': tx.status,
+        }
+        for tx in tx_qs
+    ]
+
+    # Arifmetik hisob-kitob qadamlari
+    steps = []
+    if is_teacher_negotiated:
+        final_share = 0.0
+        formula_template = "O'qituvchi kelishgan maqomi → Markaz o'qituvchiga maosh hisoblamaydi = 0 UZS"
+        formula_math = "Ulush = 0 UZS"
+        steps = [
+            {
+                'step_number': 1,
+                'title': "O'quvchi maxsus maqomi",
+                'badge': "O'qituvchi kelishgan",
+                'explanation': "O'quvchi 'O'qituvchi kelishgan' maqomida o'qiydi. O'qituvchi o'quvchi bilan bevosita individual kelishgan.",
+                'math_formula': "O'qituvchi ↔ O'quvchi bevosita kelishuv",
+                'result': "0 UZS oylik",
+                'highlight': False,
+            },
+            {
+                'step_number': 2,
+                'title': "Markaz operatsion fondi",
+                'badge': "Markaz ulushi",
+                'explanation': f"Markaz ushbu o'quvchidan faqat o'zining minimal operatsion to'lovini ({contract_base:,.0f} UZS) qabul qiladi.",
+                'math_formula': f"Guruh narxi ({monthly_price:,.0f}) − O'qituvchi normasi = {contract_base:,.0f} UZS",
+                'result': f"{contract_base:,.0f} UZS (Markazga)",
+                'highlight': False,
+            },
+            {
+                'step_number': 3,
+                'title': "Yakuniy o'qituvchi ulushi",
+                'badge': "0 UZS",
+                'explanation': "O'qituvchi to'lovni o'quvchi bilan o'zaro hal qilgani sababli markaz vedomostida ushbu o'quvchi uchun 0 UZS hisoblanadi.",
+                'math_formula': "O'qituvchi ulushi = 0 UZS",
+                'result': "0 UZS",
+                'highlight': True,
+            }
+        ]
+
+    elif is_discount:
+        lesson_price = (contract_base / total_lessons) if total_lessons > 0 else 0.0
+        att_sum = lesson_price * present_count
+
+        if salary_type == 'percentage':
+            calc_share = att_sum * (commission_pct / 100.0)
+            formula_template = "(Guruh narxi ÷ Oydagi darslar) × Qatnashgan darslar × O'qituvchi foizi"
+            formula_math = f"({contract_base:,.0f} ÷ {total_lessons}) × {present_count} dars × {commission_pct}% = {calc_share:,.0f} UZS"
+            rate_display = f"{commission_pct}%"
+        else:
+            per_lesson_rate = (per_student_amount / total_lessons) if total_lessons > 0 else 0.0
+            calc_share = per_lesson_rate * present_count
+            formula_template = "(1 o'quvchi stavkasi ÷ Oydagi darslar) × Qatnashgan darslar"
+            formula_math = f"({per_student_amount:,.0f} ÷ {total_lessons}) × {present_count} dars = {calc_share:,.0f} UZS"
+            rate_display = f"{per_student_amount:,.0f} UZS / o'quvchi"
+
+        final_share = float(round(calc_share))
+        steps = [
+            {
+                'step_number': 1,
+                'title': "Guruh oylik qiymati va oydagi reja darslar",
+                'badge': "Guruh rejasi",
+                'explanation': f"Ushbu guruhning oylik shartnoma narxi {contract_base:,.0f} UZS. Oydagi tasdiqlangan darslar soni: {total_lessons} ta.",
+                'math_formula': f"Guruh narxi: {contract_base:,.0f} UZS | Darslar soni: {total_lessons} ta",
+                'result': f"{total_lessons} ta dars",
+                'highlight': False,
+            },
+            {
+                'step_number': 2,
+                'title': "1 ta darsning bazaviy qiymati",
+                'badge': "Dars qiymati",
+                'explanation': "Oylik to'lov oydagi darslar soniga bo'linib, 1 ta dars qiymati hisoblab chiqariladi.",
+                'math_formula': f"{contract_base:,.0f} UZS ÷ {total_lessons} = {lesson_price:,.2f} UZS / dars",
+                'result': f"{lesson_price:,.2f} UZS",
+                'highlight': False,
+            },
+            {
+                'step_number': 3,
+                'title': "O'quvchining haqiqiy qatnashgan darslari (Davomat)",
+                'badge': f"Davomat: {attendance_percent}%",
+                'explanation': f"O'quvchi jurnal bo'yicha jami {total_lessons} ta darsdan {present_count} tasida 'Bor' bo'lgan.",
+                'math_formula': f"Qatnashgan darslar = {present_count} ta ({attendance_percent}%)",
+                'result': f"{present_count} / {total_lessons} ta",
+                'highlight': False,
+            },
+            {
+                'step_number': 4,
+                'title': "Davlat puli holati (Kirimga va Markaz marjasiga qo'shilmaydi)",
+                'badge': "Davlat puli",
+                'explanation': "Davlat tomonidan ushbu imtiyozli o'quvchi uchun aynan qancha summa tushishi oldindan aniq bo'lmagani sababli, bu summa umumiy kassa kirimiga va markaz marjasiga qo'shilmaydi (faqat ma'lumot uchun taxminiy hisoblanadi).",
+                'math_formula': f"Taxminiy davlat puli = {att_sum:,.0f} UZS (Kassaga olinmaydi)",
+                'result': "- (Noma'lum)",
+                'highlight': False,
+            },
+            {
+                'step_number': 5,
+                'title': f"O'qituvchi stavkasi bo'yicha ulush hisobi ({rate_display})",
+                'badge': "Mentor maoshi",
+                'explanation': f"{config_source}. Mentor stavkasi darslar soniga bo'linib, o'quvchi Face ID dan o'tgan (qatnashgan) darslariga ko'paytirildi.",
+                'math_formula': formula_math,
+                'result': f"{final_share:,.0f} UZS",
+                'highlight': True,
+            }
+        ]
+
+    else:
+        # regular / low_income / negotiated
+        if salary_type == 'percentage':
+            calc_share = paid_amount * (commission_pct / 100.0)
+            final_share = float(round(calc_share))
+            formula_template = "O'quvchi to'lagan summa × (Komissiya foizi ÷ 100)"
+            formula_math = f"{paid_amount:,.0f} UZS × {commission_pct}% = {final_share:,.0f} UZS"
+            is_fully_paid = (paid_amount >= contract_base and contract_base > 0)
+
+            steps = [
+                {
+                    'step_number': 1,
+                    'title': "O'quvchi to'lagan haqiqiy mablag'",
+                    'badge': "To'liq to'langan" if is_fully_paid else "Qisman to'langan",
+                    'explanation': f"Guruh shartnoma narxi: {contract_base:,.0f} UZS. O'quvchi haqiqatda to'lagan summa: {paid_amount:,.0f} UZS.",
+                    'math_formula': f"Haqiqiy to'lov: {paid_amount:,.0f} UZS" + (f" (Qolgan qarz: {max(0.0, contract_base - paid_amount):,.0f} UZS)" if not is_fully_paid else ""),
+                    'result': f"{paid_amount:,.0f} UZS",
+                    'highlight': False,
+                },
+                {
+                    'step_number': 2,
+                    'title': f"O'qituvchining tasdiqlangan foiz stavkasi ({commission_pct}%)",
+                    'badge': f"{commission_pct}%",
+                    'explanation': f"{config_source}.",
+                    'math_formula': f"Komissiya stavkasi = {commission_pct}% (koeffitsiyent: {commission_pct / 100.0})",
+                    'result': f"{commission_pct}%",
+                    'highlight': False,
+                },
+                {
+                    'step_number': 3,
+                    'title': "O'qituvchi ulushini hisoblash arifmetik amali",
+                    'badge': "Hisoblash",
+                    'explanation': "O'qituvchi ulushi to'g'ridan-to'g'ri o'quvchi to'lagan summadan belgilangan foizni ajratib olish orqali topiladi.",
+                    'math_formula': f"{paid_amount:,.0f} UZS × ({commission_pct} ÷ 100) = {final_share:,.0f} UZS",
+                    'result': f"{final_share:,.0f} UZS",
+                    'highlight': True,
+                }
+            ]
+        else:
+            # student_count
+            is_fully_paid = (paid_amount >= contract_base and contract_base > 0)
+            if is_fully_paid:
+                calc_share = per_student_amount
+                prop_percent = 100.0
+                formula_template = "To'liq to'lov (To'lov >= Guruh narxi) → 1 o'quvchi to'liq stavkasi"
+                formula_math = f"To'lov: {paid_amount:,.0f} >= Narx: {contract_base:,.0f} → Ulush = {per_student_amount:,.0f} UZS"
+                step_detail = f"O'quvchi kurs to'lovini 100% bajarganligi sababli, o'qituvchiga ushbu o'quvchi uchun to'liq 1 o'quvchi stavkasi ({per_student_amount:,.0f} UZS) ajratiladi."
+            else:
+                prop = (paid_amount / contract_base) if contract_base > 0 else 0.0
+                calc_share = min(paid_amount, per_student_amount * prop)
+                prop_percent = round(prop * 100.0, 1)
+                formula_template = "(O'quvchi to'lagan summa ÷ Guruh narxi) × 1 o'quvchi stavkasi"
+                formula_math = f"({paid_amount:,.0f} ÷ {contract_base:,.0f}) × {per_student_amount:,.0f} UZS = {calc_share:,.0f} UZS"
+                step_detail = f"O'quvchi to'lovni qisman bajargan ({prop_percent}%). Tizim o'qituvchiga to'langan ulushga mutanosib ravishda (proporsional) haq hisoblaydi."
+
+            final_share = float(round(calc_share))
+            steps = [
+                {
+                    'step_number': 1,
+                    'title': "Shartnoma narxi va o'quvchi to'lovi",
+                    'badge': "To'liq to'lov" if is_fully_paid else f"Qisman ({prop_percent}%)",
+                    'explanation': f"Shartnoma narxi: {contract_base:,.0f} UZS. O'quvchi to'lagan summa: {paid_amount:,.0f} UZS.",
+                    'math_formula': f"To'lov: {paid_amount:,.0f} UZS / Shartnoma: {contract_base:,.0f} UZS",
+                    'result': f"{paid_amount:,.0f} UZS",
+                    'highlight': False,
+                },
+                {
+                    'step_number': 2,
+                    'title': f"1 ta o'quvchi uchun belgilangan stavka ({per_student_amount:,.0f} UZS)",
+                    'badge': f"{per_student_amount:,.0f} UZS",
+                    'explanation': f"{config_source}.",
+                    'math_formula': f"Standart stavka = {per_student_amount:,.0f} UZS / o'quvchi",
+                    'result': f"{per_student_amount:,.0f} UZS",
+                    'highlight': False,
+                },
+                {
+                    'step_number': 3,
+                    'title': "O'qituvchi ulushini hisoblash arifmetik amali",
+                    'badge': "Natija",
+                    'explanation': step_detail,
+                    'math_formula': formula_math,
+                    'result': f"{final_share:,.0f} UZS",
+                    'highlight': True,
+                }
+            ]
+
+    return {
+        'student': {
+            'id': student.id,
+            'name': student.full_name,
+            'phone': student.phone or "",
+            'status': student.status,
+            'status_label': student.get_status_display(),
+            'is_archived': False,
+            'color': student.color or "#ffffff",
+        },
+        'group': {
+            'id': grp.id if grp else None,
+            'name': grp.name if grp else "Guruh",
+            'monthly_price': monthly_price,
+        },
+        'month': str(month_date),
+        'month_display': month_display,
+        'salary_config': {
+            'type': salary_type,
+            'type_label': "Foizli (%)" if salary_type == 'percentage' else "Stavka (so'm/o'quvchi)",
+            'rate': commission_pct if salary_type == 'percentage' else per_student_amount,
+            'source': config_source,
+            'is_group_specific': is_custom_group,
+        },
+        'contract_and_payment': {
+            'standard_group_price': monthly_price,
+            'custom_fee': custom_fee,
+            'contract_amount': contract_base,
+            'paid_amount': 0.0 if is_discount else paid_amount,
+            'paid_at': paid_at,
+            'payment_method': "Davlat puli" if is_discount else payment_method,
+            'is_partial': False if is_discount else is_partial,
+            'remaining_debt': 0.0 if is_discount else max(0.0, contract_base - paid_amount),
+            'refund_amount': refund_amount,
+            'refund_ignored': refund_ignored,
+            'marked_by_name': marked_by_name or "Kassa",
+            'notes': notes,
+        },
+        'attendance': {
+            'is_attendance_based': is_discount,
+            'total_lessons': total_lessons,
+            'present_count': present_count,
+            'absent_count': max(0, total_lessons - present_count),
+            'attendance_percentage': attendance_percent,
+            'lessons': calendar_lessons,
+        },
+        'financial_metrics': {
+            'course_fee': float(contract_base),
+            'n_total': total_lessons,
+            'n_attended': present_count,
+            'absent_count': max(0, total_lessons - present_count),
+            'attendance_rate': attendance_percent,
+            'has_manual_adjustment': any(att.is_manually_adjusted for att in attendances),
+            'state_receivable_amount': None if is_discount else float(paid_amount),
+            'earned_teacher_share': float(final_share),
+            'center_gross_margin': None if is_discount else float(max(0.0, paid_amount - final_share)),
+            'estimated_state_receivable': float(att_sum) if is_discount else None,
+            'estimated_center_margin': float(max(0.0, att_sum - final_share)) if is_discount else None,
+        },
+        'audit_logs': audit_logs_list,
+        'arithmetic_calculation': {
+            'summary_title': f"{student.full_name} to'lovidan o'qituvchi ulushi tahlili",
+            'formula_template': formula_template,
+            'formula_math': formula_math,
+            'final_share': final_share,
+            'steps': steps,
+        },
+        'transactions': transactions_list,
     }
 

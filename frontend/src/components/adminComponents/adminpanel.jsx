@@ -355,7 +355,7 @@ export default function AdminPanel() {
 
                             {isNotificationOpen && (
                                 <div
-                                    className="absolute top-12 right-0 w-80 bg-black !shadow-2xl border rounded-xl lux-card-for-grps z-[100] animate-in fade-in zoom-in-95 duration-200"
+                                    className="absolute top-12 right-0 w-80 bg-[var(--bg-panel)] !shadow-2xl border border-[var(--border-glass)] rounded-xl lux-card-for-grps z-[100] animate-in fade-in zoom-in-95 duration-200"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     <div className="p-4 border-b border-[var(--border-glass)] bg-[var(--bg-void)]/50 flex justify-between items-center">

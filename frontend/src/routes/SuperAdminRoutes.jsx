@@ -45,11 +45,12 @@ const PaymentHistory = lazy(() => import("../components/SuperAdmin/Finance/Payme
 const StaffPaymentsLayout = lazy(() => import("../components/SuperAdmin/Finance/StaffPaymentsLayout"));
 const StaffPayments = lazy(() => import("../components/SuperAdmin/Finance/StaffPayments"));
 const StaffPaymentDetails = lazy(() => import("../components/SuperAdmin/Finance/StaffPaymentDetails"));
+const StaffPaidStudents = lazy(() => import("../components/SuperAdmin/Finance/StaffPaidStudents"));
 const BranchFinance = lazy(() => import("../components/SuperAdmin/Finance/BranchDetails"));
 const UtilityPayments = lazy(() => import("../components/SuperAdmin/Finance/UtilityPayments"));
 const Kassa = lazy(() => import("../components/SuperAdmin/Finance/Kassa/index.jsx"));
-const SpecialStudentsDashboard = lazy(() =>
-  import("../components/SuperAdmin/Finance/SpecialStudents/SpecialStudentsDashboard")
+const PrivilegedStudentsPage = lazy(() =>
+  import("../components/adminComponents/PrivilegedStudents/PrivilegedStudentsPage")
 );
 
 export const SuperAdminRoutes = (
@@ -62,11 +63,20 @@ export const SuperAdminRoutes = (
  <Route path="staff-payments" element={<StaffPaymentsLayout />} >
  <Route index element={<StaffPayments />} />
  <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
+ <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
  </Route>
  <Route path="utility-payments" element={<UtilityPayments />} />
  <Route path="kassa" element={<Kassa />} />
  <Route path="branch-details/:b_id" element={<BranchFinance />} />
- <Route path="branch-details/:b_id/special-students" element={<SpecialStudentsDashboard />} />
+ <Route path="branch-details/:b_id/special-students" element={<PrivilegedStudentsPage />} />
+ <Route path="special-students" element={<PrivilegedStudentsPage />} />
+ </Route>
+
+ {/* Direct Staff Payments Alias (accessible without all-payments prefix) */}
+ <Route path="staff-payments" element={<StaffPaymentsLayout />}>
+ <Route index element={<StaffPayments />} />
+ <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
+ <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
  </Route>
 
  {/* Branches Management Section */}
@@ -74,6 +84,7 @@ export const SuperAdminRoutes = (
  <Route path="profile" element={<SuperAdminProfile />} />
  <Route index element={<div className="w-full h-screen flex justify-center items-center m-auto text-[var(--text-secondary)]"><h1 className="-mt-84 text-5xl font-black capitalize opacity-20">Filialni tanlang</h1> </div>} />
  <Route path="add-branch" element={<BranchCreate />} />
+ <Route path="special-students" element={<PrivilegedStudentsPage />} />
  
  {/* Specific Branch Scope */}
  <Route path="branch/:branch_id" element={<BranchLayout />}>
@@ -116,6 +127,7 @@ export const SuperAdminRoutes = (
  </Route>
 
  <Route path="waiting-hall" element={<WaitingHall />} />
+ <Route path="special-students" element={<PrivilegedStudentsPage />} />
  </Route>
  </Route>
  </Route>

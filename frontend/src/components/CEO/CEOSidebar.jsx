@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { ceoLogout } from '../../store/slices/ceoSlice';
+import ThemeToggle from '../ThemeToggle';
 
 const navItems = [
   {
@@ -87,19 +88,22 @@ export default function CEOSidebar() {
 
       {/* User Footer */}
       <div className="px-4 py-4" style={{ borderTop: '1px solid var(--border-glass)' }}>
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-            style={{ background: 'var(--gold)', color: '#000' }}>
-            {user?.full_name?.[0] || 'C'}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+              style={{ background: 'var(--gold)', color: '#000' }}>
+              {user?.full_name?.[0] || 'C'}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                {user?.full_name || 'CEO'}
+              </p>
+              <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                {user?.email || ''}
+              </p>
+            </div>
           </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-              {user?.full_name || 'CEO'}
-            </p>
-            <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-              {user?.email || ''}
-            </p>
-          </div>
+          <ThemeToggle />
         </div>
         <button onClick={handleLogout}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all"

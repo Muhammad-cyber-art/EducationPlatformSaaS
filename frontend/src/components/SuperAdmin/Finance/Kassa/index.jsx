@@ -17,6 +17,8 @@ const Kassa = () => {
         hasMoreWithdrawals,
         loadMore,
         branches,
+        groups,
+        loadingGroups,
         selectedPayment,
         setSelectedPayment,
         showDetailModal,
@@ -80,6 +82,8 @@ const Kassa = () => {
                     filters={filters}
                     setFilters={setFilters}
                     branches={branches}
+                    groups={groups}
+                    loadingGroups={loadingGroups}
                     clearFilters={clearFilters}
                     setToday={setToday}
                     activeTab={activeTab}

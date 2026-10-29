@@ -42,9 +42,26 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
   const [selectedYear, setSelectedYear] = useState(today.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1); // 1-12
   const [selectedGroupId, setSelectedGroupId] = useState("");
-  const [viewMode, setViewMode] = useState("horizontal"); // 'horizontal' (GitHub matrix) or 'calendar' (7-col calendar)
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) {
+      return "calendar";
+    }
+    return "horizontal";
+  }); // 'horizontal' (GitHub matrix) or 'calendar' (7-col calendar)
   const [hoveredDay, setHoveredDay] = useState(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, isBelow: false });
+
+  // Ekran o'lchamini kuzatish (responsive holat)
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(typeof window !== "undefined" && window.innerWidth < 640);
+    };
+    window.addEventListener("resize", handleResize, { passive: true });
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const isCurrentMonth =
     selectedYear === today.getFullYear() && selectedMonth === today.getMonth() + 1;
@@ -140,7 +157,7 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
     return Array.from(map.values());
   }, [studentGroups, groups]);
 
-  // Guruh tanlanganda kunlar va statistikani alohida filtrlab ajratish (ikkita guruh kunlari aralashib ketmasligi uchun)
+  // Guruh tanlanganda kunlar va statistikani alohida filtrlab ajratish
   const { days, stats } = useMemo(() => {
     const rawDays = attendancePayload?.days || [];
     const serverStats = attendancePayload?.stats;
@@ -225,14 +242,21 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
     };
   }, [attendancePayload, selectedGroupId, allGroupsList]);
 
-  // Sahifa aylantirilganda (scroll) tooltipni xavfsiz yopish
+  // Sahifa aylantirilganda (scroll) yoki tashqariga bosilganda tooltip/kartani yopish
   useEffect(() => {
     const handleScroll = () => {
-      if (hoveredDay) setHoveredDay(null);
+      if (hoveredDay && !isMobile) setHoveredDay(null);
+    };
+    const handleClickOutside = () => {
+      setHoveredDay(null);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [hoveredDay]);
+    window.addEventListener("click", handleClickOutside);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("click", handleClickOutside);
+    };
+  }, [hoveredDay, isMobile]);
 
   // Oylarni navigatsiya qilish
   const handlePrevMonth = () => {
@@ -303,22 +327,38 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
     return weeks;
   }, [days]);
 
-  // Tooltip koordinatalari (ekrandan chiqib ketishini oldini oluvchi clamping)
-  const handleMouseEnter = (day, e) => {
+  // Tooltip koordinatalari va pozitsiyasini hisoblash
+  const handleDayInteraction = (day, e) => {
     if (!day) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const rawX = rect.left + rect.width / 2;
     const screenWidth = typeof window !== "undefined" ? window.innerWidth : 800;
-    const clampedX = Math.max(140, Math.min(screenWidth - 140, rawX));
+    const clampedX = Math.max(130, Math.min(screenWidth - 130, rawX));
+    const isNearTop = rect.top < 120;
+    const targetY = isNearTop ? rect.bottom + 10 : rect.top - 8;
+
     setTooltipPos({
       x: clampedX,
-      y: rect.top - 8,
+      y: targetY,
+      isBelow: isNearTop,
     });
     setHoveredDay(day);
   };
 
+  const handleCellClick = (day, e) => {
+    if (!day) return;
+    e.stopPropagation();
+    if (hoveredDay?.date === day.date) {
+      setHoveredDay(null);
+    } else {
+      handleDayInteraction(day, e);
+    }
+  };
+
   const handleMouseLeave = () => {
-    setHoveredDay(null);
+    if (!isMobile) {
+      setHoveredDay(null);
+    }
   };
 
   // Katak uslublari (och va to'yg'in yashil, qon kabi qizil, toza adaptiv fon)
@@ -326,15 +366,13 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
     if (!day) return "bg-transparent opacity-0 pointer-events-none border-transparent";
 
     const base = isLarge
-      ? "relative rounded-xl p-2.5 transition-all duration-200 cursor-pointer select-none border flex flex-col justify-between"
-      : "relative rounded-xl px-2.5 sm:px-3.5 py-1.5 transition-all duration-200 cursor-pointer select-none border flex items-center justify-between";
+      ? "relative rounded-lg sm:rounded-xl p-1 sm:p-2 md:p-2.5 transition-all duration-200 cursor-pointer select-none border flex flex-col justify-between"
+      : "relative rounded-lg sm:rounded-xl px-1.5 sm:px-2.5 md:px-3.5 py-1 sm:py-1.5 transition-all duration-200 cursor-pointer select-none border flex items-center justify-between";
 
     switch (day.status) {
       case "present":
-        // Och va to'yg'in yashil (Vibrant Emerald) - text-white-force orqali har ikki mavzuda ham oq matn
         return `${base} bg-[#16a34a] hover:bg-[#15803d] border-[#4ade80] text-white shadow-[0_0_16px_rgba(22,163,74,0.35)] hover:scale-[1.02] font-black z-10 text-white-force`;
       case "absent":
-        // Qon kabi qizil (Deep Crimson / Blood Red) - text-white-force orqali har ikki mavzuda ham oq matn
         return `${base} bg-[#991b1b] hover:bg-[#7f1d1d] border-[#ef4444] text-white shadow-[0_0_16px_rgba(153,27,27,0.45)] hover:scale-[1.02] font-black z-10 text-white-force`;
       case "unconfirmed":
         return `${base} bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-[#fde68a] hover:bg-amber-500/25 hover:border-amber-400 shadow-sm hover:scale-[1.02] z-10`;
@@ -344,42 +382,41 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
         return `${base} bg-black/5 dark:bg-white/[0.02] border-black/5 dark:border-white/5 text-[var(--text-muted)] opacity-40 cursor-not-allowed`;
       case "no_lesson":
       default:
-        // Adaptiv yengil fon (Lightda och qumtosh/oqish, Darkda qora obsidian)
         return `${base} bg-[var(--bg-void)]/60 dark:bg-white/[0.02] border-[var(--border-glass)] text-[var(--text-muted)] hover:border-[var(--gold)]/40 hover:bg-[var(--gold)]/5 hover:text-[var(--text-primary)]`;
     }
   };
 
   return (
-    <div className="lux-card space-y-6 border border-[var(--border-glass)] shadow-xl relative overflow-visible w-full bg-[var(--card-bg)]">
+    <div className="lux-card space-y-5 sm:space-y-6 border border-[var(--border-glass)] shadow-xl relative overflow-visible w-full bg-[var(--card-bg)] p-3.5 sm:p-5 md:p-6">
       {/* 1. HEADER: Title, Month Navigation & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-[var(--border-glass)]">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-5 border-b border-[var(--border-glass)]">
         {/* Title */}
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/25 flex items-center justify-center text-[var(--gold)] shadow-sm shrink-0">
-            <CalendarIcon size={22} />
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/25 flex items-center justify-center text-[var(--gold)] shadow-sm shrink-0">
+            <CalendarIcon size={20} className="sm:w-[22px] sm:h-[22px]" />
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-black text-[var(--text-primary)] tracking-tight">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base md:text-lg font-black text-[var(--text-primary)] tracking-tight">
                 Davomat faolligi kalendari
               </h3>
-              <span className="px-2.5 py-0.5 rounded-full bg-[var(--gold)]/10 border border-[var(--gold)]/25 text-[var(--gold)] text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                <Flame size={11} /> 1 oylik heatmap
+              <span className="px-2 py-0.5 rounded-full bg-[var(--gold)]/10 border border-[var(--gold)]/25 text-[var(--gold)] text-[8px] sm:text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                <Flame size={10} /> 1 oylik heatmap
               </span>
             </div>
-            <p className="text-[10px] font-bold text-[var(--text-muted)] mt-0.5">
-              GitHub uslubidagi darsga qatnashish tahlili
+            <p className="text-[9px] sm:text-[10px] font-bold text-[var(--text-muted)] mt-0.5">
+              O'quvchining haqiqiy darsga qatnashish tahlili
             </p>
           </div>
         </div>
 
         {/* Boshqaruv elementlari */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full lg:w-auto">
           {/* Ko'rinish rejimi: Gorizontal Matritsa vs 7-ustunlik Kalendar */}
           <div className="flex items-center bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-xl p-1 shadow-sm">
             <button
               onClick={() => setViewMode("horizontal")}
-              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
                 viewMode === "horizontal"
                   ? "bg-[var(--gold)] text-white text-white-force shadow-md font-black"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -387,11 +424,11 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
               title="Gorizontal keng matritsa"
             >
               <Columns size={13} />
-              <span className="hidden sm:inline">Gorizontal</span>
+              <span className="hidden xs:inline sm:inline">Matritsa</span>
             </button>
             <button
               onClick={() => setViewMode("calendar")}
-              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
                 viewMode === "calendar"
                   ? "bg-[var(--gold)] text-white text-white-force shadow-md font-black"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -399,7 +436,7 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
               title="Klassik 7-ustunlik kalendar"
             >
               <LayoutGrid size={13} />
-              <span className="hidden sm:inline">Kalendar</span>
+              <span className="hidden xs:inline sm:inline">Kalendar</span>
             </button>
           </div>
 
@@ -410,10 +447,10 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
               className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--gold)] hover:bg-[var(--gold)]/10 rounded-lg transition-all active:scale-95"
               title="Oldingi oy"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={15} />
             </button>
 
-            <span className="px-3 text-xs font-black text-[var(--text-primary)] min-w-[110px] text-center whitespace-nowrap">
+            <span className="px-2 sm:px-3 text-[11px] sm:text-xs font-black text-[var(--text-primary)] min-w-[95px] sm:min-w-[110px] text-center whitespace-nowrap">
               {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
             </span>
 
@@ -422,14 +459,14 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
               className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--gold)] hover:bg-[var(--gold)]/10 rounded-lg transition-all active:scale-95"
               title="Keyingi oy"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={15} />
             </button>
           </div>
 
           {!isCurrentMonth && (
             <button
               onClick={handleGoToday}
-              className="h-8 px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider hover:bg-emerald-500/25 transition-all active:scale-95 flex items-center gap-1"
+              className="h-8 px-2.5 sm:px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[8px] sm:text-[9px] font-black uppercase tracking-wider hover:bg-emerald-500/25 transition-all active:scale-95 flex items-center gap-1"
             >
               Bugun
             </button>
@@ -437,7 +474,7 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
 
           {isFetching && (
             <Loader2
-              size={16}
+              size={15}
               className="animate-spin text-[var(--gold)] opacity-70"
             />
           )}
@@ -446,15 +483,15 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
 
       {/* 2. GURUH TAGLARI (GROUP FILTER PILLS) */}
       {allGroupsList.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap pt-1 pb-1">
-          <span className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mr-1 flex items-center gap-1.5 shrink-0">
-            <GraduationCap size={14} className="text-[var(--gold)]" /> Guruhlar:
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap pt-0.5 pb-0.5">
+          <span className="text-[9px] sm:text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mr-1 flex items-center gap-1.5 shrink-0">
+            <GraduationCap size={13} className="text-[var(--gold)]" /> Guruhlar:
           </span>
 
           {/* Barcha guruhlar tagi */}
           <button
             onClick={() => setSelectedGroupId("")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all active:scale-95 border ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all active:scale-95 border ${
               !selectedGroupId
                 ? "bg-[var(--gold)] text-white text-white-force border-[var(--gold)] shadow-md shadow-[var(--gold)]/20"
                 : "bg-[var(--bg-void)] text-[var(--text-secondary)] border-[var(--border-glass)] hover:border-[var(--gold)]/40 hover:text-[var(--text-primary)]"
@@ -462,7 +499,7 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
           >
             <span>Barcha guruhlar</span>
             <span
-              className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+              className={`text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full font-black ${
                 !selectedGroupId
                   ? "bg-white/25 text-white text-white-force"
                   : "bg-[var(--bg-panel)] text-[var(--text-muted)]"
@@ -479,14 +516,14 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
               <button
                 key={g.id}
                 onClick={() => setSelectedGroupId(String(g.id))}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all active:scale-95 border ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all active:scale-95 border ${
                   isSelected
                     ? "bg-[var(--gold)] text-white text-white-force border-[var(--gold)] shadow-md shadow-[var(--gold)]/20"
                     : "bg-[var(--bg-void)] text-[var(--text-secondary)] border-[var(--border-glass)] hover:border-[var(--gold)]/40 hover:text-[var(--text-primary)]"
                 }`}
               >
                 <div
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                     isSelected ? "bg-white" : "bg-[var(--gold)]"
                   }`}
                 />
@@ -498,67 +535,67 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
       )}
 
       {/* 2. STATS KPI WIDGETS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4 w-full">
         {/* Oydagi darslar */}
-        <div className="p-3.5 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center gap-3.5 shadow-sm">
-          <div className="w-9 h-9 rounded-xl bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/20 flex items-center justify-center shrink-0 shadow-sm">
-            <CalendarDays size={18} />
+        <div className="p-2.5 sm:p-3.5 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/20 flex items-center justify-center shrink-0 shadow-sm">
+            <CalendarDays size={16} className="sm:w-[18px] sm:h-[18px]" />
           </div>
           <div className="min-w-0">
-            <p className="text-[8px] sm:text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">
+            <p className="text-[8px] sm:text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider truncate">
               Oydagi darslar
             </p>
-            <p className="text-base sm:text-lg font-black text-[var(--text-primary)] tabular-nums">
+            <p className="text-sm sm:text-base md:text-lg font-black text-[var(--text-primary)] tabular-nums">
               {stats.total_scheduled} ta
             </p>
           </div>
         </div>
 
         {/* Qatnashdi (Kelgan - Och va to'yg'in yashil) */}
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3.5 shadow-sm">
-          <div className="w-9 h-9 rounded-xl bg-[#16a34a] text-white border border-[#4ade80] flex items-center justify-center shrink-0 shadow-md text-white-force">
-            <CheckCircle2 size={18} />
+        <div className="p-2.5 sm:p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#16a34a] text-white border border-[#4ade80] flex items-center justify-center shrink-0 shadow-md text-white-force">
+            <CheckCircle2 size={16} className="sm:w-[18px] sm:h-[18px] text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-[8px] sm:text-[9px] font-black text-emerald-600 dark:text-[#4ade80] uppercase tracking-wider">
+            <p className="text-[8px] sm:text-[9px] font-black text-emerald-600 dark:text-[#4ade80] uppercase tracking-wider truncate">
               Qatnashdi
             </p>
-            <p className="text-base sm:text-lg font-black text-emerald-600 dark:text-[#4ade80] tabular-nums">
+            <p className="text-sm sm:text-base md:text-lg font-black text-emerald-600 dark:text-[#4ade80] tabular-nums">
               {stats.attended_count} ta
             </p>
           </div>
         </div>
 
         {/* Qoldirdi (Kelmagan - Qon kabi qizil) */}
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-3.5 shadow-sm">
-          <div className="w-9 h-9 rounded-xl bg-[#991b1b] text-white border border-[#ef4444] flex items-center justify-center shrink-0 shadow-md text-white-force">
-            <XCircle size={18} />
+        <div className="p-2.5 sm:p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#991b1b] text-white border border-[#ef4444] flex items-center justify-center shrink-0 shadow-md text-white-force">
+            <XCircle size={16} className="sm:w-[18px] sm:h-[18px] text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-[8px] sm:text-[9px] font-black text-red-600 dark:text-[#f87171] uppercase tracking-wider">
+            <p className="text-[8px] sm:text-[9px] font-black text-red-600 dark:text-[#f87171] uppercase tracking-wider truncate">
               Qoldirdi
             </p>
-            <p className="text-base sm:text-lg font-black text-red-600 dark:text-[#f87171] tabular-nums">
+            <p className="text-sm sm:text-base md:text-lg font-black text-red-600 dark:text-[#f87171] tabular-nums">
               {stats.absent_count} ta
             </p>
           </div>
         </div>
 
         {/* Davomat darajasi */}
-        <div className="p-3.5 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center gap-3.5 shadow-sm">
-          <div className="w-9 h-9 rounded-xl bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/20 flex items-center justify-center shrink-0 shadow-sm">
-            <Award size={18} />
+        <div className="p-2.5 sm:p-3.5 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/20 flex items-center justify-center shrink-0 shadow-sm">
+            <Award size={16} className="sm:w-[18px] sm:h-[18px]" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex justify-between items-center">
-              <p className="text-[8px] sm:text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">
+              <p className="text-[8px] sm:text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider truncate">
                 Ko'rsatkich
               </p>
               <span className="text-[11px] sm:text-xs font-black text-[var(--gold)] tabular-nums">
                 {stats.attendance_rate}%
               </span>
             </div>
-            <div className="w-full bg-black/10 dark:bg-white/10 h-2 rounded-full overflow-hidden mt-1.5 border border-black/5 dark:border-white/5 shadow-inner">
+            <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 sm:h-2 rounded-full overflow-hidden mt-1 sm:mt-1.5 border border-black/5 dark:border-white/5 shadow-inner">
               <div
                 className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-[var(--gold)] via-emerald-500 to-green-500 shadow-[0_0_8px_rgba(34,197,94,0.3)]"
                 style={{ width: `${Math.min(100, Math.max(0, stats.attendance_rate))}%` }}
@@ -596,100 +633,111 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
              OPTION A: GITHUB-STYLE EXPANDED HORIZONTAL MATRIX
              7 Rows (Dushanba..Yakshanba) x Full-width Week Columns
              ========================================================== */
-          <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
-            <div className="w-full min-w-[650px] space-y-2.5">
-              {/* Hafta ustunlari sarlavhalari (100% eniga yoyilgan) */}
-              <div
-                className="grid gap-2 sm:gap-3 w-full items-center mb-1"
-                style={{
-                  gridTemplateColumns: `48px repeat(${horizontalGrid.numWeeks}, minmax(0, 1fr))`,
-                }}
-              >
-                <div />
-                {Array.from({ length: horizontalGrid.numWeeks }).map((_, colIdx) => (
-                  <div
-                    key={colIdx}
-                    className="text-center py-1.5 px-1 rounded-lg bg-[var(--bg-void)] border border-[var(--border-glass)] text-[10px] sm:text-xs font-black text-[var(--gold)] tracking-wider shadow-sm"
-                  >
-                    {colIdx + 1}-hafta
-                  </div>
-                ))}
-              </div>
+          <div className="w-full space-y-1.5">
+            {/* Kichik ekranlar uchun navigatsiya eslatmasi */}
+            <div className="sm:hidden flex items-center justify-between text-[10px] text-[var(--text-muted)] font-bold px-1">
+              <span className="flex items-center gap-1">
+                <span>↔</span> Barmoq bilan suring
+              </span>
+              <span>Katakka bosib ko'ring</span>
+            </div>
 
-              {/* 7 ta hafta kuni qatorlari */}
-              <div className="space-y-2 w-full">
-                {DAY_NAMES.map((dayName, rowIdx) => (
-                  <div
-                    key={rowIdx}
-                    className="grid gap-2 sm:gap-3 w-full items-center"
-                    style={{
-                      gridTemplateColumns: `48px repeat(${horizontalGrid.numWeeks}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {/* Hafta kuni nomi */}
-                    <div className="text-right pr-2 text-[10px] sm:text-xs font-black text-[var(--text-muted)] select-none">
-                      {dayName.short}
+            <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
+              <div className="w-full min-w-[580px] sm:min-w-[650px] space-y-2">
+                {/* Hafta ustunlari sarlavhalari (100% eniga yoyilgan) */}
+                <div
+                  className="grid gap-1.5 sm:gap-2.5 md:gap-3 w-full items-center mb-1"
+                  style={{
+                    gridTemplateColumns: `36px repeat(${horizontalGrid.numWeeks}, minmax(0, 1fr))`,
+                  }}
+                >
+                  <div />
+                  {Array.from({ length: horizontalGrid.numWeeks }).map((_, colIdx) => (
+                    <div
+                      key={colIdx}
+                      className="text-center py-1 sm:py-1.5 px-1 rounded-lg bg-[var(--bg-void)] border border-[var(--border-glass)] text-[9px] sm:text-xs font-black text-[var(--gold)] tracking-wider shadow-sm"
+                    >
+                      {colIdx + 1}-h.
                     </div>
+                  ))}
+                </div>
 
-                    {/* Haftalar bo'yicha to'liq eniga cho'zilgan kataklar */}
-                    {Array.from({ length: horizontalGrid.numWeeks }).map((_, colIdx) => {
-                      const day = horizontalGrid.rows[rowIdx]?.[colIdx];
-                      return (
-                        <div
-                          key={colIdx}
-                          onMouseEnter={(e) => day && handleMouseEnter(day, e)}
-                          onMouseLeave={handleMouseLeave}
-                          className={`w-full h-10 sm:h-12 ${getCellClasses(day, false)}`}
-                        >
-                          {day && (
-                            <>
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span
-                                  className={`text-[11px] sm:text-xs font-black tabular-nums ${
-                                    day.status === "present" || day.status === "absent"
-                                      ? "text-white text-white-force"
-                                      : day.is_today
-                                      ? "text-[var(--gold)] underline decoration-2 underline-offset-2 font-black"
-                                      : "text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
-                                  }`}
-                                >
-                                  {day.day}
-                                </span>
-                              </div>
+                {/* 7 ta hafta kuni qatorlari */}
+                <div className="space-y-1.5 sm:space-y-2 w-full">
+                  {DAY_NAMES.map((dayName, rowIdx) => (
+                    <div
+                      key={rowIdx}
+                      className="grid gap-1.5 sm:gap-2.5 md:gap-3 w-full items-center"
+                      style={{
+                        gridTemplateColumns: `36px repeat(${horizontalGrid.numWeeks}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {/* Hafta kuni nomi */}
+                      <div className="text-right pr-1 sm:pr-2 text-[10px] sm:text-xs font-black text-[var(--text-muted)] select-none">
+                        {dayName.short}
+                      </div>
 
-                              <div className="flex items-center gap-1 shrink-0">
-                                {day.status === "present" && (
-                                  <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-black text-white text-white-force drop-shadow-sm">
-                                    <CheckCircle2 size={15} className="shrink-0 text-white" />
-                                    <span className="hidden lg:inline text-white font-black text-white-force">Keldi</span>
+                      {/* Haftalar bo'yicha to'liq eniga cho'zilgan kataklar */}
+                      {Array.from({ length: horizontalGrid.numWeeks }).map((_, colIdx) => {
+                        const day = horizontalGrid.rows[rowIdx]?.[colIdx];
+                        return (
+                          <div
+                            key={colIdx}
+                            onClick={(e) => handleCellClick(day, e)}
+                            onMouseEnter={(e) => day && !isMobile && handleDayInteraction(day, e)}
+                            onMouseLeave={handleMouseLeave}
+                            className={`w-full h-9 sm:h-11 md:h-12 ${getCellClasses(day, false)}`}
+                          >
+                            {day && (
+                              <>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span
+                                    className={`text-[10px] sm:text-xs font-black tabular-nums ${
+                                      day.status === "present" || day.status === "absent"
+                                        ? "text-white text-white-force"
+                                        : day.is_today
+                                        ? "text-[var(--gold)] underline decoration-2 underline-offset-2 font-black"
+                                        : "text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
+                                    }`}
+                                  >
+                                    {day.day}
                                   </span>
-                                )}
-                                {day.status === "absent" && (
-                                  <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-black text-white text-white-force drop-shadow-sm">
-                                    <XCircle size={15} className="shrink-0 text-white" />
-                                    <span className="hidden lg:inline text-white font-black text-white-force">Qoldi</span>
-                                  </span>
-                                )}
-                                {day.status === "unconfirmed" && (
-                                  <span className="flex items-center gap-1 text-[9px] font-bold text-amber-700 dark:text-[#fde68a]">
-                                    <HelpCircle size={13} className="shrink-0" />
-                                    <span className="hidden xl:inline">Olinmagan</span>
-                                  </span>
-                                )}
-                                {day.status === "future" && (
-                                  <span className="flex items-center gap-1 text-[9px] font-bold text-sky-700 dark:text-[#38bdf8]">
-                                    <Clock size={13} className="shrink-0" />
-                                    <span className="hidden xl:inline">Rejada</span>
-                                  </span>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {day.status === "present" && (
+                                    <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-black text-white text-white-force drop-shadow-sm">
+                                      <CheckCircle2 size={14} className="shrink-0 text-white sm:w-[15px] sm:h-[15px]" />
+                                      <span className="hidden lg:inline text-white font-black text-white-force">Keldi</span>
+                                    </span>
+                                  )}
+                                  {day.status === "absent" && (
+                                    <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-black text-white text-white-force drop-shadow-sm">
+                                      <XCircle size={14} className="shrink-0 text-white sm:w-[15px] sm:h-[15px]" />
+                                      <span className="hidden lg:inline text-white font-black text-white-force">Qoldi</span>
+                                    </span>
+                                  )}
+                                  {day.status === "unconfirmed" && (
+                                    <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold text-amber-700 dark:text-[#fde68a]">
+                                      <HelpCircle size={12} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
+                                      <span className="hidden xl:inline">Olinmagan</span>
+                                    </span>
+                                  )}
+                                  {day.status === "future" && (
+                                    <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold text-sky-700 dark:text-[#38bdf8]">
+                                      <Clock size={12} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
+                                      <span className="hidden xl:inline">Rejada</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -698,13 +746,13 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
              OPTION B: STANDARD 7-COLUMN FULL-WIDTH CALENDAR
              Columns = Mon..Sun (100% width) x Weeks Rows
              ========================================================== */
-          <div className="w-full space-y-2">
+          <div className="w-full space-y-1.5 sm:space-y-2">
             {/* 7 Ustun sarlavhalari */}
-            <div className="grid grid-cols-7 gap-2 sm:gap-3 w-full text-center">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-3 w-full text-center">
               {DAY_NAMES.map((d, idx) => (
                 <div
                   key={idx}
-                  className="py-2.5 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] text-[10px] sm:text-xs font-black text-[var(--gold)] uppercase tracking-wider shadow-sm"
+                  className="py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] text-[9px] sm:text-xs font-black text-[var(--gold)] uppercase tracking-wider shadow-sm"
                 >
                   <span className="hidden sm:inline">{d.full}</span>
                   <span className="sm:hidden">{d.short}</span>
@@ -713,15 +761,16 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
             </div>
 
             {/* Haftalar qatorlari */}
-            <div className="space-y-2.5 w-full">
+            <div className="space-y-1.5 sm:space-y-2.5 w-full">
               {calendarColsGrid.map((week, weekIdx) => (
-                <div key={weekIdx} className="grid grid-cols-7 gap-2 sm:gap-3 w-full">
+                <div key={weekIdx} className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-3 w-full">
                   {week.map((day, dayIdx) => (
                     <div
                       key={dayIdx}
-                      onMouseEnter={(e) => day && handleMouseEnter(day, e)}
+                      onClick={(e) => handleCellClick(day, e)}
+                      onMouseEnter={(e) => day && !isMobile && handleDayInteraction(day, e)}
                       onMouseLeave={handleMouseLeave}
-                      className={`w-full min-h-[60px] sm:min-h-[74px] ${getCellClasses(
+                      className={`w-full min-h-[48px] sm:min-h-[64px] md:min-h-[74px] ${getCellClasses(
                         day,
                         true
                       )}`}
@@ -730,11 +779,11 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
                         <>
                           <div className="flex items-center justify-between w-full">
                             <span
-                              className={`text-xs sm:text-sm font-black tabular-nums ${
+                              className={`text-[11px] sm:text-xs md:text-sm font-black tabular-nums ${
                                 day.status === "present" || day.status === "absent"
                                   ? "text-white text-white-force"
                                   : day.is_today
-                                  ? "text-[var(--gold)] font-black ring-1 ring-[var(--gold)] px-1.5 py-0.5 rounded-lg bg-[var(--gold)]/10"
+                                  ? "text-[var(--gold)] font-black ring-1 ring-[var(--gold)] px-1 sm:px-1.5 py-0.5 rounded-md sm:rounded-lg bg-[var(--gold)]/10"
                                   : "text-[var(--text-muted)]"
                               }`}
                             >
@@ -742,39 +791,39 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
                             </span>
 
                             {day.is_today && (
-                              <span className="text-[8px] font-black text-amber-500 bg-amber-500/15 border border-amber-500/30 px-1 py-0.5 rounded uppercase hidden md:inline">
+                              <span className="text-[7px] sm:text-[8px] font-black text-amber-500 bg-amber-500/15 border border-amber-500/30 px-1 py-0.5 rounded uppercase hidden md:inline">
                                 Bugun
                               </span>
                             )}
                           </div>
 
-                          <div className="mt-1 flex items-center justify-between w-full text-[9px] sm:text-[10px] font-black">
+                          <div className="mt-0.5 sm:mt-1 flex items-center justify-center sm:justify-between w-full text-[9px] sm:text-[10px] font-black">
                             {day.status === "present" && (
                               <span className="text-white flex items-center gap-1 font-black text-white-force drop-shadow-sm">
-                                <CheckCircle2 size={15} className="text-white" />
+                                <CheckCircle2 size={14} className="text-white shrink-0 sm:w-[15px] sm:h-[15px]" />
                                 <span className="hidden sm:inline">Kelgan</span>
                               </span>
                             )}
                             {day.status === "absent" && (
                               <span className="text-white flex items-center gap-1 font-black text-white-force drop-shadow-sm">
-                                <XCircle size={15} className="text-white" />
+                                <XCircle size={14} className="text-white shrink-0 sm:w-[15px] sm:h-[15px]" />
                                 <span className="hidden sm:inline">Qoldirgan</span>
                               </span>
                             )}
                             {day.status === "unconfirmed" && (
                               <span className="text-amber-700 dark:text-[#fde68a] flex items-center gap-1 font-black">
-                                <HelpCircle size={13} />
+                                <HelpCircle size={12} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
                                 <span className="hidden sm:inline">Olinmagan</span>
                               </span>
                             )}
                             {day.status === "future" && (
                               <span className="text-sky-700 dark:text-[#38bdf8] flex items-center gap-1 font-black">
-                                <Clock size={13} />
+                                <Clock size={12} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
                                 <span className="hidden sm:inline">Rejada</span>
                               </span>
                             )}
                             {day.status === "no_lesson" && (
-                              <span className="text-[var(--text-muted)] text-[8px] font-semibold">
+                              <span className="text-[var(--text-muted)] text-[8px] font-semibold hidden sm:inline">
                                 Dars yo'q
                               </span>
                             )}
@@ -790,95 +839,166 @@ export default function StudentAttendanceHeatmap({ studentId, studentName, stude
         )}
       </div>
 
-      {/* 4. FLOATING INTERACTIVE TOOLTIP */}
+      {/* 4. FLOATING INTERACTIVE TOOLTIP / MOBILE BOTTOM SHEET */}
       {hoveredDay && (
-        <div
-          className="fixed z-[99999] pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3 bg-[#121212] border border-[#333333] text-white rounded-xl px-4 py-2.5 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 dark-tooltip text-white-force"
-          style={{ top: `${tooltipPos.y}px`, left: `${tooltipPos.x}px` }}
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-black text-[var(--gold)]">
-              {hoveredDay.date}
-            </span>
-            <span className="text-[10px] text-[#aaaaaa] font-bold">
-              ({DAY_NAMES[hoveredDay.day_of_week]?.full})
-            </span>
-            {hoveredDay.is_today && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[8px] font-black uppercase">
-                Bugun
-              </span>
+        isMobile ? (
+          /* MOBILE BOTTOM SHEET POPUP */
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-x-3 bottom-4 z-[99999] bg-[#121212]/95 border-2 border-[var(--gold)]/40 text-white rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.85)] backdrop-blur-xl animate-in slide-in-from-bottom-4 duration-200 text-white-force"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-[var(--gold)]">
+                  {hoveredDay.date}
+                </span>
+                <span className="text-xs text-[#aaaaaa] font-bold">
+                  ({DAY_NAMES[hoveredDay.day_of_week]?.full})
+                </span>
+                {hoveredDay.is_today && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[8px] font-black uppercase">
+                    Bugun
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setHoveredDay(null)}
+                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-black py-1">
+              {hoveredDay.status === "present" && (
+                <span className="text-[#4ade80] flex items-center gap-1.5 text-xs sm:text-sm font-black">
+                  <CheckCircle2 size={16} /> Darsga to'liq qatnashgan (Kelgan)
+                </span>
+              )}
+              {hoveredDay.status === "absent" && (
+                <span className="text-[#f87171] flex items-center gap-1.5 text-xs sm:text-sm font-black">
+                  <XCircle size={16} /> Dars qoldirgan (Qon qizil)
+                </span>
+              )}
+              {hoveredDay.status === "unconfirmed" && (
+                <span className="text-[#fde68a] flex items-center gap-1.5 text-xs sm:text-sm font-black">
+                  <HelpCircle size={16} /> Dars o'tilgan, ammo davomat kiritilmagan
+                </span>
+              )}
+              {hoveredDay.status === "future" && (
+                <span className="text-[#38bdf8] flex items-center gap-1.5 text-xs sm:text-sm font-black">
+                  <Clock size={16} /> Rejalashtirilgan dars kuni
+                </span>
+              )}
+              {hoveredDay.status === "not_joined" && (
+                <span className="text-[#aaaaaa] flex items-center gap-1.5 text-xs">
+                  O'quvchi guruhga qo'shilishidan oldingi dars
+                </span>
+              )}
+              {hoveredDay.status === "no_lesson" && (
+                <span className="text-[#aaaaaa] text-xs">Dars kuni emas</span>
+              )}
+            </div>
+
+            {hoveredDay.groups && hoveredDay.groups.length > 0 && (
+              <p className="text-[11px] text-[#cccccc] mt-2 pt-1.5 border-t border-white/10 font-bold">
+                Guruh: <span className="text-white font-black text-white-force">{hoveredDay.groups.join(", ")}</span>
+              </p>
             )}
           </div>
+        ) : (
+          /* DESKTOP FLOATING CURSOR TOOLTIP */
+          <div
+            className={`fixed z-[99999] pointer-events-none transform -translate-x-1/2 bg-[#121212]/95 border border-[#333333] text-white rounded-xl px-4 py-2.5 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 dark-tooltip text-white-force ${
+              tooltipPos.isBelow ? "mt-2 translate-y-0" : "mb-3 -translate-y-full"
+            }`}
+            style={{ top: `${tooltipPos.y}px`, left: `${tooltipPos.x}px` }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-black text-[var(--gold)]">
+                {hoveredDay.date}
+              </span>
+              <span className="text-[10px] text-[#aaaaaa] font-bold">
+                ({DAY_NAMES[hoveredDay.day_of_week]?.full})
+              </span>
+              {hoveredDay.is_today && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[8px] font-black uppercase">
+                  Bugun
+                </span>
+              )}
+            </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-black">
-            {hoveredDay.status === "present" && (
-              <span className="text-[#4ade80] flex items-center gap-1">
-                <CheckCircle2 size={14} /> Darsga to'liq qatnashgan (Kelgan)
-              </span>
-            )}
-            {hoveredDay.status === "absent" && (
-              <span className="text-[#f87171] flex items-center gap-1">
-                <XCircle size={14} /> Dars qoldirgan (Qon qizil)
-              </span>
-            )}
-            {hoveredDay.status === "unconfirmed" && (
-              <span className="text-[#fde68a] flex items-center gap-1">
-                <HelpCircle size={14} /> Dars o'tilgan, ammo davomat kiritilmagan
-              </span>
-            )}
-            {hoveredDay.status === "future" && (
-              <span className="text-[#38bdf8] flex items-center gap-1">
-                <Clock size={14} /> Rejalashtirilgan dars kuni
-              </span>
-            )}
-            {hoveredDay.status === "not_joined" && (
-              <span className="text-[#aaaaaa] flex items-center gap-1">
-                O'quvchi guruhga qo'shilishidan oldingi dars
-              </span>
-            )}
-            {hoveredDay.status === "no_lesson" && (
-              <span className="text-[#aaaaaa]">Dars kuni emas</span>
+            <div className="flex items-center gap-1.5 text-xs font-black">
+              {hoveredDay.status === "present" && (
+                <span className="text-[#4ade80] flex items-center gap-1">
+                  <CheckCircle2 size={14} /> Darsga to'liq qatnashgan (Kelgan)
+                </span>
+              )}
+              {hoveredDay.status === "absent" && (
+                <span className="text-[#f87171] flex items-center gap-1">
+                  <XCircle size={14} /> Dars qoldirgan (Qon qizil)
+                </span>
+              )}
+              {hoveredDay.status === "unconfirmed" && (
+                <span className="text-[#fde68a] flex items-center gap-1">
+                  <HelpCircle size={14} /> Dars o'tilgan, ammo davomat kiritilmagan
+                </span>
+              )}
+              {hoveredDay.status === "future" && (
+                <span className="text-[#38bdf8] flex items-center gap-1">
+                  <Clock size={14} /> Rejalashtirilgan dars kuni
+                </span>
+              )}
+              {hoveredDay.status === "not_joined" && (
+                <span className="text-[#aaaaaa] flex items-center gap-1">
+                  O'quvchi guruhga qo'shilishidan oldingi dars
+                </span>
+              )}
+              {hoveredDay.status === "no_lesson" && (
+                <span className="text-[#aaaaaa]">Dars kuni emas</span>
+              )}
+            </div>
+
+            {hoveredDay.groups && hoveredDay.groups.length > 0 && (
+              <p className="text-[10px] text-[#bbbbbb] mt-1.5 border-t border-white/10 pt-1 font-bold">
+                Guruh: <span className="text-white font-black text-white-force">{hoveredDay.groups.join(", ")}</span>
+              </p>
             )}
           </div>
-
-          {hoveredDay.groups && hoveredDay.groups.length > 0 && (
-            <p className="text-[10px] text-[#bbbbbb] mt-1.5 border-t border-white/10 pt-1 font-bold">
-              Guruh: <span className="text-white font-black text-white-force">{hoveredDay.groups.join(", ")}</span>
-            </p>
-          )}
-        </div>
+        )
       )}
 
       {/* 5. GITHUB-STYLE FOOTER LEGEND */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-3.5 border-t border-[var(--border-glass)] text-[10px] font-bold text-[var(--text-secondary)] w-full">
-        <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-black">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 pt-3.5 border-t border-[var(--border-glass)] text-[10px] font-bold text-[var(--text-secondary)] w-full">
+        <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-black">
           Izohlar (Legend):
         </span>
 
-        <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-4 md:gap-5">
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-md bg-[#16a34a] border border-[#4ade80] shadow-[0_0_8px_rgba(22,163,74,0.4)]" />
-            <span className="text-emerald-600 dark:text-[#4ade80] font-black">Kelgan (To'yg'in Yashil)</span>
+            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-[#16a34a] border border-[#4ade80] shadow-[0_0_8px_rgba(22,163,74,0.4)]" />
+            <span className="text-emerald-600 dark:text-[#4ade80] font-black text-[10px] sm:text-xs">Kelgan</span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-md bg-[#991b1b] border border-[#ef4444] shadow-[0_0_8px_rgba(153,27,27,0.4)]" />
-            <span className="text-red-600 dark:text-[#f87171] font-black">Qoldirgan (Qon Qizil)</span>
+            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-[#991b1b] border border-[#ef4444] shadow-[0_0_8px_rgba(153,27,27,0.4)]" />
+            <span className="text-red-600 dark:text-[#f87171] font-black text-[10px] sm:text-xs">Qoldirgan</span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-md bg-amber-500/20 border border-amber-500/50" />
-            <span className="text-amber-600 dark:text-amber-400 font-bold">Olinmagan</span>
+            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-amber-500/20 border border-amber-500/50" />
+            <span className="text-amber-600 dark:text-amber-400 font-bold text-[10px] sm:text-xs">Olinmagan</span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-md border border-dashed border-sky-500 bg-sky-500/20" />
-            <span className="text-sky-600 dark:text-sky-400 font-bold">Rejada</span>
+            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md border border-dashed border-sky-500 bg-sky-500/20" />
+            <span className="text-sky-600 dark:text-sky-400 font-bold text-[10px] sm:text-xs">Rejada</span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-md bg-[var(--bg-void)] border border-[var(--border-glass)]" />
-            <span className="text-[var(--text-muted)] font-bold">Dars yo'q</span>
+          <div className="flex items-center gap-1.5 col-span-2 sm:col-span-1">
+            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-[var(--bg-void)] border border-[var(--border-glass)]" />
+            <span className="text-[var(--text-muted)] font-bold text-[10px] sm:text-xs">Dars yo'q</span>
           </div>
         </div>
       </div>

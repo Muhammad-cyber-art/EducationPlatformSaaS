@@ -47,7 +47,7 @@ const StaffPaymentModal = ({ isOpen, onClose, onConfirm, info, amount, expectedA
                     <button
                         onClick={onClose}
                         disabled={loading}
-                        className="absolute top-5 right-5 text-slate-500 hover:text-white transition-colors p-1.5 hover:bg-[var(--bg-void)] rounded-lg disabled:opacity-50"
+                        className="absolute top-5 right-5 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1.5 hover:bg-[var(--gold)]/10 rounded-lg disabled:opacity-50"
                     >
                         <X size={18} />
                     </button>

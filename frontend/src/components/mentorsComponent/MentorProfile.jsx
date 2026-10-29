@@ -159,7 +159,7 @@ export default function MentorProfilePage({ viewMode = "all" }) {
                                                 onChange={e => dispatch({ type: 'UPDATE_EDIT_FIELD', payload: { username: e.target.value } })}
                                                 readOnly={!isEditing}
                                             />
-                                            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white" onClick={() => navigator.clipboard.writeText(mentor.username)}><Copy size={14} /></button>
+                                            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--gold)] transition-colors" onClick={() => navigator.clipboard.writeText(mentor.username)}><Copy size={14} /></button>
                                         </div>
                                     </div>
                                     <div className="space-y-1.5">

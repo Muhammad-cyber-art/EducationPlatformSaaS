@@ -18,6 +18,7 @@ import {
   UserPlus,
   TrendingDown,
   Wallet,
+  Award,
 } from "lucide-react";
 import { get_user_info } from "../Authorized/getRole";
 import api from "../../tokenUpdater/updater";
@@ -55,6 +56,7 @@ export default function SideBar({ isOpen, onClose }) {
     { name: "O'qituvchilar", path: "/admin/mentors", icon: <UserSquare2 size={20} /> },
     { name: "Kutishlar Zali", path: "/admin/waiting-hall", icon: <UserPlus size={20} /> },
     { name: "O'quvchilar", path: "/admin/all_students", icon: <GraduationCap size={20} /> },
+    ...((['admin', 'super_admin'].includes(userInfo?.role) || userInfo?.permissions?.finance !== false) ? [{ name: "Maxsus O'quvchilar", path: "/admin/special-students", icon: <Award size={20} /> }] : []),
     { name: "Arxiv", path: "/admin/archive", icon: <Trash2 size={20} /> },
     ...(userInfo?.permissions?.pay_slip !== false ? [{ name: "Moliya", path: "/admin/finance", icon: <DollarSign size={20} /> }] : []),
     { name: "Chiqimlar", path: "/admin/expenses", icon: <TrendingDown size={20} /> },

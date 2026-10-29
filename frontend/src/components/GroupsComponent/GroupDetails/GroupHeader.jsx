@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { UserPlus, Send, MoreVertical, Edit3, UserRoundPlus, Activity, Target, Trash2, Check, ArrowRightLeft, FolderKanban } from "lucide-react";
+import { UserPlus, Send, MoreVertical, Edit3, UserRoundPlus, Activity, Target, Trash2, Check, ArrowRightLeft, FolderKanban, RefreshCw } from "lucide-react";
 import GoBackButton from "../../sendback";
 import SyncStatusBadge from "../../SyncStatusBadge";
 import { normalizeCustomDays } from "../../../utils/scheduleUtils";
+import { useSyncProgress } from "../../../hooks/useSyncProgress";
 
 const GroupHeader = ({
   isEditing,
@@ -29,6 +30,7 @@ const GroupHeader = ({
   const mobileMenuButtonRef = useRef(null);
   const menuContentRef = useRef(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const { isSyncing, isOnline, triggerSync } = useSyncProgress();
 
   // Function to calculate menu position
   const calculateMenuPosition = useCallback(() => {
@@ -41,7 +43,7 @@ const GroupHeader = ({
     if (!buttonRef.current) return;
 
     const rect = buttonRef.current.getBoundingClientRect();
-    const menuWidth = 224;
+    const menuWidth = Math.min(224, window.innerWidth - 16);
     const menuMargin = 8;
 
     let left = rect.left + rect.width - menuWidth;
@@ -120,27 +122,28 @@ const GroupHeader = ({
 
   return (
     <>
-      <div className="sticky  h-[50px] z-[50] bg-[var(--bg-void)] -mt-3 sm:-mt-6 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-3 sm:pt-6 pb-4 sm:pb-6 flex flex-row items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-6 shadow-sm">
-        <div className="flex items-center gap-4">
+      <div className="sticky top-0 z-40 bg-[var(--bg-void)]/95 backdrop-blur-md border-b border-[var(--border-glass)] -mt-3 sm:-mt-6 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-6 shadow-sm">
+        {/* Left Section: Back button + Title & Status */}
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
           <GoBackButton />
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-[var(--text-primary)] tracking-tight capitalize line-clamp-1">
+          <div className="flex flex-col min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <h1 className="text-base sm:text-lg font-black text-[var(--text-primary)] tracking-tight capitalize truncate min-w-0">
                 {isEditing ? (editData.name || "Yangi Guruh") : groupinfo.name}
               </h1>
               {!isEditing && (
-                <span className={`px-2 py-0.5 rounded-full border text-[7px] font-black uppercase tracking-widest shrink-0 ${groupinfo.group_type === 'advanced'
-                  ? 'bg-[var(--gold)]/10 text-[var(--gold)] shadow-[0_0_10px_rgba(184,134,11,0.2)]'
+                <span className={`px-1.5 sm:px-2 py-0.5 rounded-full border text-[7px] font-black uppercase tracking-wider shrink-0 ${groupinfo.group_type === 'advanced'
+                  ? 'bg-[var(--gold)]/10 border-[var(--gold)]/30 text-[var(--gold)] shadow-[0_0_10px_rgba(184,134,11,0.2)]'
                   : 'bg-white/5 border-white/10 text-white/40'
                   }`}>
                   {groupinfo.group_type === 'advanced' ? 'ADVANCED' : 'STANDART'}
                 </span>
               )}
             </div>
-            <p className="text-[8px] text-[var(--text-muted)] font-black capitalize tracking-[0.3em] mt-0.5 flex items-center gap-2">
-              Protocol: <span className="text-[var(--gold)]">{isEditing ? "Tahrirlash" : "Operatsion markaz"}</span>
+            <div className="text-[8px] sm:text-[9px] text-[var(--text-muted)] font-black capitalize tracking-wider mt-0.5 flex items-center gap-1.5 sm:gap-2 truncate">
+              <span className="hidden xs:inline">Protocol:</span> <span className="text-[var(--gold)] truncate">{isEditing ? "Tahrirlash" : "Operatsion markaz"}</span>
               {!isEditing && groupinfo.computed_status && (
-                <span className={`px-2 py-0.5 rounded-md border text-[7px] ${groupinfo.computed_status === 'active' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' :
+                <span className={`px-1.5 sm:px-2 py-0.5 rounded-md border text-[7px] shrink-0 ${groupinfo.computed_status === 'active' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' :
                   groupinfo.computed_status === 'waiting' ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
                     groupinfo.computed_status === 'activating_soon' ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' :
                       'bg-red-500/10 border-red-500/30 text-red-500'
@@ -150,20 +153,23 @@ const GroupHeader = ({
                       groupinfo.computed_status === 'activating_soon' ? 'YAQINDA FAOL' : 'FAOL EMAS'}
                 </span>
               )}
-            </p>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
-          <SyncStatusBadge />
+        {/* Right Section: Sync Badge & Action Buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="hidden md:flex items-center">
+            <SyncStatusBadge />
+          </div>
           {!isEditing && (
             <>
-              {/* Desktop buttons */}
+              {/* Desktop buttons (sm and up) */}
               <div className="hidden sm:flex items-center gap-2 sm:gap-3">
                 {canAddStudent && (
                   <button
                     onClick={() => navigate(`add_student/?branch=${branchID}`)}
-                    className="flex items-center justify-center gap-2 h-10 px-6 bg-[var(--gold)] text-white rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 h-10 px-5 bg-[var(--gold)] text-white rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50 shadow-md"
                     title="O'quvchi qo'shish"
                   >
                     <UserPlus size={16} />
@@ -173,43 +179,44 @@ const GroupHeader = ({
                 {canSendMessage && (
                   <button
                     onClick={() => uiDispatch({ type: "SET_FIELD", field: "isMessageModalOpen", value: true })}
-                    className="w-10 h-10 sm:p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--gold)] hover:border-[var(--gold)]/40 transition-all shadow-lg flex items-center justify-center"
+                    className="w-10 h-10 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--gold)] hover:border-[var(--gold)]/40 transition-all shadow-md flex items-center justify-center active:scale-95"
                     title="Xabar yuborish"
                   >
                     <Send size={18} />
                   </button>
                 )}
-                {(canEditGroup || canDeleteGroup || canAddMentor) && (
+                {(canEditGroup || canDeleteGroup || canAddMentor || canTransferGroup || canSeeHomework) && (
                   <button
                     ref={desktopMenuButtonRef}
                     onClick={(e) => { e.stopPropagation(); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: !showMenu }); }}
-                    className="w-10 h-10 sm:p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] transition-all shadow-lg outline-none flex items-center justify-center focus:ring-1 focus:ring-[var(--gold)]/20"
+                    className="w-10 h-10 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] transition-all shadow-md outline-none flex items-center justify-center focus:ring-1 focus:ring-[var(--gold)]/20 active:scale-95"
+                    title="Boshqa amallar"
                   >
                     <MoreVertical size={18} />
                   </button>
                 )}
               </div>
 
-              {/* Mobile buttons */}
-              <div className="flex sm:hidden items-center gap-2">
+              {/* Mobile buttons (under sm) */}
+              <div className="flex sm:hidden items-center gap-1.5 shrink-0">
                 {canAddStudent && (
                   <button
                     onClick={() => navigate(`add_student/?branch=${branchID}`)}
-                    className="flex items-center justify-center gap-2 h-10 w-10 bg-[var(--gold)] text-white rounded-xl font-bold text-[10px] capitalize tracking-wider transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    className="flex items-center justify-center w-9 h-9 bg-[var(--gold)] text-white rounded-xl font-bold text-[10px] transition-transform active:scale-95 shadow-md shrink-0"
                     title="O'quvchi qo'shish"
                   >
                     <UserPlus size={16} />
                   </button>
                 )}
 
-                {/* Combined mobile menu for all other actions */}
-                {(canSendMessage || canEditGroup || canDeleteGroup || canAddMentor) && (
+                {(canSendMessage || canEditGroup || canDeleteGroup || canAddMentor || canTransferGroup || canSeeHomework) && (
                   <button
                     ref={mobileMenuButtonRef}
                     onClick={(e) => { e.stopPropagation(); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: !showMenu }); }}
-                    className="w-10 h-10 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] transition-all shadow-lg outline-none flex items-center justify-center focus:ring-1 focus:ring-[var(--gold)]/20"
+                    className="w-9 h-9 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] transition-all shadow-md outline-none flex items-center justify-center active:scale-95 shrink-0"
+                    title="Boshqa amallar"
                   >
-                    <MoreVertical size={18} />
+                    <MoreVertical size={16} />
                   </button>
                 )}
               </div>
@@ -219,11 +226,10 @@ const GroupHeader = ({
       </div>
 
       {/* Menu Portal */}
-
       {showMenu && typeof document !== 'undefined' && createPortal(
         <div
           ref={menuContentRef}
-          className="fixed w-56 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[9999] p-2"
+          className="fixed w-56 max-w-[calc(100vw-16px)] bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[9999] p-2"
           style={{
             top: `${menuPosition.top}px`,
             left: `${menuPosition.left}px`
@@ -279,7 +285,7 @@ const GroupHeader = ({
             )}
           </div>
 
-          {/* Mobile menu (with Send) */}
+          {/* Mobile menu (with Send and Offline sync) */}
           <div className="sm:hidden">
             {canSendMessage && (
               <button onClick={() => { uiDispatch({ type: "SET_FIELD", field: "isMessageModalOpen", value: true }); uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false }); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--text-primary)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all">
@@ -326,6 +332,17 @@ const GroupHeader = ({
                 <FolderKanban size={14} /> Topshiriqlar
               </button>
             )}
+            <button
+              onClick={() => {
+                triggerSync();
+                uiDispatch({ type: "SET_FIELD", field: "showMenu", value: false });
+              }}
+              disabled={isSyncing || !isOnline}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-dim)] text-[var(--text-primary)] text-[10px] font-black capitalize tracking-widest rounded-xl transition-all disabled:opacity-40"
+            >
+              <RefreshCw size={14} className={`text-[var(--gold)] ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? "Nusxalanmoqda..." : "Bazani nusxalash"}
+            </button>
             <div className="h-[1px] bg-[var(--border-glass)] my-1 mx-2"></div>
             {canDeleteGroup && (
               <button onClick={() => { if (confirm("Guruhni arxivlamoqchimisiz?")) handleDelete(); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 text-red-500 text-[10px] font-black capitalize tracking-widest rounded-xl transition-all">

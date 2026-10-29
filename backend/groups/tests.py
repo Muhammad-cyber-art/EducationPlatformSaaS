@@ -78,6 +78,34 @@ class GroupAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         student.refresh_from_db()
         self.assertEqual(student.group.id, new_group.id)
+        # Eski guruh enrollmenti butunlay uzilgan (o'chirilgan) bo'lishi kerak
+        self.assertFalse(student.enrollments.filter(group=self.group1).exists())
+        # Yangi guruh enrollmenti esa faol bo'lishi kerak
+        self.assertTrue(student.enrollments.filter(group=new_group, is_active=True).exists())
+
+    def test_student_edit_group_disconnects_old_enrollment(self):
+        student = Student.objects.create(full_name="S2", group=self.group1)
+        new_group = Group.objects.create(name="G4", branch=self.branch1)
+        
+        # O'quvchi profilida guruhi yangi guruhga almashtiriladi
+        student.group = new_group
+        student.save()
+        
+        # Eski guruh enrollmenti uzilgan (o'chirilgan) bo'lishi kerak
+        self.assertFalse(student.enrollments.filter(group=self.group1).exists())
+        # Yangi guruh enrollmenti faol bo'lishi kerak
+        self.assertTrue(student.enrollments.filter(group=new_group, is_active=True).exists())
+
+    def test_student_clear_group_disconnects_enrollment(self):
+        student = Student.objects.create(full_name="S3", group=self.group1)
+        self.assertTrue(student.enrollments.filter(group=self.group1).exists())
+        
+        # O'quvchining guruhi bo'shatiladi (guruhdan chiqariladi)
+        student.group = None
+        student.save()
+        
+        # Eski guruh enrollmenti uzilgan bo'lishi kerak
+        self.assertFalse(student.enrollments.filter(group=self.group1).exists())
 
     def test_superadmin_student_edit_restriction(self):
         """Testing the restriction identified in permissions.py"""

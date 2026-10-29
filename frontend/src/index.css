@@ -15,7 +15,9 @@
   --border-highlight: #3d3d3d;
   --border-primary: #27272a;
   --border-subtle: #1f1f22;
+  --border-color: transparent;
   --text-primary: #ffffff;
+  --text-color: #ffffff;
   --text-secondary: #777777;
   --text-muted: #555555;
   --input-bg: #0a0a0a;
@@ -44,9 +46,11 @@
   --border-highlight: rgba(150, 123, 79, 0.3);
   --border-primary: rgba(150, 123, 79, 0.2);
   --border-subtle: rgba(150, 123, 79, 0.1);
+  --border-color: rgba(150, 123, 79, 0.2);
 
   /* Deep Espresso & Aged Bronze Typography */
   --text-primary: #120f0d;
+  --text-color: #120f0d;
   --text-secondary: #4a3d31;
   --text-muted: #827161;
 
@@ -100,38 +104,118 @@
   filter: none !important;
 }
 
-/* ===== LIGHT MODE: COMPREHENSIVE OVERRIDES ===== */
+/* ===== LIGHT MODE: TYPOGRAPHY & TEXT SYSTEM ===== */
 
-/* Text Colors - All Bronze/Gold Tones */
+/* Base text color on data-theme='light' container */
 [data-theme='light'] {
-  color: #4a3d31 !important;
+  color: #120f0d;
 }
 
+/* Headings use primary espresso text by default */
 [data-theme='light'] h1,
 [data-theme='light'] h2,
 [data-theme='light'] h3,
 [data-theme='light'] h4,
 [data-theme='light'] h5,
-[data-theme='light'] h6,
+[data-theme='light'] h6 {
+  color: #120f0d;
+}
+
+/* Default paragraphs and labels use warm bronze/slate */
 [data-theme='light'] p,
-[data-theme='light'] span,
-[data-theme='light'] div,
-[data-theme='light'] label,
-[data-theme='light'] td,
-[data-theme='light'] th {
-  color: inherit !important;
-}
-
-/* Specific Text Color Overrides for standard content */
-[data-theme='light'] [class*='text-slate'],
-[data-theme='light'] [class*='text-gray'] {
+[data-theme='light'] label {
   color: #4a3d31;
 }
 
-/* Light theme default text color for plain text-white elements */
-[data-theme='light'] .text-white:not([class*='hover:']):not([class*='bg-']),
-[data-theme='light'] [class~='text-white']:not([class*='hover:']):not([class*='bg-']) {
+/* Specific neutral text color overrides for standard content */
+[data-theme='light'] [class*='text-slate-4'],
+[data-theme='light'] [class*='text-slate-5'],
+[data-theme='light'] [class*='text-gray-4'],
+[data-theme='light'] [class*='text-gray-5'],
+[data-theme='light'] [class*='text-zinc-4'],
+[data-theme='light'] [class*='text-zinc-5'] {
+  color: #827161;
+}
+
+[data-theme='light'] [class*='text-slate-6'],
+[data-theme='light'] [class*='text-slate-7'],
+[data-theme='light'] [class*='text-gray-6'],
+[data-theme='light'] [class*='text-gray-7'],
+[data-theme='light'] [class*='text-zinc-6'],
+[data-theme='light'] [class*='text-zinc-7'] {
   color: #4a3d31;
+}
+
+/* Standalone .text-white elements (not inside a colored bg or button) should be dark in light mode */
+[data-theme='light'] p.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] h1.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] h2.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] h3.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] h4.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] div.text-white:not([class*='hover:']):not([class*='bg-']):not([class*='shadow']):not(.keep-white):not(.text-white-force),
+[data-theme='light'] td.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] th.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] b.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] strong.text-white:not([class*='hover:']):not([class*='bg-']),
+[data-theme='light'] span.text-white:not([class*='hover:']):not([class*='bg-']):not([class*='shadow']):not(.keep-white):not(.text-white-force) {
+  color: #120f0d;
+}
+
+/* ===== PRESERVE VIBRANT SEMANTIC COLORS IN LIGHT MODE ===== */
+[data-theme='light'] .text-emerald-400,
+[data-theme='light'] .text-emerald-500,
+[data-theme='light'] .text-emerald-600 {
+  color: #059669 !important;
+}
+
+[data-theme='light'] .text-green-400,
+[data-theme='light'] .text-green-500,
+[data-theme='light'] .text-green-600 {
+  color: #16a34a !important;
+}
+
+[data-theme='light'] .text-rose-400,
+[data-theme='light'] .text-rose-500,
+[data-theme='light'] .text-rose-600 {
+  color: #e11d48 !important;
+}
+
+[data-theme='light'] .text-red-400,
+[data-theme='light'] .text-red-500,
+[data-theme='light'] .text-red-600 {
+  color: #dc2626 !important;
+}
+
+[data-theme='light'] .text-amber-400,
+[data-theme='light'] .text-amber-500,
+[data-theme='light'] .text-amber-600 {
+  color: #d97706 !important;
+}
+
+[data-theme='light'] .text-blue-400,
+[data-theme='light'] .text-blue-500,
+[data-theme='light'] .text-blue-600 {
+  color: #2563eb !important;
+}
+
+[data-theme='light'] .text-sky-400,
+[data-theme='light'] .text-sky-500 {
+  color: #0284c7 !important;
+}
+
+[data-theme='light'] .text-indigo-400,
+[data-theme='light'] .text-indigo-500 {
+  color: #4f46e5 !important;
+}
+
+[data-theme='light'] .text-purple-400,
+[data-theme='light'] .text-purple-500 {
+  color: #9333ea !important;
+}
+
+[data-theme='light'] .text-cyan-400,
+[data-theme='light'] .text-cyan-500 {
+  color: #0891b2 !important;
 }
 
 /* ========================================================================= */
@@ -165,9 +249,9 @@ a[class*='bg-[var(--gold)]']:not([class*='/']) *,
 [data-theme='light'] .text-white-force *,
 [data-theme='light'] .keep-white,
 [data-theme='light'] .keep-white *,
-[data-theme='light'] button.text-white,
-[data-theme='light'] button[class~='text-white'],
-[data-theme='light'] button [class~='text-white'],
+[data-theme='light'] button.text-white:is([class*='bg-']:not([class*='/']):not([class*='bg-white']):not([class*='bg-transparent']):not([class*='bg-[var(--bg'])),
+[data-theme='light'] button[class~='text-white']:is([class*='bg-']:not([class*='/']):not([class*='bg-white']):not([class*='bg-transparent']):not([class*='bg-[var(--bg'])),
+[data-theme='light'] button [class~='text-white']:is([class*='bg-']:not([class*='/']):not([class*='bg-white']):not([class*='bg-transparent']):not([class*='bg-[var(--bg'])),
 [data-theme='light'] .lux-btn-primary,
 [data-theme='light'] .lux-btn-primary *,
 [data-theme='light'] .lux-btn-primary span,
@@ -278,36 +362,107 @@ a[class*='bg-[var(--gold)]']:not([class*='/']) *,
   stroke: #ffffff !important;
 }
 
-/* Hover and active states for elements turning into gold/dark */
-button[class*='hover:bg-[var(--gold)]']:hover,
-button[class*='hover:bg-[var(--gold)]']:hover *,
-button[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
-a[class*='hover:bg-[var(--gold)]']:hover,
-a[class*='hover:bg-[var(--gold)]']:hover *,
-a[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
-div[class*='hover:bg-[var(--gold)]']:hover,
-div[class*='hover:bg-[var(--gold)]']:hover *,
-div[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
-[class*='group']:hover [class*='group-hover:bg-[var(--gold)]'],
-[class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] *,
-[class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] [class*='group-hover:text-black'],
-[class*='group']:hover [class*='group-hover:text-black'][class*='group-hover:bg-[var(--gold)]'],
-[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:hover,
-[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:hover *,
-[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
-[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:hover,
-[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:hover *,
-[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
-[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:hover,
-[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:hover *,
-[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
-[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]'],
-[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] *,
-[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]'] [class*='group-hover:text-black'],
-[data-theme='light'] [class*='group']:hover [class*='group-hover:text-black'][class*='group-hover:bg-[var(--gold)]'] {
+/* Hover and active states for elements turning into solid gold/dark */
+button[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover,
+button[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover *,
+button[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover [class*='hover:text-black'],
+a[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover,
+a[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover *,
+a[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover [class*='hover:text-black'],
+div[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover,
+div[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover *,
+div[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover [class*='hover:text-black'],
+[class*='group']:hover [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']),
+[class*='group']:hover [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']) *,
+[class*='group']:hover [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']) [class*='group-hover:text-black'],
+[class*='group']:hover [class*='group-hover:text-black'][class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']),
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover,
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover *,
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover [class*='hover:text-black'],
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover,
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover *,
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover [class*='hover:text-black'],
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover,
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover *,
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']):hover [class*='hover:text-black'],
+[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']),
+[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']) *,
+[data-theme='light'] [class*='group']:hover [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']) [class*='group-hover:text-black'],
+[data-theme='light'] [class*='group']:hover [class*='group-hover:text-black'][class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']) {
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
   stroke: #ffffff !important;
+}
+
+/* ========================================================================= */
+/* LIGHT MODE HOVER TEXT VISIBILITY SAFEGUARD                                 */
+/* In Light Mode, hover:text-white must NOT turn text white if there is no    */
+/* solid dark/saturated background on hover. Instead it hovers to espresso.  */
+/* ========================================================================= */
+[data-theme='light'] :is(button, a, span, p, div, svg)[class*='hover:text-white']:hover,
+[data-theme='light'] [class*='group']:hover :is(button, a, span, p, div, svg)[class*='group-hover:text-white'] {
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  stroke: currentColor !important;
+}
+
+/* Exemptions: elements that actually hover to a solid dark/colored background */
+[data-theme='light'] :is(button, a, span, p, div, svg)[class*='hover:text-white']:is(
+  [class*='hover:bg-red']:not([class*='hover:bg-red-500/']):not([class*='hover:bg-red-600/']),
+  [class*='hover:bg-rose']:not([class*='hover:bg-rose-500/']):not([class*='hover:bg-rose-600/']),
+  [class*='hover:bg-emerald']:not([class*='hover:bg-emerald-500/']):not([class*='hover:bg-emerald-600/']),
+  [class*='hover:bg-green']:not([class*='hover:bg-green-500/']):not([class*='hover:bg-green-600/']),
+  [class*='hover:bg-blue']:not([class*='hover:bg-blue-500/']):not([class*='hover:bg-blue-600/']),
+  [class*='hover:bg-indigo']:not([class*='hover:bg-indigo-500/']):not([class*='hover:bg-indigo-600/']),
+  [class*='hover:bg-purple']:not([class*='hover:bg-purple-500/']):not([class*='hover:bg-purple-600/']),
+  [class*='hover:bg-amber']:not([class*='hover:bg-amber-500/']):not([class*='hover:bg-amber-600/']),
+  [class*='hover:bg-cyan']:not([class*='hover:bg-cyan-500/']):not([class*='hover:bg-cyan-600/']),
+  [class*='hover:bg-black'],
+  [class*='hover:bg-zinc-8'],
+  [class*='hover:bg-zinc-9'],
+  [class*='hover:bg-[var(--gold)]']:not([class*='hover:bg-[var(--gold)]/']),
+  [class*='hover:bg-gold']:not([class*='hover:bg-gold/']),
+  [class*='bg-red-']:not([class*='/']),
+  [class*='bg-rose-']:not([class*='/']),
+  [class*='bg-emerald-']:not([class*='/']),
+  [class*='bg-blue-']:not([class*='/']),
+  [class*='bg-indigo-']:not([class*='/']),
+  [class*='bg-purple-']:not([class*='/']),
+  [class*='bg-amber-']:not([class*='/']),
+  [class*='bg-[var(--gold)]']:not([class*='/']),
+  [class*='bg-gold']:not([class*='/']),
+  .lux-btn-primary
+):hover,
+[data-theme='light'] [class*='group']:hover :is(button, a, span, p, div, svg)[class*='group-hover:text-white']:is(
+  [class*='group-hover:bg-red']:not([class*='group-hover:bg-red-500/']),
+  [class*='group-hover:bg-rose']:not([class*='group-hover:bg-rose-500/']),
+  [class*='group-hover:bg-emerald']:not([class*='group-hover:bg-emerald-500/']),
+  [class*='group-hover:bg-green']:not([class*='group-hover:bg-green-500/']),
+  [class*='group-hover:bg-blue']:not([class*='group-hover:bg-blue-500/']),
+  [class*='group-hover:bg-indigo']:not([class*='group-hover:bg-indigo-500/']),
+  [class*='group-hover:bg-purple']:not([class*='group-hover:bg-purple-500/']),
+  [class*='group-hover:bg-amber']:not([class*='group-hover:bg-amber-500/']),
+  [class*='group-hover:bg-cyan']:not([class*='group-hover:bg-cyan-500/']),
+  [class*='group-hover:bg-black'],
+  [class*='group-hover:bg-zinc-8'],
+  [class*='group-hover:bg-zinc-9'],
+  [class*='group-hover:bg-[var(--gold)]']:not([class*='group-hover:bg-[var(--gold)]/']),
+  [class*='group-hover:bg-gold']:not([class*='group-hover:bg-gold/'])
+) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Translucent tints in Light Mode must NEVER force white text or white children */
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]/']:hover,
+[data-theme='light'] button[class*='hover:bg-[var(--gold)]/']:hover *,
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]/']:hover,
+[data-theme='light'] a[class*='hover:bg-[var(--gold)]/']:hover *,
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]/']:hover,
+[data-theme='light'] div[class*='hover:bg-[var(--gold)]/']:hover * {
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
 }
 
 /* Danger / Cancel Action Buttons styling */
@@ -372,21 +527,20 @@ div[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
   border-color: #967b4f !important;
 }
 
-/* Borders */
-[data-theme='light'] [class*='border'] {
-  border-color: rgba(150, 123, 79, 0.15) !important;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease !important;
+/* Borders - Default neutral champagne borders for structural layout */
+[data-theme='light'] [class*='border']:not([class*='border-emerald']):not([class*='border-green']):not([class*='border-red']):not([class*='border-rose']):not([class*='border-amber']):not([class*='border-yellow']):not([class*='border-blue']):not([class*='border-sky']):not([class*='border-indigo']):not([class*='border-purple']):not([class*='border-cyan']):not([class*='border-gold']):not([class*='border-[var(--gold)]']) {
+  border-color: rgba(150, 123, 79, 0.18);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Border Hover Effects */
-[data-theme='light'] [class*='border']:hover {
-  border-color: rgba(150, 123, 79, 0.4) !important;
+/* Border Hover Effects for neutral borders */
+[data-theme='light'] [class*='border']:not([class*='border-emerald']):not([class*='border-green']):not([class*='border-red']):not([class*='border-rose']):not([class*='border-amber']):not([class*='border-yellow']):not([class*='border-blue']):not([class*='border-sky']):not([class*='border-indigo']):not([class*='border-purple']):not([class*='border-cyan']):not([class*='border-gold']):not([class*='border-[var(--gold)]']):hover {
+  border-color: rgba(150, 123, 79, 0.4);
 }
 
 /* Card Hover Effects */
 [data-theme='light'] .lux-card:hover,
-[data-theme='light'] [class*='rounded-2xl']:hover,
-[data-theme='light'] [class*='rounded-xl']:hover {
+[data-theme='light'] .lux-card-for-grps:hover {
   border-color: #967b4f !important;
   box-shadow: 0 8px 24px rgba(150, 123, 79, 0.15) !important;
 }
@@ -426,41 +580,39 @@ div[class*='hover:bg-[var(--gold)]']:hover [class*='hover:text-black'],
 }
 
 
-/* Extra small screens - even more compact */
+/* Extra small screens - compact and accessible */
 @media (max-width: 480px) {
 
   .lux-card,
   [class*='rounded-2xl'],
   [class*='rounded-xl'] {
-    padding: 10px !important;
-    border-radius: 12px !important;
+    padding: 12px;
+    border-radius: 14px;
   }
 
   button,
   .lux-btn {
-    padding: 6px 12px !important;
-    font-size: 9px !important;
-    border-radius: var(--btn-radius, 10px) !important;
+    padding: 8px 14px;
+    font-size: 11px;
+    border-radius: var(--btn-radius, 10px);
   }
 
   h1 {
-    font-size: 18px !important;
+    font-size: 20px !important;
   }
 
   h2 {
-    font-size: 14px !important;
+    font-size: 15px !important;
   }
 
   h3 {
-    font-size: 12px !important;
+    font-size: 13px !important;
   }
 }
 
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 
@@ -709,8 +861,7 @@ button[type="reset"] {
 
 /* INPUTS - VERY CLEAN & COMPACT (HEIGHT: 38px) */
 .lux-input,
-input.lux-input,
-select.lux-input {
+input.lux-input {
   background-color: var(--input-bg, #0a0a0a) !important;
   border: 1px solid var(--input-border, rgba(255, 255, 255, 0.12)) !important;
   height: 38px !important;
@@ -725,6 +876,29 @@ select.lux-input {
   outline: none;
   box-sizing: border-box;
   transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+select.lux-input {
+  background-color: var(--input-bg, #0a0a0a) !important;
+  border: 1px solid var(--input-border, rgba(255, 255, 255, 0.12)) !important;
+  height: 42px !important;
+  max-height: 46px !important;
+  padding: 8px 14px;
+  border-radius: 12px;
+  color: var(--text-primary, #ffffff) !important;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  width: 100%;
+  outline: none;
+  box-sizing: border-box;
+  line-height: normal !important;
+  transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+[data-theme='light'] select.lux-input {
+  background-color: var(--input-bg, #ffffff) !important;
+  color: #120f0d !important;
 }
 
 textarea.lux-input {

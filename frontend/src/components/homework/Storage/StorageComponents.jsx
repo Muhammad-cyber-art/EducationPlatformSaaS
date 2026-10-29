@@ -20,7 +20,7 @@ export const StorageHeader = ({ onClearAll, onClose }) => (
  <Trash size={12} className="md:w-3.5 md:h-3.5" />
  <span className="hidden sm:inline">Tozalash</span>
  </button>
- <button onClick={onClose} className="p-2 md:p-3 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg md:rounded-2xl transition-all">
+ <button onClick={onClose} className="p-2 md:p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-void)] hover:bg-[var(--gold)]/10 border border-[var(--border-glass)] rounded-lg md:rounded-2xl transition-all">
  <X className="w-5 h-5 md:w-6 md:h-6" />
  </button>
  </div>

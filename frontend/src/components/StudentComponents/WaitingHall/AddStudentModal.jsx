@@ -33,7 +33,7 @@ const AddStudentModal = ({ isOpen, onClose, onAdd }) => {
  <h3 className="text-2xl font-black gold-text capitalize tracking-tighter">O'quvchi rejalashtirish</h3>
  <p className="text-[9px] font-bold text-[var(--text-muted)] capitalize tracking-[0.2em] mt-1">Kutishlar ro'yxatiga yangi yozuv qo'shish</p>
  </div>
- <button onClick={onClose} className="w-10 h-10 rounded-xl bg-[var(--bg-void)]/50 border border-[var(--border-glass)] flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:border-[var(--gold)]/40 transition-all flex-shrink-0">
+ <button onClick={onClose} className="w-10 h-10 rounded-xl bg-[var(--bg-void)]/50 border border-[var(--border-glass)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40 hover:bg-[var(--gold)]/10 transition-all flex-shrink-0">
  <X size={20} />
  </button>
  </div>

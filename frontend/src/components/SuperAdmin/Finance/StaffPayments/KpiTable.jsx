@@ -1,5 +1,6 @@
 import React from "react";
-import { Users, CheckCircle2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Users, CheckCircle2, Calculator, Receipt } from "lucide-react";
 
 const KpiTable = ({
   data,
@@ -10,6 +11,8 @@ const KpiTable = ({
   groupConfigs = [],
   kpiLoading
 }) => {
+  const navigate = useNavigate();
+
   // Find group config for a group
   const getGroupConfig = (groupId) => {
     return groupConfigs.find(config => {
@@ -53,18 +56,29 @@ const KpiTable = ({
   // Agar guruhlar bo'lsa, jadvalni ko'rsatamiz (salary_type dan qat'i nazar)
   if (data.mentor_groups && data.mentor_groups.length > 0) {
     const isSCT = isStudentCountType;
-    
+
     return (
       <div className={`bg-[var(--bg-panel)] border ${isSCT ? 'border-blue-500/10' : 'border-emerald-500/10'} rounded-2xl overflow-hidden shadow-xl mt-4`}>
-        <div className={`px-5 py-4 border-b border-[#2a2a2a] flex items-center justify-between ${isSCT ? 'bg-blue-500/5' : 'bg-emerald-500/5'}`}>
+        <div className={`px-5 py-4 border-b border-[#2a2a2a] flex flex-wrap items-center justify-between gap-2 ${isSCT ? 'bg-blue-500/5' : 'bg-emerald-500/5'}`}>
           <div className={`flex items-center gap-2 ${isSCT ? 'text-blue-400' : 'text-emerald-400'}`}>
             <Users size={16} />
             <span className="text-[11px] font-black capitalize tracking-widest">{isSCT ? "O'quvchilar tahlili" : "Guruhlar tahlili"}</span>
           </div>
-          <div className={`px-3 py-1 rounded-full ${isSCT ? 'bg-blue-500/10 border-blue-500/20' : 'bg-emerald-500/10 border-emerald-500/20'} border`}>
-            <span className={`text-[8px] font-black ${isSCT ? 'text-blue-400' : 'text-emerald-400'} capitalize tracking-widest`}>
-              Real Tushum: {formatCurrency(data.groups_income)}
-            </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {data?.id && (
+              <button
+                onClick={() => navigate("paid-students")}
+                className="px-3 py-1 bg-[var(--gold)]/10 hover:bg-[var(--gold)] text-[var(--gold)] hover:text-black border border-[var(--gold)]/30 rounded-full text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-sm"
+              >
+                <Calculator size={10} />
+                <span>O'quvchilar Ulushi (Batafsil Arifmetika) ➜</span>
+              </button>
+            )}
+            <div className={`px-3 py-1 rounded-full ${isSCT ? 'bg-blue-500/10 border-blue-500/20' : 'bg-emerald-500/10 border-emerald-500/20'} border`}>
+              <span className={`text-[8px] font-black ${isSCT ? 'text-blue-400' : 'text-emerald-400'} capitalize tracking-widest`}>
+                Real Tushum: {formatCurrency(data.groups_income)}
+              </span>
+            </div>
           </div>
         </div>
         <div className="p-2 overflow-x-auto">
@@ -83,18 +97,17 @@ const KpiTable = ({
             <tbody className="divide-y divide-[#2a2a2a]">
               {data.mentor_groups?.map((group) => {
                 const config = getGroupConfig(group.id);
-                
+
                 return (
                   <tr key={group.id} className={`hover:${isSCT ? 'bg-blue-500/[0.02]' : 'bg-emerald-500/[0.02]'} transition-colors group`}>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="text-[10px] font-black text-[var(--text-primary)] leading-tight capitalize">{group.name}</p>
                         {config && (
-                          <span className={`px-2 py-0.5 rounded text-[7px] font-black tracking-wider ${
-                            config.salary_type === 'percentage' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/20' : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
-                          }`}>
-                            {config.salary_type === 'percentage' 
-                              ? `${config.commission_percentage}%` 
+                          <span className={`px-2 py-0.5 rounded text-[7px] font-black tracking-wider ${config.salary_type === 'percentage' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/20' : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
+                            }`}>
+                            {config.salary_type === 'percentage'
+                              ? `${config.commission_percentage}%`
                               : `${Number(config.per_student_amount).toLocaleString('uz-UZ')}`}
                           </span>
                         )}
@@ -115,23 +128,29 @@ const KpiTable = ({
                       </td>
                     )}
                     <td className="px-4 py-3.5 text-center">
-                      {group.unpaid_students && group.unpaid_students.length > 0 ? (
-                        <button
-                          onClick={() => setSelectedGroupForDebtors(group)}
-                          className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 rounded-lg text-[8px] font-black capitalize tracking-widest transition-all flex items-center gap-1.5 mx-auto shadow-sm"
-                        >
-                          <Users size={10} />
-                          Qarzdorlar ({group.unpaid_students.length})
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setSelectedGroupForDebtors(group)}
-                          className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 rounded-lg text-[8px] font-black capitalize tracking-widest transition-all flex items-center gap-1.5 mx-auto shadow-sm"
-                        >
-                          <CheckCircle2 size={10} />
-                          Ok ({group.paid_students_count || group.students_count})
-                        </button>
-                      )}
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        {data?.id && (
+                          <button
+                            onClick={() => navigate(`paid-students?group_id=${group.id}`)}
+                            className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-sm"
+                            title="To'lagan o'quvchilar va arifmetik ulush hisoboti"
+                          >
+                            <Receipt size={10} />
+                            <span>To'laganlar ({group.paid_students_count || (group.paid_students ? group.paid_students.length : 0)})</span>
+                          </button>
+                        )}
+
+                        {/* {group.unpaid_students && group.unpaid_students.length > 0 ? (
+                          <button
+                            onClick={() => setSelectedGroupForDebtors(group)}
+                            className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white border border-amber-500/20 rounded-lg text-[8px] font-black capitalize tracking-widest transition-all flex items-center gap-1 shadow-sm"
+                            title="Qarzdorlar ro'yxati"
+                          >
+                            <Users size={10} />
+                            <span>Qarz ({group.unpaid_students.length})</span>
+                          </button>
+                        ) : null} */}
+                      </div>
                     </td>
                   </tr>
                 );

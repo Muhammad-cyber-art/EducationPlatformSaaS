@@ -184,6 +184,7 @@ class Attendance(models.Model):
 
     date = models.DateField(default=timezone.localdate)
     is_present = models.BooleanField(default=True)
+    is_manually_adjusted = models.BooleanField(default=False, verbose_name="Qo'lda tahrirlangan")
     # Xabarnoma takrorlanmasligi uchun
     last_sent_status = models.BooleanField(null=True, blank=True)
 

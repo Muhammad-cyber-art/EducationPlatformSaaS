@@ -82,7 +82,7 @@ const StudentGroupsSection = ({
                                         e.stopPropagation(); 
                                         dispatch({ type: 'TOGGLE_MENU', payload: showGroupMenu === group.id ? false : group.id }); 
                                     }}
-                                    className="p-2 text-[var(--text-muted)] hover:text-white transition-all rounded-lg"
+                                    className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 transition-all rounded-lg"
                                 >
                                     <MoreVertical size={16} />
                                 </button>

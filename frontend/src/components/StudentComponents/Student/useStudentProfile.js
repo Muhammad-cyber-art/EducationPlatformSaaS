@@ -67,7 +67,9 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
               address: data.address || "",
               notes: data.notes || "",
               birth_date: data.birth_date || "",
-              group: data.group?.id,
+              group: (typeof data.group === 'object' && data.group !== null)
+                ? (data.group.id ?? "")
+                : (data.group || (Array.isArray(data.groups) && data.groups[0]?.id) || ""),
               image: null,
               status: data.status || "regular",
               custom_fee: data.custom_fee || "",
@@ -94,7 +96,9 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
                   address: data.address || "",
                   notes: data.notes || "",
                   birth_date: data.birth_date || "",
-                  group: data.group?.id,
+                  group: (typeof data.group === 'object' && data.group !== null)
+                    ? (data.group.id ?? "")
+                    : (data.group || (Array.isArray(data.groups) && data.groups[0]?.id) || ""),
                   image: null,
                   status: data.status || "regular",
                   custom_fee: data.custom_fee || "",
@@ -142,7 +146,9 @@ export const useStudentProfile = (student_id, branchID, dispatch) => {
                   address: "",
                   notes: "",
                   birth_date: "",
-                  group: fallbackData.group?.id,
+                  group: (typeof fallbackData.group === 'object' && fallbackData.group !== null)
+                    ? (fallbackData.group.id ?? "")
+                    : (fallbackData.group || (Array.isArray(fallbackData.groups) && fallbackData.groups[0]?.id) || ""),
                   image: null,
                   status: fallbackData.status || "regular",
                   custom_fee: "",

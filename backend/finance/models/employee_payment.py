@@ -644,13 +644,8 @@ class StaffProfile(models.Model):
                 processed_student_group_pairs.add(key)
 
                 if student.status == "teacher_negotiated":
-                    p = payment_map.get(key)
-                    base_amount = Decimal("0")
-                    if p:
-                        base_amount = Decimal(str(p.paid_amount or 0))
-                    net_amount = base_amount + extra_map.get(key, Decimal("0"))
-                    if net_amount != 0:
-                        total_income += net_amount
+                    # Kategoriya C: O'qituvchi kelishgan talaba faqat markaz operatsion xarajatini to'laydi.
+                    # O'qituvchi ulushi har doim 0 UZS bo'lib, o'qituvchi daromadiga (total_income) ASLO qo'shilmaydi.
                     continue
 
                 # Discount va negotiated studentlar uchun alohida mantiq

@@ -2,7 +2,6 @@ import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
-import WarningModal from "../../Errors/Warning";
 import { Plus, LayoutGrid, MapPin, UserCircle, WalletCards, ChevronRight, Building2, ExpandIcon, Trash2, ArrowLeftRight } from "lucide-react";
 import TransferStaff from "../TransferStaff";
 import ThemeToggle from "../../ThemeToggle";
@@ -27,7 +26,8 @@ const BranchPattern = () => {
     });
 
     const branches = useMemo(() => (Array.isArray(branchesData) ? branchesData : []), [branchesData]);
-    const urlId = branch_id ? Number(branch_id) : null;
+    const searchBranchId = new URLSearchParams(location.search).get('branch_id');
+    const urlId = branch_id ? Number(branch_id) : (searchBranchId ? Number(searchBranchId) : null);
     const activeBranchId = urlId ?? branches[0]?.id ?? null;
     const activeBranch = branches.find(b => b.id === activeBranchId);
 
@@ -41,7 +41,11 @@ const BranchPattern = () => {
     }, [branches, urlId, location.pathname, navigate]);
 
     const handleTabClick = (id) => {
-        navigate(`branch/${id}`);
+        if (location.pathname.includes('special-students')) {
+            navigate(`/super_admin/special-students?branch_id=${id}`);
+        } else {
+            navigate(`branch/${id}`);
+        }
     };
 
     return (
@@ -64,7 +68,8 @@ const BranchPattern = () => {
                             </div>
 
                             {branches.map((branch) => {
-                                const isActive = activeBranchId === branch.id && location.pathname.includes('branch');
+                                const isBranchScoped = location.pathname.includes('branch') || location.pathname.includes('special-students');
+                                const isActive = activeBranchId === branch.id && isBranchScoped;
                                 return (
                                     <button
                                         key={branch.id}
@@ -82,6 +87,7 @@ const BranchPattern = () => {
 
                             {/* ACTION BUTTONS (Moved from sidebar) */}
                             <div className="flex items-center gap-2 pl-2 md:pl-4 border-l border-[var(--border-glass)] ml-2">
+
                                 <button
                                     onClick={() => setStaffModal(true)}
                                     className="p-2 rounded-lg flex bg-[var(--bg-void)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-all group"
@@ -115,10 +121,19 @@ const BranchPattern = () => {
                         <LayoutGrid size={10} className="mb-0.5" /> Boshqaruv
                     </div>
                     <ChevronRight size={10} className="text-[var(--text-muted)]" />
-                    <div className="text-[8.5px] md:text-[9.5px] font-black capitalize tracking-[0.15em] text-[var(--gold)]">
+                    <div className="text-[8.5px] md:text-[9.5px] font-black capitalize tracking-[0.15em] text-[var(--gold)] flex items-center gap-1.5">
                         {location.pathname.includes('profile') ? 'Profil' :
                             location.pathname.includes('all-payments') ? 'To\'lovlar' :
-                                activeBranch?.name || 'Filial'}
+                                location.pathname.includes('special-students') ? (
+                                    <>
+                                        <span className="cursor-pointer hover:underline" onClick={() => navigate(`branch/${activeBranchId}`)}>
+                                            {activeBranch?.name || 'Filial'}
+                                        </span>
+                                        <ChevronRight size={10} className="text-[var(--text-muted)]" />
+                                        <span>Maxsus o'quvchilar</span>
+                                    </>
+                                ) :
+                                    activeBranch?.name || 'Filial'}
                     </div>
                 </div>
 

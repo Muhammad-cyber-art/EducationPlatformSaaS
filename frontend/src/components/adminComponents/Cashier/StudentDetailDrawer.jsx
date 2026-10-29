@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, CreditCard, Calendar, CheckCircle2, 
   AlertCircle, Phone, MapPin, User, FileText, Upload, 
-  Layers, Clock, ArrowRight, DollarSign, Loader2, Sparkles, Receipt, Trash2 
+  Layers, Clock, ArrowRight, DollarSign, Loader2, Sparkles, Receipt, Trash2, Award 
 } from 'lucide-react';
 import api from '../../../tokenUpdater/updater';
 import toast from 'react-hot-toast';
@@ -140,6 +140,15 @@ export default function StudentDetailDrawer({
 
   if (!isOpen || !student) return null;
 
+  const isDiscountStudent = Boolean(
+    student?.status === 'discount' || 
+    student?.is_discount ||
+    detailData?.student?.status === 'discount' ||
+    detailData?.student?.is_discount ||
+    student?.status_display?.toLowerCase()?.includes('imtiyoz') ||
+    detailData?.student?.status_display?.toLowerCase()?.includes('imtiyoz')
+  );
+
   // Active group currently selected in drawer for payment
   const activeGroup = detailData?.all_active_groups?.find(g => g.group_id === activePaymentGroupId) || {
     group_id: student.group_id,
@@ -159,6 +168,10 @@ export default function StudentDetailDrawer({
   // Submit Payment (Online + Offline-First)
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
+    if (isDiscountStudent) {
+      toast.error("Imtiyozli (grant) o'quvchidan kassada to'lov qabul qilinmaydi. To'lov davlat tomonidan qoplanadi.");
+      return;
+    }
     const amountVal = parseFloat(payAmount);
     if (isNaN(amountVal) || amountVal <= 0) {
       toast.error("To'lov summasi 0 dan katta bo'lishi kerak");
@@ -295,14 +308,26 @@ export default function StudentDetailDrawer({
         {/* Drawer Header */}
         <div className="p-4 sm:p-5 border-b border-[var(--border-glass)] bg-[var(--bg-void)]/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/20 flex items-center justify-center text-[var(--gold)] font-bold">
+            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold ${
+              isDiscountStudent 
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' 
+                : 'bg-[var(--gold)]/10 border-[var(--gold)]/20 text-[var(--gold)]'
+            }`}>
               {student.student_name ? student.student_name.charAt(0).toUpperCase() : 'O'}
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
-                {student.student_name}
-              </h3>
-              <p className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
+                  {student.student_name}
+                </h3>
+                {isDiscountStudent && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1 shadow-sm">
+                    <Award size={12} />
+                    Imtiyozli (Grant)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-0.5">
                 <span>{student.student_phone || "Telefon kiritilmagan"}</span>
                 {student.parent_phone && <span>· Ota-onasi: {student.parent_phone}</span>}
               </p>
@@ -354,7 +379,11 @@ export default function StudentDetailDrawer({
                       >
                         <div className="flex items-start justify-between gap-1 mb-1">
                           <h5 className="text-xs font-bold text-[var(--text-primary)] truncate">{grp.group_name}</h5>
-                          {grp.is_paid ? (
+                          {isDiscountStudent || grp.is_discount ? (
+                            <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1">
+                              <Award size={11} /> Davlat puli
+                            </span>
+                          ) : grp.is_paid ? (
                             <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-0.5">
                               <CheckCircle2 size={11} /> To'langan
                             </span>
@@ -411,161 +440,191 @@ export default function StudentDetailDrawer({
                 </div>
               )}
 
-              {/* SECTION 3: Point-of-Sale Payment Form */}
-              <div className="p-4 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-2xl shadow-lg relative overflow-hidden">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <CreditCard size={16} className="text-[var(--gold)]" />
-                    <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                      Tezkor To'lov Qabul Qilish: <span className="text-[var(--gold)]">{activeGroup.group_name}</span>
-                    </h4>
+              {/* SECTION 3: Point-of-Sale Payment Form OR Privileged Student Notice */}
+              {isDiscountStudent ? (
+                <div className="p-4 sm:p-5 bg-gradient-to-br from-amber-500/10 via-[var(--bg-void)] to-amber-500/5 border border-amber-500/30 rounded-2xl shadow-xl relative overflow-hidden">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0 shadow-lg shadow-amber-500/5">
+                      <Award size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-amber-500">
+                          Imtiyozli O'quvchi (Davlat Puli)
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          Kassada to'lov qabul qilish nofaol
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--text-secondary)] mt-2 leading-relaxed">
+                        Ushbu o'quvchi markazda <strong className="text-amber-400">imtiyozli (davlat puli)</strong> asosida tahsil oladi. Shu sababli filial kassasida o'quvchidan to'lov qabul qilinmaydi va o'quvchiga shaxsiy qarz hisoblanmaydi.
+                      </p>
+                      <div className="mt-3 p-3 bg-[var(--bg-panel)]/80 rounded-xl border border-amber-500/20 flex items-center justify-between text-xs">
+                        <span className="text-[var(--text-muted)]">Moliyaviy hisob:</span>
+                        <span className="font-bold text-[var(--gold)]">Maxsus O'quvchilar Moduli</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                        O'qituvchi ulushi va davomat hisob-kitoblari <strong>"Maxsus O'quvchilar"</strong> bo'limida avtomatik ravishda davlat subsidiyasi hisobidan yuritiladi.
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs text-[var(--text-muted)] tabular-nums">
-                    Qarz: <strong className="text-rose-500">{formatCurrency(activeGroup.remaining_amount || 0)}</strong>
-                  </span>
                 </div>
-
-                <form onSubmit={handlePaymentSubmit} className="space-y-3.5">
-                  {/* Amount Input with quick presets */}
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                      To'lov Summasi (UZS) <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--gold)] z-10 pointer-events-none" />
-                      <AmountInput
-                        required
-                        placeholder="Summani kiriting..."
-                        value={payAmount}
-                        onChange={(e) => setPayAmount(e.target.value)}
-                        className="w-full pl-9 pr-14 py-2 text-sm font-bold bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)]"
-                      />
+              ) : (
+                <div className="p-4 bg-[var(--bg-void)] border border-[var(--border-glass)] rounded-2xl shadow-lg relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <CreditCard size={16} className="text-[var(--gold)]" />
+                      <h4 className="text-sm font-bold text-[var(--text-primary)]">
+                        Tezkor To'lov Qabul Qilish: <span className="text-[var(--gold)]">{activeGroup.group_name}</span>
+                      </h4>
                     </div>
-
-                    {/* Presets */}
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setPayAmount(String(activeGroup.remaining_amount || ''))}
-                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/20 hover:bg-[var(--gold)]/20 transition-colors"
-                      >
-                        Qolgan qarz ({formatCurrency(activeGroup.remaining_amount || 0)})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPayAmount(String(activeGroup.monthly_price || ''))}
-                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:bg-[var(--gold)]/10 hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-colors"
-                      >
-                        To'liq oylik ({formatCurrency(activeGroup.monthly_price || 0)})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPayAmount(String(Math.round((activeGroup.monthly_price || 0) / 2)))}
-                        className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:bg-[var(--gold)]/10 hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-colors"
-                      >
-                        50%
-                      </button>
-                    </div>
+                    <span className="text-xs text-[var(--text-muted)] tabular-nums">
+                      Qarz: <strong className="text-rose-500">{formatCurrency(activeGroup.remaining_amount || 0)}</strong>
+                    </span>
                   </div>
 
-                  {/* Payment Method */}
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                      To'lov Usuli
-                    </label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {[
-                        { id: 'cash', label: 'Naqd' },
-                        { id: 'click', label: 'Click/Karta' },
-                        { id: 'payme', label: 'Payme' },
-                        { id: 'other', label: 'Boshqa' }
-                      ].map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            setPayMethod(m.id);
-                            if (m.id === 'click' || m.id === 'payme') {
-                              setIsReceiptless(false);
-                            } else if (m.id === 'cash') {
-                              setIsReceiptless(true);
-                              setReceiptImage(null);
-                            }
-                          }}
-                          className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${
-                            payMethod === m.id
-                              ? 'bg-[var(--gold)] text-white shadow-md'
-                              : 'bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Receiptless toggle & Notes */}
-                  <div className="flex items-center justify-between text-xs pt-1">
-                    <label className="flex items-center gap-2 cursor-pointer text-[var(--text-secondary)]">
-                      <input
-                        type="checkbox"
-                        checked={isReceiptless}
-                        onChange={(e) => setIsReceiptless(e.target.checked)}
-                        className="w-4 h-4 rounded text-[var(--gold)] focus:ring-0 bg-[var(--bg-panel)] border-[var(--border-glass)]"
-                      />
-                      <span>Cheksiz to'lov (kvitansiyasiz)</span>
-                    </label>
-
-                    {!isReceiptless && (
-                      <label className="text-xs text-[var(--gold)] hover:underline cursor-pointer flex items-center gap-1">
-                        <Upload size={12} />
-                        <span>Chek yuklash</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setReceiptImage(e.target.files[0])}
-                          className="hidden"
-                        />
+                  <form onSubmit={handlePaymentSubmit} className="space-y-3.5">
+                    {/* Amount Input with quick presets */}
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                        To'lov Summasi (UZS) <span className="text-rose-500">*</span>
                       </label>
-                    )}
-                  </div>
+                      <div className="relative">
+                        <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--gold)] z-10 pointer-events-none" />
+                        <AmountInput
+                          required
+                          placeholder="Summani kiriting..."
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                          className="w-full pl-9 pr-14 py-2 text-sm font-bold bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--gold)]"
+                        />
+                      </div>
 
-                  {receiptImage && !isReceiptless && (
-                    <div className="flex items-center justify-between text-[11px] text-emerald-500 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
-                      <span className="truncate">Chek tanlandi: {receiptImage.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setReceiptImage(null)}
-                        className="ml-2 text-rose-500 hover:text-rose-400 font-bold"
-                      >
-                        ✕
-                      </button>
+                      {/* Presets */}
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount(String(activeGroup.remaining_amount || ''))}
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--gold)]/10 text-[var(--gold)] border border-[var(--gold)]/20 hover:bg-[var(--gold)]/20 transition-colors"
+                        >
+                          Qolgan qarz ({formatCurrency(activeGroup.remaining_amount || 0)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount(String(activeGroup.monthly_price || ''))}
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:bg-[var(--gold)]/10 hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-colors"
+                        >
+                          To'liq oylik ({formatCurrency(activeGroup.monthly_price || 0)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount(String(Math.round((activeGroup.monthly_price || 0) / 2)))}
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:bg-[var(--gold)]/10 hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-colors"
+                        >
+                          50%
+                        </button>
+                      </div>
                     </div>
-                  )}
 
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Izoh (ixtiyoriy)..."
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] placeholder:text-[var(--text-muted)]"
-                    />
-                  </div>
+                    {/* Payment Method */}
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                        To'lov Usuli
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { id: 'cash', label: 'Naqd' },
+                          { id: 'click', label: 'Click/Karta' },
+                          { id: 'payme', label: 'Payme' },
+                          { id: 'other', label: 'Boshqa' }
+                        ].map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setPayMethod(m.id);
+                              if (m.id === 'click' || m.id === 'payme') {
+                                setIsReceiptless(false);
+                              } else if (m.id === 'cash') {
+                                setIsReceiptless(true);
+                                setReceiptImage(null);
+                              }
+                            }}
+                            className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${
+                              payMethod === m.id
+                                ? 'bg-[var(--gold)] text-white shadow-md'
+                                : 'bg-[var(--bg-panel)] text-[var(--text-secondary)] border border-[var(--border-glass)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40'
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full py-2.5 px-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white font-black text-xs rounded-xl shadow-lg shadow-[var(--gold)]/10 active:scale-98 transition-all flex items-center justify-center gap-2"
-                  >
-                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                    <span>To'lovni Tasdiqlash va Kassaga Yozish</span>
-                  </button>
-                </form>
-              </div>
+                    {/* Receiptless toggle & Notes */}
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-[var(--text-secondary)]">
+                        <input
+                          type="checkbox"
+                          checked={isReceiptless}
+                          onChange={(e) => setIsReceiptless(e.target.checked)}
+                          className="w-4 h-4 rounded text-[var(--gold)] focus:ring-0 bg-[var(--bg-panel)] border-[var(--border-glass)]"
+                        />
+                        <span>Cheksiz to'lov (kvitansiyasiz)</span>
+                      </label>
+
+                      {!isReceiptless && (
+                        <label className="text-xs text-[var(--gold)] hover:underline cursor-pointer flex items-center gap-1">
+                          <Upload size={12} />
+                          <span>Chek yuklash</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => setReceiptImage(e.target.files[0])}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    {receiptImage && !isReceiptless && (
+                      <div className="flex items-center justify-between text-[11px] text-emerald-500 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+                        <span className="truncate">Chek tanlandi: {receiptImage.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setReceiptImage(null)}
+                          className="ml-2 text-rose-500 hover:text-rose-400 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Izoh (ixtiyoriy)..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold)] placeholder:text-[var(--text-muted)]"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full py-2.5 px-4 bg-[var(--gold)] hover:bg-[var(--gold)]/90 text-white font-black text-xs rounded-xl shadow-lg shadow-[var(--gold)]/10 active:scale-98 transition-all flex items-center justify-center gap-2"
+                    >
+                      {submitting ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
+                      <span>To'lovni Tasdiqlash va Kassaga Yozish</span>
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {/* Cancel Action */}
-              {activeGroup.paid_amount > 0 && (
+              {activeGroup.paid_amount > 0 && !isDiscountStudent && (
                 <div className="pt-1">
                   <button
                     type="button"

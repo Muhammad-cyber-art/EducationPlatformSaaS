@@ -353,9 +353,10 @@ class Student(models.Model):
         super(Student, self).save(*args, **kwargs)
 
         # ✅ M2M va Enrollment synchronization
-        # Faqat yangi yaratilganda yoki FK 'group' haqiqatda o'zgarganda faollashtiramiz.
-        # Bu o'quvchi guruhdan chiqarilganda (is_active=False) oddiy profil tahririda
-        # eski guruh enrollmenti noo'rin qayta yoqilib (resurrected) ketishini oldini oladi.
+        # Guruh o'zgarganda (shu jumladan o'quvchi guruhsiz qoldirilganda ham) eski guruh enrollmenti uziladi!
+        if not is_new and old_group_id and old_group_id != self.group_id:
+            GroupEnrollment.objects.filter(student=self, group_id=old_group_id).delete()
+
         if self.group:
             if is_new or (old_group_id != self.group_id):
                 obj, created = GroupEnrollment.objects.get_or_create(
@@ -497,13 +498,15 @@ class Student(models.Model):
         if self.status in ["low_income", "negotiated", "discount"]:
             if self.custom_fee is not None:
                 base_price = self.custom_fee
+        elif self.status == "teacher_negotiated":
+            if self.custom_fee is not None:
+                base_price = self.custom_fee
+            else:
+                from finance.utils import get_teacher_negotiated_center_fee
+                base_price = get_teacher_negotiated_center_fee(target_group)
 
         # Bir kunlik dars narxi
-        daily_price = floor_amount(base_price / total_lessons_count)
-
-        # O'qituvchi kelishgan: Umuman pul to'lamaydi
-        if self.status == "teacher_negotiated":
-            return 0
+        raw_daily_price = Decimal(str(base_price)) / Decimal(str(total_lessons_count))
 
         # Faqat o'tib ketgan va oydagi dars kunlarini olamiz
         today = timezone.localdate()
@@ -518,7 +521,7 @@ class Student(models.Model):
             is_present=True,
         ).count()
 
-        accrued_amount = floor_amount(daily_price * present_count)
+        accrued_amount = floor_amount(raw_daily_price * Decimal(str(present_count)))
         return accrued_amount
 
     def calculate_refund_amount(self, year, month, group=None):
@@ -556,6 +559,9 @@ class Student(models.Model):
         ]:
             if self.custom_fee is not None:
                 base_price = self.custom_fee
+            elif self.status == "teacher_negotiated":
+                from finance.utils import get_teacher_negotiated_center_fee
+                base_price = get_teacher_negotiated_center_fee(target_group)
         lessons_count = len(lesson_dates)
         if lessons_count <= 0:
             return 0

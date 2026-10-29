@@ -75,7 +75,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
     return (
         <table className="w-full text-left border-collapse">
             <thead>
-                <tr className="bg-[var(--bg-panel)] border-b border-[#333]">
+                <tr className="bg-[var(--bg-panel)] border-b border-[var(--border-glass)]">
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">O'quvchi / Guruh</th>
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">To'lov Usuli</th>
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">Summa</th>
@@ -84,7 +84,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em] text-right">Amallar</th>
                 </tr>
             </thead>
-            <tbody className="divide-y divide-[#333]">
+            <tbody className="divide-y divide-[var(--border-glass)]">
                 {loading && payments.length === 0 ? (
                     <tr><td colSpan="6" className="p-16 text-center text-[var(--gold)] animate-pulse uppercase font-black tracking-widest">Ma'lumotlar yuklanmoqda...</td></tr>
                 ) : payments.length === 0 ? (
@@ -120,12 +120,12 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                     >
                                         <td className="px-8 py-4">
                                             <div className="flex items-center gap-4">
-                                                <div className={`w-10 h-10 rounded-2xl bg-[var(--bg-void)] border flex items-center justify-center transition-colors ${isDeleted ? 'border-red-500/30 text-red-400' : 'border-[#333] text-[var(--text-muted)] group-hover/row:border-[var(--gold)]/30'}`}>
+                                                <div className={`w-10 h-10 rounded-2xl bg-[var(--bg-void)] border flex items-center justify-center transition-colors ${isDeleted ? 'border-red-500/30 text-red-400' : 'border-[var(--border-glass)] text-[var(--text-muted)] group-hover/row:border-[var(--gold)]/30'}`}>
                                                     <User size={20} strokeWidth={1.5} />
                                                 </div>
                                                 <div>
-                                                    <p className={`text-sm font-black capitalize ${isCancelled ? 'text-red-400 line-through' : isDeleted ? 'text-red-500' : 'text-white'}`}>{p.student_name}</p>
-                                                    <p className="text-[10px] text-[var(--text-muted)] font-black uppercase tracking-widest mt-0.5 opacity-70">{p.payment_details?.group_name || 'Guruhsiz'}</p>
+                                                    <p className={`text-sm font-black capitalize ${isCancelled ? 'text-red-400 line-through' : isDeleted ? 'text-red-500' : 'text-[var(--text-primary)]'}`}>{p.student_name}</p>
+                                                    <p className="text-[10px] text-[var(--text-muted)] font-black uppercase tracking-widest mt-0.5 opacity-70">{p.payment_details?.group_name || p.group_name || 'Guruhsiz'}</p>
                                                     {isCancelled && (
                                                         <p className="text-[9px] text-red-400 font-bold mt-0.5">
                                                             ❌ Bekor qilindi: {p.cancelled_by_name || '—'}
@@ -142,7 +142,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                             </div>
                                         </td>
                                         <td className="px-8 py-4">
-                                            <div className={`text-[15px] font-black tabular-nums tracking-tight ${isCancelled ? 'text-red-400 line-through' : 'text-white'}`}>{formatCurrency(p.amount)}</div>
+                                            <div className={`text-[15px] font-black tabular-nums tracking-tight ${isCancelled ? 'text-red-400 line-through' : 'text-[var(--text-primary)]'}`}>{formatCurrency(p.amount)}</div>
                                             {p.payment_details?.refund_amount > 0 && !p.payment_details?.refund_ignored && (
                                                 <div className="mt-0.5 text-[9px] font-bold text-emerald-400">Refund: -{formatCurrency(p.payment_details.refund_amount)}</div>
                                             )}
@@ -152,14 +152,14 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                         </td>
                                         <td className="px-8 py-4">
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${p.payment_details?.is_verified ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-white/5 text-[var(--gold)] border-white/10'}`}>
+                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${p.payment_details?.is_verified ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-[var(--bg-void)] text-[var(--gold)] border-[var(--border-glass)]'}`}>
                                                     {p.payment_details?.is_verified ? <CheckCircle2 size={14} /> : <ShieldCheck size={14} />}
                                                 </div>
                                                 <span className="text-[10px] font-black uppercase text-[var(--text-secondary)]">{p.marked_by_name || "Tizim"}</span>
                                             </div>
                                         </td>
                                         <td className="px-8 py-4">
-                                            <div className="text-[10px] font-black text-white">{new Date(p.created_at || p.date).toLocaleDateString('uz-UZ')}</div>
+                                            <div className="text-[10px] font-black text-[var(--text-primary)]">{new Date(p.created_at || p.date).toLocaleDateString('uz-UZ')}</div>
                                             <div className="text-[9px] text-[var(--text-muted)] font-black mt-0.5">{new Date(p.created_at || p.date).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</div>
                                         </td>
                                         <td className="px-8 py-4 text-right">
@@ -240,9 +240,9 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                                 <React.Fragment key={w.id}>
                                     {showBadge && (
                                         <tr>
-                                            <td colSpan="6" className="py-3 bg-[#0a0a0a]/50 border-y border-[#333]/50">
+                                            <td colSpan="6" className="py-3 bg-[var(--bg-void)]/30 border-y border-[var(--gold)]/20">
                                                 <div className="flex justify-center">
-                                                    <span className="px-4 py-1 rounded-full bg-white/5 border border-white/10 text-white text-[11px] font-black uppercase tracking-widest shadow-lg">
+                                                    <span className="px-4 py-1 rounded-full bg-[var(--bg-panel)] border border-[var(--gold)]/30 text-[var(--text-primary)] text-[11px] font-black uppercase tracking-widest shadow-sm">
                                                         {dateBadge}
                                                     </span>
                                                 </div>
@@ -256,7 +256,7 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                                                     <TrendingDown size={20} strokeWidth={1.5} />
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-black text-white capitalize">{w.title}</p>
+                                                    <p className="text-sm font-black text-[var(--text-primary)] capitalize">{w.title}</p>
                                                     <p className="text-[10px] text-[var(--text-muted)] font-black uppercase tracking-widest mt-0.5 opacity-70 truncate max-w-[200px]">{w.description}</p>
                                                 </div>
                                             </div>
@@ -270,14 +270,14 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                                         <td className="px-8 py-4 text-[15px] font-black text-red-500 tabular-nums tracking-tight">{formatCurrency(w.amount)}</td>
                                         <td className="px-8 py-4">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 text-[var(--gold)]">
+                                                <div className="w-7 h-7 rounded-lg bg-[var(--bg-void)] flex items-center justify-center border border-[var(--border-glass)] text-[var(--gold)]">
                                                     <User size={14} />
                                                 </div>
                                                 <span className="text-[10px] font-black uppercase text-[var(--text-secondary)]">{w.marked_by_name || "Super Admin"}</span>
                                             </div>
                                         </td>
                                         <td className="px-8 py-4">
-                                            <div className="text-[10px] font-black text-white">{w.date}</div>
+                                            <div className="text-[10px] font-black text-[var(--text-primary)]">{w.date}</div>
                                             <div className="text-[9px] text-[var(--text-muted)] font-black mt-0.5">Chiqim operatsiyasi</div>
                                         </td>
                                         <td className="px-8 py-4 text-right">
@@ -309,23 +309,24 @@ const MobileIncomeCard = ({ item, isSuperAdmin, onVerify, onDetail, onReceipt })
     const isDeleted = item.student_name?.includes("O'chirilgan");
     const branchName = item.branch_name || item.payment_details?.branch_name || item.branch?.name;
     const timeStr = new Date(item.created_at || item.date).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+    const methodMeta = getMethodMeta(item.payment_details?.payment_method, item.payment_details?.payment_method_display);
 
     return (
-        <div className="flex items-center justify-between gap-2 p-4 bg-[var(--bg-panel)]/30 border border-[#333] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
+        <div className="flex items-center justify-between gap-2 p-4 bg-[var(--bg-panel)]/30 border border-[var(--border-glass)] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
             <div className="flex-1 min-w-0">
-                <h3 className={`text-[13px] font-black capitalize truncate ${isCancelled ? 'text-red-400 line-through' : isDeleted ? 'text-red-500' : 'text-white'}`}>{item.student_name}</h3>
-                <div className="flex items-center gap-2 mt-0.5">
+                <h3 className={`text-[13px] font-black capitalize truncate ${isCancelled ? 'text-red-400 line-through' : isDeleted ? 'text-red-500' : 'text-[var(--text-primary)]'}`}>{item.student_name}</h3>
+                <p className="text-[10px] text-[var(--text-muted)] font-bold truncate opacity-80">{item.payment_details?.group_name || item.group_name || 'Guruhsiz'}</p>
+                <div className="flex items-center gap-2 mt-1">
                     <p className={`text-[13px] font-black tabular-nums ${isCancelled ? 'text-red-400 line-through' : 'text-[var(--gold)]'}`}>{formatCurrency(item.amount)}</p>
-                    {item.payment_details?.payment_method_display && (
-                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${isDeleted ? 'bg-red-500/10 text-red-400 border border-red-500/30' : 'bg-white/5 text-white/50 border border-white/10'}`}>
-                            {item.payment_details.payment_method_display}
-                        </span>
-                    )}
+                    <span className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border ${isCancelled ? 'opacity-40 grayscale' : isDeleted ? 'bg-red-500/10 text-red-400 border-red-500/30' : methodMeta.badgeClass}`}>
+                        {methodMeta.icon && React.cloneElement(methodMeta.icon, { size: 12, strokeWidth: 2.2 })}
+                        {methodMeta.mobileLabel || methodMeta.label}
+                    </span>
                 </div>
             </div>
 
             <div className="flex flex-col items-center justify-center shrink-0 px-2">
-                <span className="text-[10px] text-white font-black uppercase tracking-widest text-center max-w-[90px] truncate">
+                <span className="text-[10px] text-[var(--text-primary)] font-black uppercase tracking-widest text-center max-w-[90px] truncate">
                     {branchName || 'Asosiy'}
                 </span>
                 <span className="text-[9px] text-[var(--gold)] font-black tracking-widest mt-1 text-center leading-tight">
@@ -337,18 +338,38 @@ const MobileIncomeCard = ({ item, isSuperAdmin, onVerify, onDetail, onReceipt })
                 {!isCancelled && (
                     <>
                         {isSuperAdmin && !item.payment_details?.is_verified && (
-                            <button onClick={() => onVerify(item.payment_details?.original_payment_id || item.id)} className="w-10 h-10 flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg active:scale-90 transition-all"><CheckCircle2 size={18} /></button>
+                            <button
+                                onClick={() => onVerify(item.payment_details?.original_payment_id || item.id)}
+                                title="Tasdiqlash"
+                                className="w-11 h-11 flex items-center justify-center bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 rounded-xl active:scale-90 transition-all shadow-sm"
+                            >
+                                <CheckCircle2 size={20} strokeWidth={2.2} />
+                            </button>
+                        )}
+                        {item.payment_details?.is_verified && (
+                            <div
+                                title="Tasdiqlangan"
+                                className="w-11 h-11 flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-xl"
+                            >
+                                <CheckCircle2 size={20} strokeWidth={2.2} />
+                            </div>
                         )}
                         {item.payment_details?.receipt_image && (
                             <button
                                 onClick={() => onReceipt(item.payment_details.receipt_image, item)}
                                 title="To'lov cheki va izohni ko'rish"
-                                className="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-lg active:scale-90 transition-all"
+                                className="w-11 h-11 flex items-center justify-center bg-blue-500/15 text-blue-500 border border-blue-500/30 rounded-xl active:scale-90 transition-all shadow-sm"
                             >
-                                <ImageIcon size={18} />
+                                <ImageIcon size={20} strokeWidth={2.2} />
                             </button>
                         )}
-                        <button onClick={() => onDetail(item)} className="w-10 h-10 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-lg active:scale-90 transition-all"><FileText size={18} /></button>
+                        <button
+                            onClick={() => onDetail(item)}
+                            title="Batafsil ma'lumot"
+                            className="w-11 h-11 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/30 rounded-xl active:scale-90 transition-all shadow-sm"
+                        >
+                            <FileText size={20} strokeWidth={2.2} />
+                        </button>
                     </>
                 )}
             </div>
@@ -357,14 +378,19 @@ const MobileIncomeCard = ({ item, isSuperAdmin, onVerify, onDetail, onReceipt })
 };
 
 const MobileExpenseCard = ({ item }) => (
-    <div className="flex items-center justify-between p-4 bg-[var(--bg-panel)]/30 border border-[#333] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
-        <div>
-            <h3 className="text-[13px] font-black text-white capitalize">{item.title}</h3>
-            <p className="text-[13px] font-black tabular-nums mt-0.5 text-red-500">{formatCurrency(item.amount)}</p>
+    <div className="flex items-center justify-between p-4 bg-[var(--bg-panel)]/30 border border-[var(--border-glass)] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
+        <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-red-500/10 border border-red-500/25 flex items-center justify-center text-red-500 shrink-0 shadow-sm">
+                <TrendingDown size={20} strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+                <h3 className="text-[13px] font-black text-[var(--text-primary)] capitalize truncate">{item.title}</h3>
+                <p className="text-[13px] font-black tabular-nums mt-0.5 text-red-500">{formatCurrency(item.amount)}</p>
+            </div>
         </div>
-        <div className="flex gap-2">
-            <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
-                <CheckCircle2 size={10} />
+        <div className="flex gap-2 shrink-0">
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                <CheckCircle2 size={15} strokeWidth={2.2} />
                 Bajarildi
             </div>
         </div>
@@ -411,7 +437,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
     return (
         <div className="relative">
             {/* Desktop Table View */}
-            <div className="hidden lg:block !p-0 rounded-2xl overflow-hidden border border-[#333] shadow-xl bg-[var(--bg-panel)]/20 backdrop-blur-md">
+            <div className="hidden lg:block !p-0 rounded-2xl overflow-hidden border border-[var(--border-glass)] shadow-xl bg-[var(--bg-panel)]/20 backdrop-blur-md">
                 <div className="overflow-x-auto">
                     {activeTab === "incomes" ? (
                         <IncomeTable
@@ -454,7 +480,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                 <React.Fragment key={item.id}>
                                     {showBadge && (
                                         <div className="flex justify-center my-6">
-                                            <span className="px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-white text-[11px] font-black uppercase tracking-widest shadow-lg">
+                                            <span className="px-4 py-1.5 rounded-full bg-[var(--bg-panel)] border border-[var(--gold)]/30 text-[var(--text-primary)] text-[11px] font-black uppercase tracking-widest shadow-sm">
                                                 {dateBadge}
                                             </span>
                                         </div>
@@ -499,19 +525,19 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                     href={receiptViewerUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors border border-white/10 flex items-center gap-1.5"
+                                    className="px-3 py-1.5 text-xs font-bold bg-[var(--bg-panel)] hover:bg-[var(--bg-void)] text-white rounded-xl transition-colors border border-[var(--border-glass)] flex items-center gap-1.5"
                                 >
                                     <span>Yangi oynada ochish</span>
                                 </a>
                                 <button
                                     onClick={() => { setReceiptViewerUrl(null); setReceiptViewerPayment(null); }}
-                                    className="w-8 h-8 flex items-center justify-center bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                                    className="w-8 h-8 flex items-center justify-center bg-[var(--bg-panel)] text-white rounded-xl hover:bg-[var(--bg-void)] transition-all border border-[var(--border-glass)] cursor-pointer"
                                 >
                                     ✕
                                 </button>
                             </div>
                         </div>
-                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/50 p-2">
+                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-glass)] bg-black/60 p-2">
                             <img
                                 src={receiptViewerUrl}
                                 alt="Chek rasmi"
@@ -536,7 +562,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                         </div>
 
                         {receiptViewerPayment && (
-                            <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-[var(--gold)]/20 rounded-2xl shadow-xl space-y-3 animate-in fade-in duration-150">
+                            <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-xl space-y-3 animate-in fade-in duration-150">
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                                     <div>
                                         <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider font-bold">O'quvchi</p>
@@ -575,12 +601,14 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                         .replace(/\|+/g, ' ')
                                         .trim();
 
+                                    customNote = customNote.replace(/^(?:izoh|izohi|comment|note):\s*/i, '').trim();
+
                                     if (customNote.startsWith(groupName) || customNote.includes("UZS. Usul:") || customNote === groupName) {
                                         customNote = "";
                                     }
 
                                     return (
-                                        <div className="p-3.5 bg-[var(--gold)]/10 border border-[var(--gold)]/20 rounded-xl space-y-2">
+                                        <div className="p-3.5 bg-[var(--bg-void)]/60 border border-[var(--border-glass)] rounded-xl space-y-2.5">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] font-black uppercase text-[var(--gold)] tracking-widest flex items-center gap-1.5">
                                                     <FileText size={13} />
@@ -593,13 +621,19 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-white font-medium leading-relaxed">
+                                            <p className="text-xs text-[var(--text-color)] font-medium leading-relaxed">
                                                 Guruh: <strong className="text-[var(--gold)]">{groupName}</strong> {month ? `• Davr: ${month}` : ''}
                                             </p>
                                             {customNote ? (
-                                                <div className="pt-1.5 border-t border-[var(--gold)]/15">
-                                                    <span className="text-[9px] uppercase font-bold text-[var(--text-muted)] block">Admin izohi:</span>
-                                                    <p className="text-xs text-white font-medium whitespace-pre-wrap">{customNote}</p>
+                                                <div className="pt-2 border-t border-[var(--border-glass)]">
+                                                    <div className="p-3 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs space-y-1">
+                                                        <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider block">
+                                                            Kiritilgan Izoh:
+                                                        </span>
+                                                        <p className="text-sm font-black text-amber-300 whitespace-pre-wrap leading-relaxed select-text">
+                                                            "{customNote}"
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             ) : null}
                                         </div>

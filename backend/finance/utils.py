@@ -22,61 +22,23 @@ def normalize_month(value) -> date:
 
 def _auto_floor_precision(amount):
     """
-    Summa kattaligiga qarab optimal yaxlitlash aniqligini tanlaydi.
-
-    Maqsad:
-      - Har bir summa uchun nisbiy xatolik ~0.1-1% oralig'ida bo'lsin
-      - Kichik summalar ham toza ko'rinsin (9,327 → 9,300)
-      - Katta summalarda mayda-chuyda raqamlar bo'lmasin (3,453,270 → 3,450,000)
-
-    Jadval:
-      < 10,000      → 100    (max ~1%   xatolik)
-      10k - 100k    → 500    (max ~0.5% xatolik)
-      100k - 1M     → 1,000  (max ~0.1% xatolik)
-      1M - 10M      → 5,000  (max ~0.05% xatolik)
-      > 10M         → 10,000 (max ~0.1%  xatolik)
+    Summa kattaligiga qarab optimal yaxlitlash aniqligi:
+    1 so'mgacha aniq hisoblash — katta summalarda (10 000 - 30 000 so'm)
+    kamayib ketishining oldini olish uchun 1 so'm qaytaradi.
     """
-    amount = abs(amount)
-    if amount < 10_000:
-        return 100
-    elif amount < 100_000:
-        return 500
-    elif amount < 1_000_000:
-        return 1_000
-    elif amount < 10_000_000:
-        return 5_000
-    else:
-        return 10_000
+    return 1
 
 
-def floor_amount(value, precision=1000):
+def floor_amount(value, precision=1):
     """
-    Har qanday pul miqdorini eng yaqin past <precision> ga yaxlitlaydi (floor).
+    Har qanday pul miqdorini eng yaqin <precision> ga yaxlitlaydi.
+    Default aniqlik 1 so'm (tiyinlarsiz, 1 so'mgacha aniq Decimal).
+    Katta pullarda (10 000 - 30 000 so'm) kamayib ketishining oldini oladi.
 
     Parametrlar:
         value:     Yaxlitlanadigan son (int, float, Decimal, str)
-        precision: Yaxlitlash aniqligi (default: 1000 — eski kod bilan mos)
-                   Agar None bo'lsa → _auto_floor_precision orqali avtomatik tanlanadi
-
-    Misollar (precision=1000, default):
-        350548  → 350000
-        125750  → 125000
-        999     → 0
-        1001    → 1000
-        300000  → 300000  (o'zgarmaydi)
-
-    Misollar (precision=None, adaptiv):
-        9,327       → 9,300   (precision=100)
-        45,327      → 45,000  (precision=500)
-        345,327     → 345,000 (precision=1,000)
-        3,453,270   → 3,450,000 (precision=5,000)
-        34,532,700  → 34,530,000 (precision=10,000)
-
-    Barcha to'lov hisoblashlarida ishlatiladi:
-      - Student to'lovlari
-      - Refund summasi
-      - Mentor / admin oylik maoshi
-      - Qo'shimcha to'lovlar
+        precision: Yaxlitlash aniqligi (default: 1 so'm)
+                   Agar None bo'lsa -> _auto_floor_precision (1 so'm)
     """
     if value is None:
         return Decimal("0")
@@ -84,6 +46,8 @@ def floor_amount(value, precision=1000):
         amount = Decimal(str(value))
         if precision is None:
             precision = _auto_floor_precision(amount)
+        if precision == 1:
+            return amount.quantize(Decimal("1"), rounding=decimal.ROUND_HALF_UP)
         divisor = Decimal(str(precision))
         return (amount // divisor) * divisor
     except (TypeError, ValueError, decimal.InvalidOperation):
@@ -132,6 +96,30 @@ def calculate_attendance_based_student_payment(student, group, month_date, ignor
     if join_date is None and student.joined_at:
         join_date = student.joined_at.date()
 
+    # Oy boshlanishi va tugash sanalarini hisoblash (indekslangan B-tree so'rovlar uchun)
+    import calendar
+    from datetime import date
+    _, last_day = calendar.monthrange(month_date.year, month_date.month)
+    month_start = date(month_date.year, month_date.month, 1)
+    month_end = date(month_date.year, month_date.month, last_day)
+
+    # Agar o'quvchining ushbu oyda haqiqiy tasdiqlangan davomati (Attendance) mavjud bo'lsa,
+    # joined_at sanasi ushbu darslarni asossiz ravishda kesib tashlamasligi kerak
+    earliest_att_date = (
+        Attendance.objects.filter(
+            student=student,
+            group=group,
+            date__range=(month_start, month_end),
+            is_present=True,
+            marked_by__isnull=False,
+        )
+        .order_by("date")
+        .values_list("date", flat=True)
+        .first()
+    )
+    if earliest_att_date and join_date and earliest_att_date < join_date:
+        join_date = earliest_att_date
+
     # Guruh dars kunlari shu oyda (cache'dan foydalanish optimizatsiyasi)
     if lesson_dates_cache is not None and group.id in lesson_dates_cache:
         full_month_lessons = list(lesson_dates_cache[group.id])
@@ -162,7 +150,16 @@ def calculate_attendance_based_student_payment(student, group, month_date, ignor
     # Faqat o'tib ketgan va oydagi dars kunlarini olamiz (agar ignore_today_check bo'lsa, barchasini olamiz)
     if not ignore_today_check:
         today = timezone.localdate()
-        active_lesson_dates = [d for d in lesson_dates if d <= today]
+        # Agar sanada tasdiqlangan davomat mavjud bo'lsa, u bugundan keyin bo'lsa ham hisobga olinadi
+        marked_dates = set(
+            Attendance.objects.filter(
+                student=student,
+                group=group,
+                date__range=(month_start, month_end),
+                marked_by__isnull=False,
+            ).values_list("date", flat=True)
+        )
+        active_lesson_dates = [d for d in lesson_dates if d <= today or d in marked_dates]
     else:
         active_lesson_dates = lesson_dates
 
@@ -174,8 +171,7 @@ def calculate_attendance_based_student_payment(student, group, month_date, ignor
     attendance_filters = {
         "student": student,
         "group": group,
-        "date__year": month_date.year,
-        "date__month": month_date.month,
+        "date__range": (month_start, month_end),
         "date__in": active_lesson_dates,
         "is_present": True,
         "marked_by__isnull": False,
@@ -205,7 +201,8 @@ calculate_discount_student_payment = calculate_attendance_based_student_payment
 
 
 def calculate_attendance_based_mentor_share(
-    student, group, month_date, per_student_amount, commission_percentage=None, ignore_today_check=False
+    student, group, month_date, per_student_amount, commission_percentage=None, ignore_today_check=False,
+    lesson_dates_cache=None, enrollment_cache=None, attendance_cache=None
 ):
     """
     Per_student yoki foizli mentor uchun imtiyozli (discount) va kelishilgan (negotiated) student uchun ulush summasini hisoblash:
@@ -230,20 +227,52 @@ def calculate_attendance_based_mentor_share(
         if student.custom_fee is not None:
             base_price = student.custom_fee
 
-    # Join date aniqlash
+    # Join date aniqlash (cache yoki DB)
     join_date = None
-    enrollment = (
-        GroupEnrollment.objects.filter(student=student, group=group)
-        .only("joined_at")
-        .first()
-    )
-    if enrollment and enrollment.joined_at:
-        join_date = enrollment.joined_at.date()
-    elif student.joined_at:
+    if enrollment_cache is not None and ('_join_dates' in enrollment_cache):
+        join_date = enrollment_cache['_join_dates'].get((student.id, group.id))
+    else:
+        enrollment = (
+            GroupEnrollment.objects.filter(student=student, group=group)
+            .only("joined_at")
+            .first()
+        )
+        if enrollment and enrollment.joined_at:
+            join_date = enrollment.joined_at.date()
+    if join_date is None and student.joined_at:
         join_date = student.joined_at.date()
 
-    # Step 2: Guruh dars kunlari shu oyda
-    full_month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
+    # Oy boshlanishi va tugash sanalarini hisoblash (indekslangan B-tree so'rovlar uchun)
+    import calendar
+    from datetime import date
+    _, last_day = calendar.monthrange(month_date.year, month_date.month)
+    month_start = date(month_date.year, month_date.month, 1)
+    month_end = date(month_date.year, month_date.month, last_day)
+
+    # Agar o'quvchining ushbu oyda haqiqiy tasdiqlangan davomati (Attendance) mavjud bo'lsa,
+    # joined_at sanasi ushbu darslarni asossiz ravishda kesib tashlamasligi kerak
+    earliest_att_date = (
+        Attendance.objects.filter(
+            student=student,
+            group=group,
+            date__range=(month_start, month_end),
+            is_present=True,
+            marked_by__isnull=False,
+        )
+        .order_by("date")
+        .values_list("date", flat=True)
+        .first()
+    )
+    if earliest_att_date and join_date and earliest_att_date < join_date:
+        join_date = earliest_att_date
+
+    # Step 2: Guruh dars kunlari shu oyda (cache'dan foydalanish)
+    if lesson_dates_cache is not None and group.id in lesson_dates_cache:
+        full_month_lessons = list(lesson_dates_cache[group.id])
+    else:
+        full_month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
+        if lesson_dates_cache is not None:
+            lesson_dates_cache[group.id] = full_month_lessons
     
     # BUG FIX: Xuddi student to'lovidagi kabi, bir kunlik narx to'liq darslar sonidan chiqadi
     total_lessons_count = len(full_month_lessons)
@@ -261,7 +290,16 @@ def calculate_attendance_based_mentor_share(
     # Step 3: Faqat o'tib ketgan va oydagi dars kunlarini olamiz (agar ignore_today_check bo'lsa, barchasini olamiz)
     if not ignore_today_check:
         today = timezone.localdate()
-        active_lesson_dates = [d for d in lesson_dates if d <= today]
+        # Agar sanada tasdiqlangan davomat mavjud bo'lsa, u bugundan keyin bo'lsa ham hisobga olinadi
+        marked_dates = set(
+            Attendance.objects.filter(
+                student=student,
+                group=group,
+                date__range=(month_start, month_end),
+                marked_by__isnull=False,
+            ).values_list("date", flat=True)
+        )
+        active_lesson_dates = [d for d in lesson_dates if d <= today or d in marked_dates]
     else:
         active_lesson_dates = lesson_dates
 
@@ -269,8 +307,7 @@ def calculate_attendance_based_mentor_share(
     attendance_filters = {
         "student": student,
         "group": group,
-        "date__year": month_date.year,
-        "date__month": month_date.month,
+        "date__range": (month_start, month_end),
         "date__in": active_lesson_dates,
         "is_present": True,
         "marked_by__isnull": False,
@@ -306,6 +343,45 @@ def calculate_attendance_based_mentor_share(
 calculate_discount_student_payment_for_per_student_mentor = (
     calculate_attendance_based_mentor_share
 )
+
+
+def get_teacher_negotiated_center_fee(group):
+    """
+    Kategoriya C: 'O'qituvchi kelishgan' (teacher_negotiated) talaba uchun
+    markazning operatsion ulushini hisoblash.
+
+    Qoida (Ground Truth):
+    - Talaba faqat markazning operatsion ulushini to'laydi: (Course Fee - Standard Teacher Share)
+    - O'qituvchi ulushi = 0 UZS (o'qituvchi oyligiga/balansiga mutlaqo qo'shilmaydi)
+    - Markaz daromadi = talabadan undirilgan summaning 100%
+    """
+    if not group or not getattr(group, "monthly_price", None):
+        return Decimal("0")
+
+    course_fee = Decimal(str(group.monthly_price or 0))
+    mentor = getattr(group, "mentor", None)
+    if not mentor or not hasattr(mentor, "staff_profile"):
+        return course_fee
+
+    profile = mentor.staff_profile
+    from finance.models import MentorGroupSalaryConfig
+
+    group_config = MentorGroupSalaryConfig.objects.filter(mentor=mentor, group=group).first()
+
+    salary_type = group_config.salary_type if group_config else getattr(profile, "salary_type", None)
+    commission_pct = (group_config.commission_percentage if group_config else getattr(profile, "commission_percentage", 0)) or Decimal("0")
+    per_student_amt = (group_config.per_student_amount if group_config else getattr(profile, "per_student_amount", 0)) or Decimal("0")
+
+    if salary_type == "percentage":
+        teacher_share = course_fee * (Decimal(str(commission_pct)) / Decimal("100"))
+    elif salary_type == "student_count":
+        teacher_share = Decimal(str(per_student_amt))
+    else:
+        teacher_share = Decimal("0")
+
+    center_share = course_fee - teacher_share
+    return floor_amount(max(Decimal("0"), center_share))
+
 
 
 def attendance_refund_queryset(year, month, branch=None, paid_only=False):
@@ -469,6 +545,14 @@ def calculate_group_revenue_and_mentor_share(
             "teacher_negotiated",
         ]:
             contract_base = student.custom_fee
+        elif is_teacher_negotiated:
+            # Standart operatsion ulush: Course Fee - Standard Teacher Share
+            std_teacher_share = Decimal("0")
+            if is_percentage:
+                std_teacher_share = Decimal(str(group.monthly_price or 0)) * commission_pct
+            elif is_student_count:
+                std_teacher_share = per_student_rate
+            contract_base = max(Decimal("0"), Decimal(str(group.monthly_price or 0)) - std_teacher_share)
         contract_amount = floor_amount(Decimal(str(contract_base)))
 
         paid_amount = Decimal(str(p.paid_amount or 0)) if p else Decimal("0")
@@ -519,19 +603,8 @@ def calculate_group_revenue_and_mentor_share(
         }
 
         # ----------------------------------------------------------
-        # 1) Refund: faqat regular / low_income uchun ishlaydi.
-        #    discount/negotiated uchun refund yo'q (davomat o'zi hisoblab beradi).
-        #    teacher_negotiated uchun 0.
-        # ----------------------------------------------------------
+        # 1) Refund hisobi: expected daromad shartnoma summasi asosida shakllantiriladi (refund chiqarmaymiz)
         refund_for_expected = Decimal("0")
-        if not is_discount and not is_negotiated and not is_teacher_negotiated:
-            try:
-                raw_refund = student.calculate_refund_amount(
-                    month_date.year, month_date.month, group=group
-                )
-                refund_for_expected = floor_amount(Decimal(str(raw_refund)))
-            except Exception:
-                refund_for_expected = Decimal("0")
 
         # ----------------------------------------------------------
         # 2) Actual / Expected bazalar
@@ -541,11 +614,11 @@ def calculate_group_revenue_and_mentor_share(
         net_actual = (base_actual or Decimal("0"))
 
         # Expected for frontend:
-        #   teacher_negotiated → 0 (mentor uchun)
+        #   teacher_negotiated → contract_amount (markaz operatsion ulushi)
         #   discount/negotiated → attendance asosida
         #   regular/low_income  → CONTRACT AMOUNT (refund chiqarmaymiz! frontend uchun kerak)
         if is_teacher_negotiated:
-            net_expected = Decimal("0")
+            net_expected = (base_expected_floored or Decimal("0"))
         elif is_discount or is_negotiated:
             net_expected = (base_expected_floored or Decimal("0"))
         else:
@@ -570,6 +643,7 @@ def calculate_group_revenue_and_mentor_share(
         #    negotiated         → (mentor_stafka / lesson_count * present_count)
         #    regular/low_income → paid: real to'lov × %; expected: (contract−refund) × %
         # ----------------------------------------------------------
+        student_mentor_share = Decimal("0")
         if profile and profile.user.role == "mentor" and not is_teacher_negotiated:
             # Birinchi, kelgan darslar sonini hisoblash (barcha statuslar uchun kerak)
             present_count = 0
@@ -595,15 +669,21 @@ def calculate_group_revenue_and_mentor_share(
             except Exception:
                 present_count = 0
             lessons_count = len(_group_lesson_dates) if _group_lesson_dates else 1
+            if present_count > lessons_count:
+                present_count = lessons_count
 
+            student_mentor_share = Decimal("0")
             if is_discount:
                 if is_percentage:
-                    mentor_share_paid += net_actual * commission_pct
+                    student_mentor_share = net_actual * commission_pct
+                    mentor_share_paid += student_mentor_share
                     mentor_share_expected += net_expected * commission_pct
                 elif is_student_count:
                     mentor_fee = calculate_attendance_based_mentor_share(
-                        student, group, month_date, per_student_rate, ignore_today_check=ignore_today_check
+                        student, group, month_date, per_student_rate, ignore_today_check=ignore_today_check,
+                        lesson_dates_cache=lesson_dates_cache, enrollment_cache=enrollment_cache, attendance_cache=attendance_cache
                     )
+                    student_mentor_share = mentor_fee
                     mentor_share_paid += mentor_fee
                     mentor_share_expected += mentor_fee  # discount uchun paid == expected (davomat asosida)
             else:
@@ -613,13 +693,26 @@ def calculate_group_revenue_and_mentor_share(
                 expected_base = (contract_amount or Decimal("0"))
 
                 if is_percentage:
-                    mentor_share_paid += net_actual * commission_pct
+                    student_mentor_share = net_actual * commission_pct
+                    mentor_share_paid += student_mentor_share
                     mentor_share_expected += expected_base * commission_pct
                 elif is_student_count:
-                    if net_actual > 0:
-                        mentor_share_paid += per_student_rate
-                    # per_student: refund ta'sir qilmaydi (har student uchun sobit)
+                    if net_actual >= contract_amount and contract_amount > 0:
+                        student_mentor_share = per_student_rate
+                    elif net_actual > 0 and contract_amount > 0:
+                        # Qisman to'lov: mutanosib ravishda o'qituvchiga to'lanadi
+                        prop_share = (per_student_rate * net_actual) / contract_amount
+                        student_mentor_share = min(net_actual, prop_share)
+                    mentor_share_paid += student_mentor_share
                     mentor_share_expected += per_student_rate
+
+        student_info["group_id"] = group.id
+        student_info["group_name"] = group.name
+        student_info["group_monthly_price"] = float(group.monthly_price)
+        student_info["phone"] = student.phone or ""
+        student_info["mentor_share"] = float(floor_amount(student_mentor_share if profile and profile.user.role == "mentor" else Decimal("0"), precision=1))
+        student_info["salary_type"] = "percentage" if is_percentage else ("student_count" if is_student_count else "fixed")
+        student_info["salary_rate"] = float(commission_pct * 100) if is_percentage else float(per_student_rate)
 
     # Yakuniy natijalarni adaptiv precision bilan yaxlitlash:
     # - Oraliq hisoblar barqarorlik uchun default precision=1000 da qoladi
@@ -690,21 +783,35 @@ def calculate_group_revenue_and_mentor_share(
                 else:
                     unpaid_students.append(student_info)
 
+                arch_mentor_share = Decimal("0")
                 if profile and profile.user.role == "mentor":
                     if is_percentage:
-                        mentor_share_paid += paid_amount * commission_pct
+                        arch_mentor_share = paid_amount * commission_pct
+                        mentor_share_paid += arch_mentor_share
                         mentor_share_expected += contract_amount * commission_pct
                     elif is_student_count:
-                        if paid_amount > 0 or is_paid:
-                            mentor_share_paid += per_student_rate
+                        if (paid_amount >= contract_amount and contract_amount > 0) or is_paid:
+                            arch_mentor_share = per_student_rate
+                        elif paid_amount > 0 and contract_amount > 0:
+                            prop_share = (per_student_rate * paid_amount) / contract_amount
+                            arch_mentor_share = min(paid_amount, prop_share)
+                        mentor_share_paid += arch_mentor_share
                         mentor_share_expected += per_student_rate
+
+                student_info["group_id"] = group.id
+                student_info["group_name"] = group.name
+                student_info["group_monthly_price"] = float(group.monthly_price)
+                student_info["phone"] = getattr(arch, "phone", "") or ""
+                student_info["mentor_share"] = float(floor_amount(arch_mentor_share if profile and profile.user.role == "mentor" else Decimal("0"), precision=1))
+                student_info["salary_type"] = "percentage" if is_percentage else ("student_count" if is_student_count else "fixed")
+                student_info["salary_rate"] = float(commission_pct * 100) if is_percentage else float(per_student_rate)
 
     return {
         "group_id": group.id,
-        "actual_revenue": floor_amount(actual_revenue, precision=None),
-        "expected_revenue": floor_amount(expected_revenue, precision=None),
-        "mentor_share_paid": floor_amount(mentor_share_paid, precision=None),
-        "mentor_share_expected": floor_amount(mentor_share_expected, precision=None),
+        "actual_revenue": floor_amount(actual_revenue, precision=1),
+        "expected_revenue": floor_amount(expected_revenue, precision=1),
+        "mentor_share_paid": floor_amount(mentor_share_paid, precision=1),
+        "mentor_share_expected": floor_amount(mentor_share_expected, precision=1),
         "paid_students": paid_students,
         "unpaid_students": unpaid_students,
     }

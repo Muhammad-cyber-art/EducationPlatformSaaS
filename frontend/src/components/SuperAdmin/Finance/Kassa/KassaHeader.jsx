@@ -4,7 +4,7 @@ import { formatCurrency } from "./useKassa";
 import ThemeToggle from "../../../ThemeToggle";
 
 const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWithdraw, isSuperAdmin }) => (
-    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 p-5 bg-[var(--bg-panel)]/40 border border-[#333] rounded-2xl shadow-xl backdrop-blur-xl relative overflow-hidden group">
+    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 p-5 bg-[var(--bg-panel)]/40 border border-[var(--border-glass)] rounded-2xl shadow-xl backdrop-blur-xl relative overflow-hidden group">
         <div className="absolute inset-0 bg-gradient-to-r from-[var(--gold)]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
 
         <div className="flex items-center gap-4 sm:gap-6 relative z-10 w-full xl:w-auto justify-between xl:justify-start">
@@ -17,13 +17,13 @@ const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWi
                 </button>
                 <div>
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <Wallet className="text-[var(--gold)] w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-                        <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight capitalize drop-shadow-sm truncate">
+                        <Wallet className="text-[var(--gold)] w-6 h-6 sm:w-7 sm:h-7 shrink-0" strokeWidth={2.2} />
+                        <h1 className="text-lg sm:text-2xl font-black text-[var(--text-primary)] tracking-tight capitalize drop-shadow-sm truncate">
                             Kassa Tizimi
                         </h1>
                     </div>
-                    <p className="text-[7px] sm:text-[9px] text-[var(--text-muted)] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-1 sm:mt-1.5 flex items-center gap-1.5 sm:gap-2">
-                        <Circle size={5} className="sm:w-[6px] sm:h-[6px] fill-emerald-500 text-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)] shrink-0" />
+                    <p className="text-[9px] sm:text-[10px] text-[var(--text-muted)] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-1 sm:mt-1.5 flex items-center gap-1.5 sm:gap-2">
+                        <Circle size={7} className="sm:w-2 sm:h-2 fill-emerald-500 text-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)] shrink-0" />
                         Jonli Moliyaviy Tushumlar
                     </p>
                 </div>
@@ -35,29 +35,29 @@ const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWi
             </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 relative z-10 w-full xl:w-auto">
-            <div className="px-2 py-2 sm:px-5 sm:py-3 bg-[var(--bg-void)]/60 border border-[var(--gold)]/20 rounded-xl group/total flex flex-col justify-center">
-                <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 opacity-70">
-                    <PlusCircle size={8} className="text-[var(--gold)] sm:w-[10px] sm:h-[10px] shrink-0" />
-                    <p className="text-[6px] sm:text-[8px] font-black text-[var(--gold)] uppercase tracking-wider sm:tracking-widest truncate">Umumiy Kirim</p>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 relative z-10 w-full xl:w-auto">
+            <div className="px-2.5 py-2.5 sm:px-5 sm:py-3 bg-[var(--bg-void)]/60 border border-[var(--gold)]/20 rounded-xl group/total flex flex-col justify-center">
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 opacity-80">
+                    <PlusCircle size={15} className="text-[var(--gold)] sm:w-4 sm:h-4 shrink-0" strokeWidth={2.2} />
+                    <p className="text-[8px] sm:text-[10px] font-black text-[var(--gold)] uppercase tracking-wider sm:tracking-widest truncate">Umumiy Kirim</p>
                 </div>
-                <span className="text-[9px] sm:text-base font-black text-white tabular-nums tracking-tighter truncate">{formatCurrency(totalToday)}</span>
+                <span className="text-xs sm:text-base font-black text-[var(--text-primary)] tabular-nums tracking-tight truncate">{formatCurrency(totalToday)}</span>
             </div>
 
-            <div className="px-2 py-2 sm:px-5 sm:py-3 bg-red-500/5 border border-red-500/20 rounded-xl group/withdraw flex flex-col justify-center">
-                <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 opacity-70">
-                    <TrendingDown size={8} className="text-red-500 sm:w-[10px] sm:h-[10px] shrink-0" />
-                    <p className="text-[6px] sm:text-[8px] font-black text-red-500 uppercase tracking-wider sm:tracking-widest truncate">Olingan</p>
+            <div className="px-2.5 py-2.5 sm:px-5 sm:py-3 bg-red-500/5 border border-red-500/20 rounded-xl group/withdraw flex flex-col justify-center">
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 opacity-80">
+                    <TrendingDown size={15} className="text-red-500 sm:w-4 sm:h-4 shrink-0" strokeWidth={2.2} />
+                    <p className="text-[8px] sm:text-[10px] font-black text-red-500 uppercase tracking-wider sm:tracking-widest truncate">Olingan</p>
                 </div>
-                <span className="text-[9px] sm:text-base font-black text-red-500 tabular-nums tracking-tighter truncate">{formatCurrency(totalWithdrawn)}</span>
+                <span className="text-xs sm:text-base font-black text-red-500 tabular-nums tracking-tight truncate">{formatCurrency(totalWithdrawn)}</span>
             </div>
 
-            <div className="px-2 py-2 sm:px-5 sm:py-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl group/verified flex flex-col justify-center">
-                <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 opacity-70">
-                    <Verified size={8} className="text-emerald-500 sm:w-[10px] sm:h-[10px] shrink-0" />
-                    <p className="text-[6px] sm:text-[8px] font-black text-emerald-500 uppercase tracking-wider sm:tracking-widest truncate">Tasdiqlangan</p>
+            <div className="px-2.5 py-2.5 sm:px-5 sm:py-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl group/verified flex flex-col justify-center">
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 opacity-80">
+                    <Verified size={15} className="text-emerald-500 sm:w-4 sm:h-4 shrink-0" strokeWidth={2.2} />
+                    <p className="text-[8px] sm:text-[10px] font-black text-emerald-500 uppercase tracking-wider sm:tracking-widest truncate">Tasdiqlangan</p>
                 </div>
-                <span className="text-[9px] sm:text-base font-black text-emerald-500 tabular-nums tracking-tighter truncate">{formatCurrency(totalVerified)}</span>
+                <span className="text-xs sm:text-base font-black text-emerald-500 tabular-nums tracking-tight truncate">{formatCurrency(totalVerified)}</span>
             </div>
         </div>
 
@@ -65,9 +65,9 @@ const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWi
             {isSuperAdmin && (
                 <button
                     onClick={onWithdraw}
-                    className="w-full xl:w-auto px-6 xl:px-8 h-12 bg-red-600 hover:bg-red-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3 shrink-0"
+                    className="w-full xl:w-auto px-6 xl:px-8 h-12 bg-red-600 hover:bg-red-500 text-white font-black text-[11px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2.5 shrink-0"
                 >
-                    <MinusCircle size={16} />
+                    <MinusCircle size={18} strokeWidth={2.2} />
                     Pul Olish
                 </button>
             )}

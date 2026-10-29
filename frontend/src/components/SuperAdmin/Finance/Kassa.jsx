@@ -311,14 +311,14 @@ const Kassa = () => {
             <div className="flex items-center gap-2 p-1.5 bg-[var(--bg-panel)]/30 border border-[#2a2a2a] rounded-[1.25rem] w-full sm:w-fit overflow-x-auto no-scrollbar">
                 <button 
                     onClick={() => setActiveTab("incomes")}
-                    className={`flex-1 sm:flex-none whitespace-nowrap px-6 xl:px-10 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'incomes' ? 'bg-[var(--gold)] text-white shadow-[0_8px_20px_rgba(184,134,11,0.3)] scale-105 z-10' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`}
+                    className={`flex-1 sm:flex-none whitespace-nowrap px-6 xl:px-10 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'incomes' ? 'bg-[var(--gold)] text-white shadow-[0_8px_20px_rgba(184,134,11,0.3)] scale-105 z-10' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10'}`}
                 >
                     <PlusCircle size={14} />
                     Tushumlar <span className="opacity-50 text-[8px]">({payments.length})</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab("expenses")}
-                    className={`flex-1 sm:flex-none whitespace-nowrap px-6 xl:px-10 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'expenses' ? 'bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.3)] scale-105 z-10' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`}
+                    className={`flex-1 sm:flex-none whitespace-nowrap px-6 xl:px-10 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'expenses' ? 'bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.3)] scale-105 z-10' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10'}`}
                 >
                     <TrendingDown size={14} />
                     Chiqimlar <span className="opacity-50 text-[8px]">({withdrawals.length})</span>
@@ -580,7 +580,7 @@ const Kassa = () => {
                             <button 
                                 type="button" 
                                 onClick={() => setShowWithdrawModal(false)} 
-                                className="w-12 h-12 flex items-center justify-center bg-white/5 text-gray-500 hover:text-white hover:bg-white/10 rounded-2xl transition-all active:scale-90"
+                                className="w-12 h-12 flex items-center justify-center bg-[var(--bg-void)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 rounded-2xl border border-[var(--border-glass)] transition-all active:scale-90"
                             >
                                 <X size={24} />
                             </button>
@@ -698,7 +698,7 @@ const Kassa = () => {
                                 <div className="w-12 h-12 rounded-2xl bg-[var(--gold-dim)] flex items-center justify-center text-[var(--gold)] border border-[var(--gold)]/20 shadow-inner"><FileText size={24} /></div>
                                 <div><h2 className="text-xl font-black text-white tracking-tight">To'lov Tafsilotlari</h2><p className="text-[9px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">ID: STP-{selectedPayment.id}</p></div>
                             </div>
-                            <button onClick={() => setShowDetailModal(false)} className="w-10 h-10 flex items-center justify-center bg-white/5 text-gray-400 hover:text-white rounded-xl transition-all"><X size={20} /></button>
+                            <button onClick={() => setShowDetailModal(false)} className="w-10 h-10 flex items-center justify-center bg-[var(--bg-void)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 rounded-xl border border-[var(--border-glass)] transition-all"><X size={20} /></button>
                         </div>
                         <div className="p-8 space-y-6 text-white">
                             <div className="grid grid-cols-2 gap-6 font-bold text-sm bg-white/5 p-4 rounded-xl border border-white/5">

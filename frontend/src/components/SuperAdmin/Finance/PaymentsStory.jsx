@@ -489,7 +489,7 @@ const TransactionModal = ({ trx, formatCurrency, onClose, onDelete, isSuperAdmin
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 text-white/50 hover:text-white bg-white/5 rounded-full transition-colors hidden md:block">
+                    <button onClick={onClose} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 rounded-full transition-colors hidden md:block">
                         <X size={20} />
                     </button>
                 </div>

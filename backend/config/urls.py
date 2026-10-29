@@ -25,6 +25,7 @@ urlpatterns = [
         path('add_branch/', include('branches.urls')),
         path('homework_attends/', include('homework_attends.urls')),
         path('finance/', include('finance.urls')),
+        path('v1/finance/', include('finance.urls')),
         path('archive/', include('archivebase.urls')),
         path('reports/', include('reports.urls')),
         path('permissions/', include('permissions.urls')),

@@ -14,17 +14,20 @@ def enroll_student_to_group(group, student_id, create_payment=True):
     student = get_object_or_404(Student, id=student_id)
     
     with transaction.atomic():
+        # O'quvchi boshqa guruhga qo'shilganda eski guruhi bilan enrollmenti butunlay uziladi
+        GroupEnrollment.objects.filter(student=student).exclude(group=group).delete()
+        
         enrollment, created = GroupEnrollment.objects.get_or_create(
             student=student,
             group=group
         )
         
-        if created:
-            # Legacy FK field support
-            if not student.group:
-                student.group = group
-                student.save()
+        # O'quvchining asosiy guruhi va filiali yangi guruhga sinxronlashtiriladi
+        student.group = group
+        student.branch = group.branch
+        student.save()
             
+        if created:
             if create_payment:
                 from finance.utils import floor_amount, calculate_attendance_based_student_payment
                 today = timezone.now().date()
@@ -205,6 +208,8 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
 
         # Eski enrollment butunlay o'chiriladi (eski guruhdan asar ham qolmaydi)
         GroupEnrollment.objects.filter(student=student, group=old_group).delete()
+        # Boshqa barcha nofaol/eski guruh enrollmentlarini ham uzish
+        GroupEnrollment.objects.filter(student=student).exclude(group=new_group).delete()
             
         new_enrollment, _ = GroupEnrollment.objects.get_or_create(student=student, group=new_group)
         if not new_enrollment.is_active or new_enrollment.left_at is not None:
@@ -376,24 +381,18 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
             new_group_fee=new_group_fee
         )
 
-        # 5. Student model yangilash
-        is_current_group_inactive = not GroupEnrollment.objects.filter(
-            student=student, group=student.group, is_active=True
-        ).exists() if student.group else True
+        # 5. Student model yangilash (eski guruhdan yangisiga butunlay o'tkazish)
+        student.group = new_group
+        student.branch = new_group.branch
+        student.save()
 
-        if student.group == old_group or not student.group or is_current_group_inactive:
-            student.group = new_group
-            
-            has_other_groups_in_old_branch = GroupEnrollment.objects.filter(
-                student=student,
-                group__branch=old_group.branch,
-                is_active=True
-            ).exclude(group=old_group).exists()
-            
-            if not has_other_groups_in_old_branch:
-                student.branch = new_group.branch
-                
-            student.save()
+        # Eski guruh uchun transfer oyidan keyingi oylarga to'lanmagan paymentlar bo'lsa tozalash
+        Payment.objects.filter(
+            student=student,
+            group=old_group,
+            month__gt=current_month_start,
+            paid_amount=0
+        ).delete()
             
         from finance.services import sync_mentor_salary
         sync_mentor_salary(old_group, current_month_start)

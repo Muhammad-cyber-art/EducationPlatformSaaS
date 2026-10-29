@@ -36,6 +36,9 @@ const GroupAssignmentsPage = lazy(() =>
 const CashierDashboard = lazy(() =>
   import("../components/adminComponents/Cashier/CashierDashboard")
 );
+const PrivilegedStudentsPage = lazy(() =>
+  import("../components/adminComponents/PrivilegedStudents/PrivilegedStudentsPage")
+);
 
 
 export const AdminRoutes = (
@@ -83,6 +86,7 @@ export const AdminRoutes = (
 
  <Route path="waiting-hall" element={<WaitingHall />} />
  <Route path="finance" element={<MentorFinance />} />
+ <Route path="special-students" element={<PrivilegedStudentsPage />} />
  <Route path="profile" element={<AdminProfile />} />
  <Route path="archive" element={<ArchivePage />} />
  <Route path="expenses" element={<AdminExpenses />} />

@@ -91,7 +91,7 @@ export default function MentorRow({ mentor, currentBranchId }) {
  title="Rangni o'zgartirish"
  ></div>
 
- <ChevronRight size={18} className="text-gray-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
+ <ChevronRight size={18} className="text-[var(--text-muted)] group-hover:text-[var(--gold)] group-hover:translate-x-1 transition-all" />
  </div>
 
  {/* Floating Color Picker */}

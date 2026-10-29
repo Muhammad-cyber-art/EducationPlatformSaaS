@@ -278,27 +278,27 @@ const AttendanceSection = ({
         </div>
       )}
 
-      <div className="p-2 sm:p-3 flex items-center justify-between gap-4 ">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] shadow-inner">
+      <div className="p-2 sm:p-3 flex items-center justify-between gap-2 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg-void)] border border-[var(--border-glass)] flex items-center justify-center text-[var(--gold)] shadow-inner shrink-0">
             <Users size={14} className="sm:size-[18px]" />
           </div>
-          <div >
-            <h3 className="text-sm sm:text-xl font-bold text-[var(--text-primary)] capitalize tracking-tight flex items-center gap-2">
-              Davomat
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm sm:text-xl font-bold text-[var(--text-primary)] capitalize tracking-tight flex items-center gap-1.5 sm:gap-2 truncate">
+              <span>Davomat</span>
               {isAttendanceConfirmed && (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black tracking-widest flex items-center gap-1 mt-0.5 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.1)] shrink-0">
                   <Check size={10} strokeWidth={3} /> TAYYOR
                 </span>
               )}
             </h3>
-            <p className="text-[8px] sm:text-[10px] font-bold text-[var(--text-muted)] capitalize tracking-[0.3em] font-sans mt-0.5">
+            <p className="text-[8px] sm:text-[10px] font-bold text-[var(--text-muted)] capitalize tracking-wider font-sans mt-0.5 truncate">
               Sana: <span className="text-[var(--gold)]">{selectedDate}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Desktop buttons - show all */}
           <div className="hidden sm:flex items-center gap-2 sm:gap-3">
             {canTakeAttendance && (
@@ -349,14 +349,14 @@ const AttendanceSection = ({
           </div>
           
           {/* Mobile buttons - show confirm and 3 dots */}
-          <div className="flex sm:hidden items-center gap-2">
+          <div className="flex sm:hidden items-center gap-1.5 shrink-0">
             {canEditAttendance && (
               <button
                 onClick={() => handleConfirmAttendance(isLessonDay)}
-                className="flex items-center justify-center px-4 h-10 bg-[var(--gold)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
+                className="flex items-center justify-center px-3 h-9 bg-[var(--gold)] text-white rounded-xl font-black text-[9px] uppercase tracking-wider transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)] shrink-0"
                 title="Tayyor"
               >
-                <Check size={18} strokeWidth={3} /> <span className="ml-2">Tayyor</span>
+                <Check size={14} strokeWidth={3} /> <span className="ml-1.5">Tayyor</span>
               </button>
             )}
             
@@ -364,10 +364,10 @@ const AttendanceSection = ({
             <button
               ref={menuButtonRef}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-all shadow-lg active:scale-95"
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--gold)] hover:border-[var(--gold)]/30 transition-all shadow-md active:scale-95 shrink-0"
               title="Boshqa amallar"
             >
-              <MoreVertical size={18} />
+              <MoreVertical size={16} />
             </button>
           </div>
           

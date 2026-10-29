@@ -42,6 +42,8 @@ const initialState = {
     loading: true,
     loadingMore: false,
     branches: [],
+    groups: [],
+    loadingGroups: false,
     selectedPayment: null,
     showDetailModal: false,
     showWithdrawModal: false,
@@ -50,6 +52,7 @@ const initialState = {
     activeTab: "incomes",
     filters: {
         branch: "",
+        group: "",
         method: "",
         search: "",
         month: getCurrentMonth()
@@ -83,6 +86,10 @@ function kassaReducer(state, action) {
             return { ...state, loadingMore: action.payload };
         case 'SET_BRANCHES':
             return { ...state, branches: action.payload };
+        case 'SET_GROUPS':
+            return { ...state, groups: action.payload };
+        case 'SET_LOADING_GROUPS':
+            return { ...state, loadingGroups: action.payload };
         case 'SET_SELECTED_PAYMENT':
             return { ...state, selectedPayment: action.payload };
         case 'SET_SHOW_DETAIL_MODAL':
@@ -125,6 +132,8 @@ export const useKassa = () => {
         loading,
         loadingMore,
         branches,
+        groups,
+        loadingGroups,
         selectedPayment,
         showDetailModal,
         showWithdrawModal,
@@ -136,6 +145,61 @@ export const useKassa = () => {
     } = state;
 
     const userInfo = useMemo(() => get_user_info(), []);
+
+    // Tanlangan filial bo'yicha guruhlarni dinamik yuklash
+    useEffect(() => {
+        let isCancelled = false;
+        const fetchBranchGroups = async () => {
+            if (!filters.branch) {
+                dispatch({ type: 'SET_GROUPS', payload: [] });
+                return;
+            }
+            const cacheKey = `branch_groups_${filters.branch}`;
+            // 1. Keshdan darhol chiqarish (0ms qotishsiz render)
+            try {
+                const cached = await db.query_cache.get(cacheKey);
+                if (cached?.data?.length && !isCancelled) {
+                    dispatch({ type: 'SET_GROUPS', payload: cached.data });
+                } else if (!isCancelled) {
+                    dispatch({ type: 'SET_LOADING_GROUPS', payload: true });
+                }
+            } catch (e) {
+                if (!isCancelled) dispatch({ type: 'SET_LOADING_GROUPS', payload: true });
+            }
+
+            try {
+                const res = await api.get(`/groups/nested_groups/?branch_id=${filters.branch}&page_size=500`);
+                const gData = res.data.results || res.data || [];
+                if (!isCancelled) {
+                    dispatch({ type: 'SET_GROUPS', payload: gData });
+                }
+                try {
+                    await db.query_cache.put({
+                        query_key: cacheKey,
+                        data: gData,
+                        updated_at: new Date().toISOString()
+                    });
+                } catch (e) {}
+            } catch (err) {
+                try {
+                    const cached = await db.query_cache.get(cacheKey);
+                    if (cached?.data && !isCancelled) {
+                        dispatch({ type: 'SET_GROUPS', payload: cached.data });
+                        return;
+                    }
+                } catch (e) {}
+                if (!isCancelled) {
+                    dispatch({ type: 'SET_GROUPS', payload: [] });
+                }
+            } finally {
+                if (!isCancelled) {
+                    dispatch({ type: 'SET_LOADING_GROUPS', payload: false });
+                }
+            }
+        };
+        fetchBranchGroups();
+        return () => { isCancelled = true; };
+    }, [filters.branch]);
 
     const fetchTodayStats = useCallback(async () => {
         const today = new Date().toISOString().split('T')[0];
@@ -184,7 +248,7 @@ export const useKassa = () => {
     }, [filters.branch]);
 
     const fetchPayments = useCallback(async (page = 1, isLoadMore = false) => {
-        const cacheKey = `kassa_incomes_${filters.month}_${filters.branch || 'all'}`;
+        const cacheKey = `kassa_incomes_${filters.month}_${filters.branch || 'all'}_${filters.group || 'all'}_${filters.method || 'all'}`;
         try {
             if (isLoadMore) dispatch({ type: 'SET_LOADING_MORE', payload: true });
             else dispatch({ type: 'SET_LOADING', payload: true });
@@ -196,6 +260,8 @@ export const useKassa = () => {
                 exclude_reversals: 'true',
                 search: filters.search || undefined,
                 branch: filters.branch || undefined,
+                group: filters.group || undefined,
+                payment_method: filters.method || undefined,
                 date__gte: date_gte,
                 date__lte: date_lte,
                 page: page
@@ -246,7 +312,7 @@ export const useKassa = () => {
             dispatch({ type: 'SET_LOADING', payload: false });
             dispatch({ type: 'SET_LOADING_MORE', payload: false });
         }
-    }, [filters.month, filters.search, filters.branch]);
+    }, [filters.month, filters.search, filters.branch, filters.group, filters.method]);
 
     const fetchWithdrawals = useCallback(async (page = 1, isLoadMore = false) => {
         const cacheKey = `kassa_expenses_${filters.month}_${filters.branch || 'all'}`;
@@ -412,8 +478,27 @@ export const useKassa = () => {
         }
     }, [fetchTodayStats]);
 
+    // Guruh bo'yicha qat'iy filtrlash (faqat shu guruhdagi to'lovlar/o'quvchilar chiqadi)
+    const filteredPayments = useMemo(() => {
+        if (!filters.group) return payments;
+        const gid = String(filters.group);
+        const selectedGroup = (groups || []).find(g => String(g.id) === gid);
+        const groupName = selectedGroup?.name?.toLowerCase();
+
+        return payments.filter(p => {
+            if (p.group !== undefined && p.group !== null && String(p.group) === gid) return true;
+            if (p.payment_details?.group_id !== undefined && p.payment_details?.group_id !== null && String(p.payment_details?.group_id) === gid) return true;
+            if (groupName) {
+                const pGroupName = (p.payment_details?.group_name || p.group_name || "").toLowerCase();
+                if (pGroupName === groupName) return true;
+                if (p.description && p.description.toLowerCase().includes(groupName)) return true;
+            }
+            return false;
+        });
+    }, [payments, filters.group, groups]);
+
     const clearFilters = useCallback(() => {
-        dispatch({ type: 'SET_FILTERS', payload: { branch: "", method: "", search: "", month: getCurrentMonth() } });
+        dispatch({ type: 'SET_FILTERS', payload: { branch: "", group: "", method: "", search: "", month: getCurrentMonth() } });
     }, []);
 
     const setToday = useCallback(() => {
@@ -433,7 +518,8 @@ export const useKassa = () => {
 
     return {
         navigate,
-        payments,
+        payments: filteredPayments,
+        rawPayments: payments,
         withdrawals,
         loading,
         loadingMore,
@@ -441,6 +527,8 @@ export const useKassa = () => {
         hasMoreWithdrawals,
         loadMore,
         branches,
+        groups,
+        loadingGroups,
         selectedPayment,
         setSelectedPayment,
         showDetailModal,

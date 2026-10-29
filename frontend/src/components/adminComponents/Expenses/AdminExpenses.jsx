@@ -98,7 +98,7 @@ const AdminExpenses = () => {
                 <AlertCircle size={48} />
             </div>
             <div className="text-center space-y-2">
-                <h3 className="text-xl font-black text-white capitalize">Ma'lumotlar yangilanmoqda</h3>
+                <h3 className="text-xl font-black text-[var(--text-primary)] capitalize">Ma'lumotlar yangilanmoqda</h3>
                 <p className="text-xs text-[var(--text-muted)] font-bold max-w-xs mx-auto">
                     Aloqa vaqtincha sekinlashgan bo'lishi mumkin. Iltimos, biroz kuting yoki qayta urinib ko'ring.
                 </p>

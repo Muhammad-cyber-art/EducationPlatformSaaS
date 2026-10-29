@@ -440,7 +440,7 @@ export default function GroupAssignmentsPage() {
               className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase transition-all whitespace-nowrap ${
                 activeTab === "homeworks"
                   ? "bg-[var(--gold)] text-white shadow-lg shadow-[var(--gold-glow)]"
-                  : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-white border border-[var(--border-glass)]"
+                  : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--gold)]/40 border border-[var(--border-glass)]"
               }`}
             >
               <BookOpen size={16} />
@@ -465,7 +465,7 @@ export default function GroupAssignmentsPage() {
               className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase transition-all whitespace-nowrap ${
                 activeTab === "mocktests"
                   ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30"
-                  : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-white border border-[var(--border-glass)]"
+                  : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-rose-500/40 border border-[var(--border-glass)]"
               }`}
             >
               <Target size={16} />
@@ -490,7 +490,7 @@ export default function GroupAssignmentsPage() {
               className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-xs font-black tracking-wider uppercase transition-all whitespace-nowrap ${
                 activeTab === "history"
                   ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
-                  : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-white border border-[var(--border-glass)]"
+                  : "bg-[var(--bg-panel)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-emerald-500/40 border border-[var(--border-glass)]"
               }`}
             >
               <History size={16} />
@@ -530,7 +530,7 @@ export default function GroupAssignmentsPage() {
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
                   <X size={12} />
                 </button>
@@ -609,7 +609,7 @@ export default function GroupAssignmentsPage() {
                       setIsCreatingHomework(false);
                       setHwFile(null);
                     }}
-                    className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/5 transition-all"
+                    className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 transition-all"
                   >
                     <X size={18} />
                   </button>
@@ -729,7 +729,7 @@ export default function GroupAssignmentsPage() {
                       setIsCreatingHomework(false);
                       setHwFile(null);
                     }}
-                    className="px-5 py-2.5 rounded-xl border border-[var(--border-glass)] text-xs font-bold text-[var(--text-muted)] hover:text-white transition-all"
+                    className="px-5 py-2.5 rounded-xl border border-[var(--border-glass)] text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 transition-all"
                   >
                     Bekor qilish
                   </button>
@@ -946,7 +946,7 @@ export default function GroupAssignmentsPage() {
                   <button
                     type="button"
                     onClick={() => setIsCreatingMock(false)}
-                    className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/5 transition-all"
+                    className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 transition-all"
                   >
                     <X size={18} />
                   </button>
@@ -1017,7 +1017,7 @@ export default function GroupAssignmentsPage() {
                   <button
                     type="button"
                     onClick={() => setIsCreatingMock(false)}
-                    className="px-5 py-2.5 rounded-xl border border-[var(--border-glass)] text-xs font-bold text-[var(--text-muted)] hover:text-white transition-all"
+                    className="px-5 py-2.5 rounded-xl border border-[var(--border-glass)] text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--gold)]/10 transition-all"
                   >
                     Bekor qilish
                   </button>

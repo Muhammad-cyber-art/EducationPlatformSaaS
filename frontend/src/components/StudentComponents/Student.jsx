@@ -355,6 +355,7 @@ export default function StudentProfilePage() {
             {...{
               editData,
               branchGroups,
+              studentData,
               editMutation,
               dispatch,
               handleSaveEdit,

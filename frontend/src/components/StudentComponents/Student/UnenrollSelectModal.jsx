@@ -81,7 +81,7 @@ export default function UnenrollSelectModal({
                         onClick={handleClose}
                         className="p-2 hover:bg-white/5 rounded-xl transition-all"
                     >
-                        <X size={18} className="text-[var(--text-muted)] hover:text-white" />
+                        <X size={18} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]" />
                     </button>
                 </div>
 
@@ -104,7 +104,7 @@ export default function UnenrollSelectModal({
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setSelectedGroup(null)}
-                                    className="flex-1 p-3.5 bg-[var(--bg-void)]/60 hover:bg-[var(--bg-void)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
+                                    className="flex-1 p-3.5 bg-[var(--bg-void)]/60 hover:bg-[var(--bg-void)] border border-[var(--border-glass)] hover:border-[var(--gold)]/40 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
                                 >
                                     Orqaga qaytish
                                 </button>
@@ -137,7 +137,7 @@ export default function UnenrollSelectModal({
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setIsConfirmingArchive(false)}
-                                    className="flex-1 p-3.5 bg-[var(--bg-void)]/60 hover:bg-[var(--bg-void)] border border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
+                                    className="flex-1 p-3.5 bg-[var(--bg-void)]/60 hover:bg-[var(--bg-void)] border border-[var(--border-glass)] hover:border-[var(--gold)]/40 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
                                 >
                                     Orqaga qaytish
                                 </button>

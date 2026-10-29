@@ -1237,7 +1237,7 @@ class AdminViewSet(viewsets.ReadOnlyModelViewSet):
 
 class GroupSimpleViewSet(viewsets.ReadOnlyModelViewSet):
     """Guruhlar ro'yxati (oddiy)"""
-    queryset = Group.objects.all()
+    queryset = Group.objects.select_related('mentor', 'branch').prefetch_related('mentor__branch_accesses__branch')
     serializer_class = GroupSimpleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]

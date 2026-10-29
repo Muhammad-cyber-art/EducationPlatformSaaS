@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft, Settings, Calculator, Loader2, Edit3, Coins, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Settings, Calculator, Loader2, Edit3, Coins, Trash2, Users, Receipt } from "lucide-react";
 import toast from "react-hot-toast";
 import ThemeToggle from "../../../ThemeToggle";
 
@@ -54,6 +54,17 @@ const PaymentHeader = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {data && (
+                            <button
+                                onClick={() => navigate("paid-students")}
+                                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-500/15 to-emerald-500/5 hover:from-emerald-500 hover:to-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-sm"
+                                title="To'lovni amalga oshirgan o'quvchilar ro'yxati va batafsil arifmetik hisob-kitob"
+                            >
+                                <Receipt size={12} />
+                                <span>O'quvchilar To'lovlari & Ulush</span>
+                            </button>
+                        )}
+
                         <button onClick={() => isSuperAdmin ? dispatch(setEditModal(true)) : toast.error("Ruxsat yo'q")} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[var(--bg-panel)] hover:bg-[var(--gold)]/10 border border-[#2a2a2a] hover:border-[var(--gold)]/50 rounded-xl text-[9px] font-black capitalize tracking-widest transition-all text-[var(--text-secondary)] hover:text-[var(--gold)]">
                             <Edit3 size={12} /> <span className="hidden md:inline">Tahrirlash</span>
                         </button>

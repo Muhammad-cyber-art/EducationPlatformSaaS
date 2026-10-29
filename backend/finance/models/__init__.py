@@ -3,6 +3,7 @@ from .employee_payment import EmployeePayment, StaffProfile, EmployeeAdvance, Me
 from .transaction import FinanceTransaction
 from .admin_expense import AdminExpense
 from .student_finance_profile import StudentFinanceProfile
+from .privileged_audit import AttendanceAuditLog
 
 __all__ = [
     'Payment',
@@ -13,4 +14,5 @@ __all__ = [
     'FinanceTransaction',
     'AdminExpense',
     'StudentFinanceProfile',
+    'AttendanceAuditLog',
 ]

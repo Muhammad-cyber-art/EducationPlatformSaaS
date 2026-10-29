@@ -110,7 +110,7 @@ export default function TransferStaff({ isOpen, onClose }) {
  <p className="text-[var(--text-muted)] text-[10px] capitalize font-black tracking-widest mt-1">Boshqa filialga o'tkazish tizimi</p>
  </div>
  </div>
- <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full text-[var(--text-muted)] hover:text-white transition-colors">
+ <button onClick={onClose} className="p-2 hover:bg-[var(--gold)]/10 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
  <X size={20} />
  </button>
  </div>

@@ -729,6 +729,22 @@ def compute_student_monthly_attendance(
         else:
             records_list = [r for r in attendance_records if not active_gids or r.group_id in active_gids]
 
+    # Har bir guruh uchun tasdiqlangan eng dastlabki davomat sanasini aniqlash.
+    # Bu CRM tizimiga kechikib kiritilgan o'quvchilarning real o'tgan darslarini
+    # asossiz ravishda 'not_joined' qilib qo'yishining oldini oladi.
+    earliest_att_dates = {}
+    for r in records_list:
+        if r.marked_by_id is not None:
+            if r.group_id not in earliest_att_dates or r.date < earliest_att_dates[r.group_id]:
+                earliest_att_dates[r.group_id] = r.date
+
+    for g_id, j_date in join_dates.items():
+        if j_date and g_id in earliest_att_dates:
+            if earliest_att_dates[g_id] < j_date:
+                join_dates[g_id] = earliest_att_dates[g_id]
+                if g_id in group_lessons_map:
+                    group_lessons_map[g_id]['join_date'] = earliest_att_dates[g_id]
+
     att_by_date = {}
     for att in records_list:
         att_date_str = str(att.date)
@@ -761,6 +777,7 @@ def compute_student_monthly_attendance(
 
         is_lesson = len(day_groups_with_lesson) > 0
         records_today = att_by_date.get(curr_date_str, [])
+        confirmed_records = [r for r in records_today if r.marked_by_id is not None]
 
         status_str = "no_lesson"
         lesson_groups_names = []
@@ -769,35 +786,29 @@ def compute_student_monthly_attendance(
             total_scheduled += 1
             lesson_groups_names = [g['name'] for g in day_groups_with_lesson]
 
-            joined_all = any(
-                (not ginfo['join_date'] or curr_date >= ginfo['join_date'])
-                for ginfo in day_groups_with_lesson
-            )
-
-            if not joined_all:
+            if confirmed_records:
+                # Agar ushbu sanada admin yoki o'qituvchi tomonidan tasdiqlangan davomat mavjud bo'lsa
+                total_passed += 1
+                if any(r.is_present for r in confirmed_records):
+                    status_str = "present"
+                    attended_count += 1
+                else:
+                    status_str = "absent"
+                    absent_count += 1
+            elif records_today:
+                total_passed += 1
+                status_str = "unconfirmed"
+                unconfirmed_count += 1
+            elif not any((not ginfo['join_date'] or curr_date >= ginfo['join_date']) for ginfo in day_groups_with_lesson):
                 status_str = "not_joined"
             elif is_future:
                 status_str = "future"
                 future_count += 1
             else:
                 total_passed += 1
-                if records_today:
-                    confirmed_records = [r for r in records_today if r.marked_by_id is not None]
-                    if confirmed_records:
-                        if any(r.is_present for r in confirmed_records):
-                            status_str = "present"
-                            attended_count += 1
-                        else:
-                            status_str = "absent"
-                            absent_count += 1
-                    else:
-                        status_str = "unconfirmed"
-                        unconfirmed_count += 1
-                else:
-                    status_str = "unconfirmed"
-                    unconfirmed_count += 1
+                status_str = "unconfirmed"
+                unconfirmed_count += 1
         elif records_today:
-            confirmed_records = [r for r in records_today if r.marked_by_id is not None]
             if confirmed_records:
                 if any(r.is_present for r in confirmed_records):
                     status_str = "present"
@@ -815,12 +826,19 @@ def compute_student_monthly_attendance(
         if not day_group_ids and records_today:
             day_group_ids = [r.group_id for r in records_today if r.group_id]
 
+        is_present_val = None
+        if status_str == "present":
+            is_present_val = True
+        elif status_str == "absent":
+            is_present_val = False
+
         days_data.append({
             "date": curr_date_str,
             "day": day_num,
             "day_of_week": curr_date.weekday(),
             "is_lesson_day": is_lesson or (len(records_today) > 0),
             "status": status_str,
+            "is_present": is_present_val,
             "groups": lesson_groups_names,
             "group_ids": day_group_ids,
             "is_today": is_today

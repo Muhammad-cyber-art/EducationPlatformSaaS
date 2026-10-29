@@ -320,11 +320,15 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                     normalize_month(payment.month)
                 )
             elif _student is not None and _student.status in ["low_income", "negotiated", "teacher_negotiated"]:
-                base_amount = (
-                    _student.custom_fee
-                    if _student.custom_fee is not None
-                    else (_group.monthly_price if _group else payment.amount or 0)
-                )
+                if _student.status == "teacher_negotiated" and _student.custom_fee is None:
+                    from finance.utils import get_teacher_negotiated_center_fee
+                    base_amount = get_teacher_negotiated_center_fee(_group)
+                else:
+                    base_amount = (
+                        _student.custom_fee
+                        if _student.custom_fee is not None
+                        else (_group.monthly_price if _group else payment.amount or 0)
+                    )
             elif _student is None:
                 # Student o'chirilgan — snapshot yoki group narxidan foydalanamiz
                 base_amount = (
@@ -817,16 +821,32 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             if pmt:
                 g_expected = float(pmt.amount or g.monthly_price or 0)
                 g_paid = float(pmt.paid_amount or 0)
-                g_remaining = float(pmt.remaining_amount)
-                g_is_paid = pmt.is_paid
-                g_is_partial = pmt.is_partial
+                if student.status == 'discount':
+                    g_remaining = 0.0
+                    g_is_paid = True
+                    g_is_partial = False
+                else:
+                    g_remaining = float(pmt.remaining_amount)
+                    g_is_paid = pmt.is_paid
+                    g_is_partial = pmt.is_partial
                 pmt_id = pmt.id
             else:
-                fee = float(student.custom_fee) if (student.status in ['low_income', 'negotiated', 'teacher_negotiated'] and student.custom_fee is not None) else float(g.monthly_price or 0)
-                g_expected = fee
+                if student.status == 'discount':
+                    fee = 0.0
+                elif student.status == 'teacher_negotiated':
+                    if student.custom_fee is not None:
+                        fee = float(student.custom_fee)
+                    else:
+                        from finance.utils import get_teacher_negotiated_center_fee
+                        fee = float(get_teacher_negotiated_center_fee(g))
+                elif student.status in ['low_income', 'negotiated'] and student.custom_fee is not None:
+                    fee = float(student.custom_fee)
+                else:
+                    fee = float(g.monthly_price or 0)
+                g_expected = float(g.monthly_price or 0) if student.status == 'discount' else fee
                 g_paid = 0.0
-                g_remaining = 0.0 if student.status == 'teacher_negotiated' else fee
-                g_is_paid = (student.status == 'teacher_negotiated')
+                g_remaining = 0.0 if student.status == 'discount' else fee
+                g_is_paid = (fee <= 0) or (student.status == 'discount')
                 g_is_partial = False
                 pmt_id = None
 
@@ -842,7 +862,8 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "paid_amount": g_paid,
                 "remaining_amount": g_remaining,
                 "is_paid": g_is_paid,
-                "is_partial": g_is_partial
+                "is_partial": g_is_partial,
+                "is_discount": (student.status == 'discount')
             })
 
         if not target_group:
@@ -856,16 +877,32 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             if pmt:
                 g_expected = float(pmt.amount or target_group.monthly_price or 0)
                 g_paid = float(pmt.paid_amount or 0)
-                g_remaining = float(pmt.remaining_amount)
-                g_is_paid = pmt.is_paid
-                g_is_partial = pmt.is_partial
+                if student.status == 'discount':
+                    g_remaining = 0.0
+                    g_is_paid = True
+                    g_is_partial = False
+                else:
+                    g_remaining = float(pmt.remaining_amount)
+                    g_is_paid = pmt.is_paid
+                    g_is_partial = pmt.is_partial
                 pmt_id = pmt.id
             else:
-                fee = float(student.custom_fee) if (student.status in ['low_income', 'negotiated', 'teacher_negotiated'] and student.custom_fee is not None) else float(target_group.monthly_price or 0)
-                g_expected = fee
+                if student.status == 'discount':
+                    fee = 0.0
+                elif student.status == 'teacher_negotiated':
+                    if student.custom_fee is not None:
+                        fee = float(student.custom_fee)
+                    else:
+                        from finance.utils import get_teacher_negotiated_center_fee
+                        fee = float(get_teacher_negotiated_center_fee(target_group))
+                elif student.status in ['low_income', 'negotiated'] and student.custom_fee is not None:
+                    fee = float(student.custom_fee)
+                else:
+                    fee = float(target_group.monthly_price or 0)
+                g_expected = float(target_group.monthly_price or 0) if student.status == 'discount' else fee
                 g_paid = 0.0
-                g_remaining = 0.0 if student.status == 'teacher_negotiated' else fee
-                g_is_paid = (student.status == 'teacher_negotiated')
+                g_remaining = 0.0 if student.status == 'discount' else fee
+                g_is_paid = (fee <= 0) or (student.status == 'discount')
                 g_is_partial = False
                 pmt_id = None
 
@@ -881,7 +918,8 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "paid_amount": g_paid,
                 "remaining_amount": g_remaining,
                 "is_paid": g_is_paid,
-                "is_partial": g_is_partial
+                "is_partial": g_is_partial,
+                "is_discount": (student.status == 'discount')
             })
 
         # 2. Target guruh davomat statistikasi
@@ -962,6 +1000,7 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "notes": student.notes or "",
                 "status": student.status,
                 "status_display": student.get_status_display(),
+                "is_discount": (student.status == 'discount'),
                 "custom_fee": float(student.custom_fee) if student.custom_fee is not None else None,
                 "branch_name": student.branch.name if student.branch else ""
             },
@@ -1004,6 +1043,9 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
                 if student.status in ["low_income", "negotiated", "teacher_negotiated"] and student.custom_fee is not None:
                     initial_fee = student.custom_fee
+                elif student.status == "teacher_negotiated":
+                    from finance.utils import get_teacher_negotiated_center_fee
+                    initial_fee = get_teacher_negotiated_center_fee(group)
                 else:
                     initial_fee = group.monthly_price or 0
 
@@ -1017,6 +1059,13 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                         'is_paid': False,
                         'is_partial': False
                     }
+                )
+
+            # Imtiyozli (grant) o'quvchilardan kassada to'lov qabul qilinmaydi
+            if payment.student and payment.student.status == 'discount':
+                return Response(
+                    {"detail": "Imtiyozli (grant) o'quvchidan kassada to'lov qabul qilinmaydi. To'lov davlat tomonidan qoplanadi."},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Filial ruxsatini tekshirish
@@ -1074,8 +1123,8 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         """OPTIMIZATSIYA: Serializer uchun batch-prefetched ma'lumotlarni tayyorlash"""
         context = super().get_serializer_context()
-        # Faqat list, retrieve va kpi uchun prefetch qilish
-        if self.action not in ('list', 'retrieve', 'kpi'):
+        # Faqat list, retrieve, kpi va paid_students uchun prefetch qilish
+        if self.action not in ('list', 'retrieve', 'kpi', 'paid_students'):
             return context
         # Lite mode flagini context ga qo'shamiz
         context['lite'] = getattr(self, '_lite_mode', False)
@@ -1098,7 +1147,7 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                 employee_ids.add(ep.employee_id)
             
             # --- START BATCH PREFETCH UNPAID HISTORY ---
-            if self.action == 'retrieve':
+            if self.action in ('retrieve', 'kpi', 'paid_students'):
                 # Faqat bitta employee uchun o'tgan to'lanmagan oylarni ham qo'shamiz
                 unpaid_qs = EmployeePayment.objects.filter(
                     employee_id=items[0].employee_id, 
@@ -1244,7 +1293,7 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                 group_id__in=all_group_ids,
                 is_active=True,
                 is_archived=False
-            ).only('id', 'custom_fee', 'status', 'full_name', 'joined_at', 'group_id'):
+            ).only('id', 'custom_fee', 'status', 'full_name', 'joined_at', 'group_id', 'phone', 'is_frozen', 'color'):
                 gid = st.group_id
                 if (st.id, gid) in _inactive_student_group_pairs:
                     continue
@@ -1394,6 +1443,316 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
             logger.error(f"Add advance error: {e}")
             return Response({"error": str(e)}, status=400)
 
+    @action(detail=True, methods=['get'], url_path='paid-students')
+    def paid_students(self, request, pk=None):
+        """
+        Xodimning ushbu oydagi to'lovni amalga oshirgan barcha o'quvchilari ro'yxati va ulushlari.
+        N+1 muammosi oldi olingan (barcha guruhlar, to'lovlar va davomatlar context orqali prefetch qilinadi).
+        """
+        try:
+            payment = self.get_object()
+            self._lite_mode = False
+            context = self.get_serializer_context()
+            context['lite'] = False
+            temp_s = EmployeePaymentSerializer(payment, context=context)
+            mentor_groups = temp_s.get_mentor_groups(payment)
+
+            from collections import defaultdict
+            from homework_attends.models import Attendance
+            from finance.models import AttendanceAuditLog
+            from groups.models import Group
+
+            all_paid_students = []
+            groups_summary = []
+            total_paid_collected = Decimal('0')
+            total_mentor_share = Decimal('0')
+            total_center_margin = Decimal('0')
+            total_lessons_planned = 0
+            total_lessons_attended = 0
+
+            status_counts = {
+                'discount': 0,
+                'low_income': 0,
+                'negotiated': 0,
+                'teacher_negotiated': 0,
+                'regular': 0,
+                'archived': 0,
+            }
+
+            profile = getattr(payment.employee, 'staff_profile', None)
+            default_salary_type = profile.salary_type if profile else 'fixed'
+
+            # 1. Guruhlarning rejadagi dars kunlari (Context prefetch keshidan olish)
+            group_ids = [g.get('id') for g in mentor_groups if g.get('id')]
+            pf = context.get('employee_prefetch', {})
+            lesson_dates_cache = pf.get('lesson_dates_cache', {})
+            group_dates_map = {}
+            missing_gids = []
+            for gid in group_ids:
+                if gid in lesson_dates_cache:
+                    group_dates_map[gid] = lesson_dates_cache[gid]
+                else:
+                    missing_gids.append(gid)
+            if missing_gids:
+                for grp in Group.objects.filter(id__in=missing_gids).prefetch_related('special_lesson_days', 'canceled_lesson_days'):
+                    group_dates_map[grp.id] = grp.get_lesson_dates(payment.month.year, payment.month.month)
+
+            # 2. Barcha o'quvchilar ro'yxati (to'laganlar + barcha maxsus maqomdagilar)
+            candidates_map = {}
+            for g in mentor_groups:
+                gid = g.get('id')
+                g_name = g.get('name')
+                g_price = g.get('monthly_price')
+                for s in g.get('paid_students', []):
+                    s['group_id'] = gid
+                    s['group_name'] = g_name
+                    s['group_monthly_price'] = g_price
+                    candidates_map[(s.get('id'), gid)] = s
+
+                # Guruhning BARCHA o'quvchilarini (to'lamaganlarni ham) qo'shamiz
+                for unp in g.get('unpaid_students', []):
+                    key = (unp.get('id'), gid)
+                    if key not in candidates_map:
+                        unp['group_id'] = gid
+                        unp['group_name'] = g_name
+                        unp['group_monthly_price'] = g_price
+                        candidates_map[key] = unp
+
+            student_ids = list({sid for sid, gid in candidates_map.keys() if sid})
+
+            # 3. 1 ta SQL so'rov bilan barcha talabalarning davomatini olish (Indekslangan date__range)
+            import calendar
+            from datetime import date
+            _, last_day = calendar.monthrange(payment.month.year, payment.month.month)
+            month_start = date(payment.month.year, payment.month.month, 1)
+            month_end = date(payment.month.year, payment.month.month, last_day)
+
+            att_map = defaultdict(list)
+            if student_ids and group_ids:
+                att_qs = Attendance.objects.filter(
+                    student_id__in=student_ids,
+                    group_id__in=group_ids,
+                    date__range=(month_start, month_end),
+                    marked_by__isnull=False,
+                ).values('student_id', 'group_id', 'date', 'is_present', 'is_manually_adjusted')
+                for a in att_qs:
+                    att_map[(a['student_id'], a['group_id'])].append(a)
+
+            # 4. 1 ta SQL so'rov bilan barcha audit loglarini olish (Zero N+1)
+            audit_map = {}
+            if student_ids and group_ids:
+                audit_qs = AttendanceAuditLog.objects.filter(
+                    student_id__in=student_ids,
+                    group_id__in=group_ids,
+                    month=payment.month,
+                ).select_related('modified_by').order_by('-created_at')
+                for al in audit_qs:
+                    key = (al.student_id, al.group_id)
+                    if key not in audit_map:
+                        audit_map[key] = {
+                            'id': al.id,
+                            'modified_by': al.modified_by.get_full_name() or al.modified_by.username if al.modified_by else "Admin",
+                            'created_at': al.created_at.strftime("%Y-%m-%d %H:%M") if al.created_at else None,
+                            'previous_attended_count': al.previous_attended_count,
+                            'new_attended_count': al.new_attended_count,
+                            'previous_teacher_share': float(al.previous_teacher_share or 0),
+                            'new_teacher_share': float(al.new_teacher_share or 0),
+                            'previous_state_receivable': float(al.previous_state_receivable or 0),
+                            'new_state_receivable': float(al.new_state_receivable or 0),
+                            'reason_for_change': al.reason_for_change or "",
+                        }
+
+            # 5. Guruhlar xulosasi va o'quvchilarni boyitish
+            total_paid_collected = Decimal('0')
+            total_mentor_share = Decimal('0')
+            total_center_margin = Decimal('0')
+            total_estimated_state_receivable = Decimal('0')
+            total_estimated_center_margin = Decimal('0')
+            total_lessons_planned = 0
+            total_lessons_attended = 0
+
+            for g in mentor_groups:
+                g_paid = g.get('paid_students', [])
+                g_unpaid = g.get('unpaid_students', [])
+                g_real_paid = [s for s in g_paid if s.get('financial_status') != 'discount']
+                g_discount = [s for s in g_paid if s.get('financial_status') == 'discount']
+                g_debtors = [s for s in g_unpaid if s.get('financial_status') != 'discount']
+
+                g_total_paid = sum(Decimal(str(s.get('actual', 0))) for s in g_real_paid)
+                g_total_share = sum(Decimal(str(s.get('mentor_share', 0))) for s in g_paid)
+                g_est_state = sum(Decimal(str(s.get('actual', 0))) for s in g_discount)
+
+                groups_summary.append({
+                    'id': g.get('id'),
+                    'name': g.get('name'),
+                    'monthly_price': g.get('monthly_price'),
+                    'paid_students_count': len(g_real_paid),
+                    'discount_students_count': len(g_discount),
+                    'debtors_count': len(g_debtors),
+                    'total_students_count': g.get('students_count', 0),
+                    'total_paid_amount': float(g_total_paid),
+                    'total_mentor_share': float(g_total_share),
+                    'total_estimated_state_receivable': float(g_est_state),
+                })
+
+            for (sid, gid), s in candidates_map.items():
+                lesson_dates = group_dates_map.get(gid, [])
+                n_total = len(lesson_dates) if lesson_dates else 1
+
+                st_atts = att_map.get((sid, gid), [])
+                attended_dates = {a['date'] for a in st_atts if a['is_present'] and a['date'] in lesson_dates}
+                n_attended = len(attended_dates)
+                has_manual = any(a.get('is_manually_adjusted') for a in st_atts)
+                att_rate = round((n_attended / n_total * 100), 1) if n_total > 0 else 0.0
+
+                fin_status = s.get('financial_status', 'regular')
+                is_discount = fin_status == 'discount'
+                is_teacher_neg = fin_status == 'teacher_negotiated'
+
+                paid_amt = Decimal(str(s.get('actual', 0.0) or s.get('paid_amount', 0.0)))
+                mentor_share_amt = Decimal(str(s.get('mentor_share', 0.0)))
+                contract_amt = Decimal(str(s.get('contract_amount', 0.0) or s.get('group_monthly_price', 0.0)))
+
+                is_debtor = bool(paid_amt == 0 and not is_discount)
+                is_partial = bool(paid_amt > 0 and paid_amt < contract_amt and not is_discount)
+
+                if is_discount:
+                    raw_daily = contract_amt / Decimal(str(n_total)) if n_total > 0 else Decimal('0')
+                    state_receivable = round(raw_daily * Decimal(str(n_attended)))
+                    if state_receivable > contract_amt:
+                        state_receivable = contract_amt
+                    est_center_margin = max(Decimal('0'), state_receivable - mentor_share_amt)
+                    total_estimated_state_receivable += state_receivable
+                    total_estimated_center_margin += est_center_margin
+                    center_margin = None
+                    student_paid_amount = 0.0
+                    student_state_receivable = None
+                else:
+                    state_receivable = paid_amt
+                    center_margin = max(Decimal('0'), state_receivable - mentor_share_amt)
+                    total_paid_collected += paid_amt
+                    total_center_margin += center_margin
+                    est_center_margin = None
+                    student_paid_amount = float(paid_amt)
+                    student_state_receivable = float(paid_amt)
+
+                total_mentor_share += mentor_share_amt
+                total_lessons_planned += n_total
+                total_lessons_attended += n_attended
+
+                if fin_status in status_counts:
+                    status_counts[fin_status] += 1
+                else:
+                    status_counts['regular'] += 1
+
+                sal_type = s.get('salary_type') or default_salary_type
+                sal_rate = s.get('salary_rate', 0.0)
+                if sal_type == 'percentage':
+                    rate_display = f"{sal_rate}%"
+                    type_label = "Foizli ulush"
+                elif sal_type == 'student_count':
+                    rate_display = f"{int(sal_rate):,} UZS / o'quvchi".replace(",", " ")
+                    type_label = "Har bir o'quvchi uchun"
+                else:
+                    rate_display = "Fiksatsiyalangan"
+                    type_label = "Belgilangan oylik"
+
+                st_audit = audit_map.get((sid, gid))
+
+                all_paid_students.append({
+                    'id': sid,
+                    'name': s.get('name'),
+                    'phone': s.get('phone', ''),
+                    'status': fin_status,
+                    'status_label': s.get('financial_status_label', "Oddiy"),
+                    'group_id': gid,
+                    'group_name': s.get('group_name') or "Guruh",
+                    'group_monthly_price': float(s.get('group_monthly_price') or 0),
+                    'custom_fee': float(s.get('negotiated_price')) if s.get('negotiated_price') is not None else None,
+                    'contract_amount': float(contract_amt),
+                    'paid_amount': student_paid_amount,
+                    'mentor_share': float(mentor_share_amt),
+                    'expected': float(s.get('expected', 0.0)),
+                    'n_total': n_total,
+                    'n_attended': n_attended,
+                    'attendance_rate': att_rate,
+                    'has_manual_adjustment': has_manual,
+                    'state_receivable_amount': student_state_receivable,
+                    'estimated_state_receivable': float(state_receivable) if is_discount else None,
+                    'center_gross_margin': float(center_margin) if center_margin is not None else None,
+                    'estimated_center_margin': float(est_center_margin) if est_center_margin is not None else None,
+                    'salary_type': sal_type,
+                    'salary_rate': float(sal_rate),
+                    'teacher_rate_display': rate_display,
+                    'teacher_salary_type_label': type_label,
+                    'paid_at': s.get('paid_at'),
+                    'payment_method': "Davlat puli" if is_discount else (s.get('payment_method') or ("To'lanmagan" if is_debtor else "Kassa")),
+                    'is_attendance_based': is_discount,
+                    'mentor_salary_excluded': is_teacher_neg,
+                    'refund_amount': float(s.get('refund_amount', 0.0)),
+                    'refund_ignored': s.get('refund_ignored', False),
+                    'is_debtor': is_debtor,
+                    'is_partial': is_partial,
+                    'remaining_debt': float(max(Decimal('0'), contract_amt - paid_amt)) if not is_discount else 0.0,
+                    'last_audit_log': st_audit,
+                })
+
+            employee_name = f"{payment.employee.first_name} {payment.employee.last_name}".strip() or payment.employee.username
+
+            month_name_uz = {
+                1: "Yanvar", 2: "Fevral", 3: "Mart", 4: "Aprel", 5: "May", 6: "Iyun",
+                7: "Iyul", 8: "Avgust", 9: "Sentabr", 10: "Oktabr", 11: "Noyabr", 12: "Dekabr"
+            }
+            month_display = f"{month_name_uz.get(payment.month.month, '')} {payment.month.year}" if payment.month else ""
+
+            return Response({
+                'payment_id': payment.id,
+                'employee_id': payment.employee_id,
+                'employee_name': employee_name,
+                'employee_role': payment.employee.role,
+                'month': str(payment.month),
+                'month_display': month_display,
+                'salary_type': default_salary_type,
+                'salary_base': float(payment.salary_base or 0),
+                'total_students_count': len(all_paid_students),
+                'total_debtors_count': sum(1 for st in all_paid_students if st.get('is_debtor')),
+                'total_paid_amount': float(total_paid_collected),
+                'total_mentor_share': float(total_mentor_share),
+                'total_center_margin': float(total_center_margin),
+                'total_estimated_state_receivable': float(total_estimated_state_receivable),
+                'total_estimated_center_margin': float(total_estimated_center_margin),
+                'total_lessons_planned': total_lessons_planned,
+                'total_lessons_attended': total_lessons_attended,
+                'overall_attendance_rate': round(total_lessons_attended / total_lessons_planned * 100, 1) if total_lessons_planned > 0 else 0.0,
+                'status_counts': status_counts,
+                'groups': groups_summary,
+                'students': all_paid_students,
+            })
+        except Exception as e:
+            logger.error(f"paid_students error: {e}", exc_info=True)
+            return Response({'detail': f"To'langan o'quvchilar ro'yxatini yuklashda xatolik: {str(e)}"}, status=400)
+
+    @action(detail=True, methods=['get'], url_path='student-calculation-detail')
+    def student_calculation_detail(self, request, pk=None):
+        """
+        Alohida o'quvchi uchun to'liq arifmetik hisob-kitob tafsiloti (formulalar, amallar, davomat).
+        Frontend keshlaydi, N+1 so'rovlar yuzaga kelmaydi.
+        """
+        payment = self.get_object()
+        student_id = request.query_params.get('student_id')
+        group_id = request.query_params.get('group_id')
+
+        if not student_id:
+            return Response({'detail': "student_id parametri talab qilinadi."}, status=400)
+
+        from finance.services import build_student_calculation_detail_dict
+        try:
+            detail = build_student_calculation_detail_dict(payment, student_id, group_id)
+            return Response(detail)
+        except Exception as e:
+            logger.error(f"student_calculation_detail error: {e}", exc_info=True)
+            return Response({'detail': str(e)}, status=400)
+
 class StaffProfileViewSet(viewsets.ModelViewSet):
     """Xodimlar profili va maosh sozlamalari. 
 
@@ -1490,6 +1849,30 @@ class FinanceTransactionViewSet(viewsets.ModelViewSet):
 
         if self.request.query_params.get('exclude_reversals') == 'true':
             qs = qs.exclude(record_type='reversal')
+
+        group_param = self.request.query_params.get('group') or self.request.query_params.get('group_id')
+        if group_param:
+            try:
+                gid = int(group_param)
+                from groups.models import Group
+                p_ids = list(Payment.objects.filter(group_id=gid).values_list('id', flat=True)[:3000])
+                group_q = Q(group_id=gid)
+                grp = Group.objects.filter(id=gid).first()
+                if grp:
+                    group_q |= Q(group_name=grp.name)
+                if p_ids:
+                    p_qs = Q()
+                    for pid in p_ids:
+                        p_qs |= Q(related_id__startswith=f"STP-{pid}-") | Q(related_id=f"STP-{pid}")
+                    group_q |= p_qs
+                qs = qs.filter(group_q)
+            except (ValueError, TypeError):
+                qs = qs.filter(Q(group_name__icontains=group_param) | Q(description__icontains=group_param))
+
+        method_param = self.request.query_params.get('payment_method') or self.request.query_params.get('method')
+        if method_param:
+            qs = qs.filter(Q(payment_method__iexact=method_param) | Q(description__icontains=method_param))
+
         return qs
 
     def perform_create(self, serializer):
@@ -1749,13 +2132,14 @@ def generate_single_student_payment(request):
             group = get_object_or_404(Group, id=group_id)
             target_groups.append(group)
         else:
-            # O'quvchining barcha faol guruhlarini aniqlash
+            # O'quvchining barcha faol guruhlarini aniqlash (eski/uzilgan guruhlar kirmaydi)
             active_enrollments = GroupEnrollment.objects.filter(
-                student=student, is_active=True
+                student=student, is_active=True, left_at__isnull=True
             ).select_related('group')
             target_groups = [e.group for e in active_enrollments if e.group and e.group.is_faol]
             if not target_groups and student.group and student.group.is_faol:
-                target_groups = [student.group]
+                if GroupEnrollment.objects.filter(student=student, group=student.group, is_active=True, left_at__isnull=True).exists():
+                    target_groups = [student.group]
 
         if not target_groups:
             return Response({
@@ -1773,6 +2157,9 @@ def generate_single_student_payment(request):
             if student.status in ["low_income", "negotiated", "discount", "teacher_negotiated"]:
                 if student.custom_fee is not None:
                     base_price = student.custom_fee
+                elif student.status == "teacher_negotiated":
+                    from finance.utils import get_teacher_negotiated_center_fee
+                    base_price = get_teacher_negotiated_center_fee(group)
 
             month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
 
@@ -2020,145 +2407,6 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from datetime import date
 from decimal import Decimal
-from .serializers import SpecialStudentDashboardResponseSerializer
-
-class SpecialStudentsDashboardAPIView(APIView):
-    """
-    Filialdagi barcha "maxsus" statusga ega o'quvchilar va ularning dinamik moliyaviy ma'lumotlarini qaytaradi.
-    Statuslar: 'discount', 'low_income', 'negotiated', 'teacher_negotiated'
-    """
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter('year', OpenApiTypes.INT, required=True),
-            OpenApiParameter('month', OpenApiTypes.INT, required=True),
-            OpenApiParameter('status', OpenApiTypes.STR, required=False, description="Masalan: discount, negotiated"),
-        ],
-        responses=SpecialStudentDashboardResponseSerializer
-    )
-    def get(self, request, branch_id):
-        # BUG-11 FIX: Admin uchun branch ruxsatini tekshirish
-        if request.user.role == 'admin' and str(request.user.branch_id) != str(branch_id):
-            return Response({"detail": "Siz faqat o'z filialingiz ma'lumotlarini ko'ra olasiz"}, status=403)
-
-        try:
-            year = int(request.query_params.get('year', timezone.now().year))
-            month = int(request.query_params.get('month', timezone.now().month))
-            status_filter = request.query_params.get('status', None)
-        except ValueError:
-            return Response({"detail": "Yil yoki oy xato formatda"}, status=400)
-
-        statuses = ['discount', 'low_income', 'negotiated', 'teacher_negotiated']
-        if status_filter and status_filter in statuses:
-            statuses = [status_filter]
-            
-        from django.db.models import Prefetch
-        # BUG-5 FIX: N+1 muammosini hal qilish uchun kerakli barcha ma'lumotlarni Prefetch qilamiz
-        students = Student.objects.filter(
-            branch_id=branch_id,
-            status__in=statuses,
-            is_active=True
-        ).prefetch_related(
-            Prefetch('enrollments', queryset=GroupEnrollment.objects.filter(is_active=True).select_related('group'), to_attr='active_enrollments'),
-            Prefetch('payments', queryset=Payment.objects.filter(month__year=year, month__month=month), to_attr='current_payments'),
-            Prefetch('attendances', queryset=Attendance.objects.filter(date__year=year, date__month=month, is_present=True, marked_by__isnull=False), to_attr='monthly_attendances'),
-            'finance_profile'
-        )
-
-        data = []
-        total_expected = Decimal(0)
-        total_paid = Decimal(0)
-        total_debt = Decimal(0)
-        
-        group_lesson_dates_cache = {}
-        today = timezone.localdate()
-        from finance.utils import floor_amount
-        
-        for student in students:
-            # InMemory prefetch orqali (DB ga bormaydi)
-            for enr in student.active_enrollments:
-                group = enr.group
-                
-                # Dinamik qarz hisoblash (InMemory)
-                expected = Decimal(0)
-                if student.status != "teacher_negotiated":
-                    if group.id not in group_lesson_dates_cache:
-                        group_lesson_dates_cache[group.id] = group.get_lesson_dates(year, month)
-                    lesson_dates = group_lesson_dates_cache[group.id]
-                    
-                    total_lessons_count = len(lesson_dates)
-                    if total_lessons_count > 0:
-                        base_price = student.custom_fee if student.custom_fee is not None else group.monthly_price
-                        raw_daily = Decimal(str(base_price)) / Decimal(str(total_lessons_count))
-                        
-                        active_lesson_dates = set(d for d in lesson_dates if d <= today)
-                        present_count = sum(1 for att in student.monthly_attendances if att.group_id == group.id and att.date in active_lesson_dates)
-                        expected = floor_amount(raw_daily * Decimal(str(present_count)))
-                        
-                        if expected > Decimal(str(base_price)):
-                            expected = Decimal(str(base_price))
-                
-                # Payment orqali to'langan qismini aniqlaymiz (InMemory)
-                paid_amt = sum((p.paid_amount for p in student.current_payments if p.group_id == group.id), Decimal(0))
-                
-                debt = max(Decimal(0), expected - paid_amt)
-                
-                # Wallet
-                wallet = getattr(student, 'finance_profile', None)
-                w_paid = wallet.total_paid_all_time if wallet else Decimal(0)
-                w_refunded = wallet.total_refunded if wallet else Decimal(0)
-                w_date = wallet.last_payment_date if wallet else None
-                
-                total_expected += expected
-                total_paid += paid_amt
-                total_debt += debt
-                
-                data.append({
-                    "student_id": student.id,
-                    "full_name": student.full_name,
-                    "phone": student.phone,
-                    "status": student.status,
-                    "status_display": student.get_status_display(),
-                    "group_id": group.id,
-                    "group_name": group.name,
-                    "monthly_price": group.monthly_price,
-                    "custom_fee": student.custom_fee,
-                    "expected_amount": expected,
-                    "paid_amount": paid_amt,
-                    "debt": debt,
-                    "wallet_total_paid": w_paid,
-                    "wallet_total_refunded": w_refunded,
-                    "last_payment_date": w_date,
-                })
-
-        status_counts = {
-            'discount': 0,
-            'low_income': 0,
-            'negotiated': 0,
-            'teacher_negotiated': 0
-        }
-        for s in students:
-            if s.status in status_counts:
-                status_counts[s.status] += 1
-            else:
-                status_counts[s.status] = 1
-
-        summary = {
-            "total_expected": total_expected,
-            "total_paid": total_paid,
-            "total_debt": total_debt,
-            "students_count": len(data),
-            "status_counts": status_counts
-        }
-        
-        serializer = SpecialStudentDashboardResponseSerializer({
-            "summary": summary,
-            "students": data
-        })
-        
-        return Response(serializer.data)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

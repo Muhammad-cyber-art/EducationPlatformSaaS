@@ -67,6 +67,8 @@ const parsePaymentDetails = (payment) => {
         .replace(/\|+/g, ' ')
         .trim();
 
+    customNote = customNote.replace(/^(?:izoh|izohi|comment|note):\s*/i, '').trim();
+
     if (customNote.startsWith(groupName) || customNote.includes("UZS. Usul:") || customNote === groupName) {
         customNote = "";
     }
@@ -89,14 +91,29 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
     const receiptUrl = payment.payment_details?.receipt_image;
     const parsed = parsePaymentDetails(payment);
 
+    const rawDateTime = payment.created_at || payment.payment_details?.paid_at || payment.payment_details?.created_at || payment.date;
+    const paymentDateObj = rawDateTime ? new Date(rawDateTime) : null;
+    const isValidDate = paymentDateObj && !isNaN(paymentDateObj.getTime());
+
+    const dateMonths = [
+        "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
+        "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"
+    ];
+    const formattedDate = isValidDate
+        ? `${paymentDateObj.getDate()} - ${dateMonths[paymentDateObj.getMonth()]} ${paymentDateObj.getFullYear()}`
+        : "Noma'lum sana";
+    const formattedTime = isValidDate
+        ? paymentDateObj.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : "—";
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
-            <div className="relative w-full max-w-xl bg-[var(--bg-panel)] border border-[var(--gold)]/20 rounded-2xl shadow-2xl overflow-hidden animate-lux-pop">
+            <div className="relative w-full max-w-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-2xl overflow-hidden animate-lux-pop">
                 {/* Header */}
-                <div className="p-6 sm:p-8 border-b border-[var(--gold)]/10 flex items-center justify-between bg-gradient-to-r from-[var(--gold)]/10 to-transparent">
+                <div className="p-6 sm:p-8 border-b border-[var(--border-glass)] flex items-center justify-between bg-gradient-to-r from-[var(--gold)]/10 to-transparent">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-[var(--gold-dim)] flex items-center justify-center text-[var(--gold)] border border-[var(--gold)]/20 shadow-inner">
+                        <div className="w-12 h-12 rounded-xl bg-[var(--gold-dim)] flex items-center justify-center text-[var(--gold)] border border-[var(--border-glass)] shadow-inner">
                             <FileText size={24} />
                         </div>
                         <div>
@@ -104,9 +121,9 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                             <p className="text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">ID: STP-{payment.id}</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={onClose} 
-                        className="w-10 h-10 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--gold)]/20 text-[var(--text-muted)] hover:text-[var(--text-color)] hover:border-[var(--gold)] rounded-xl transition-all"
+                    <button
+                        onClick={onClose}
+                        className="w-10 h-10 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--border-glass)] text-[var(--text-muted)] hover:text-[var(--text-color)] hover:border-[var(--gold)] rounded-xl transition-all"
                     >
                         <X size={20} />
                     </button>
@@ -114,11 +131,14 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
 
                 {/* Content */}
                 <div className="p-6 sm:p-8 space-y-5 text-[var(--text-color)] max-h-[75vh] overflow-y-auto">
+                    {/* To'lov qabul qilingan sana va aniq soat bloki */}
+
+
                     {/* Basic Grid Info */}
-                    <div className="grid grid-cols-2 gap-4 sm:gap-6 font-bold text-sm bg-[var(--bg-void)]/40 p-4 rounded-xl border border-white/5">
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6 font-bold text-sm bg-[var(--bg-void)]/40 p-4 rounded-xl border border-[var(--border-glass)]">
                         <div>
                             <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">O'quvchi</p>
-                            <span className={payment.status === 'cancelled' ? 'line-through text-red-400' : payment.student_name?.includes("O'chirilgan") ? 'text-red-500 font-black' : ''}>
+                            <span className={payment.status === 'cancelled' ? 'line-through text-red-400' : payment.student_name?.includes("O'chirilgan") ? 'text-red-500 font-black' : 'text-[var(--text-primary)]'}>
                                 {payment.student_name}
                             </span>
                         </div>
@@ -129,7 +149,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                         <div>
                             <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">To'lov Oyi (Davr)</p>
                             <span className="text-[var(--text-color)] font-extrabold flex items-center gap-1.5">
-                                <Calendar size={13} className="text-[var(--gold)]" />
+                                <Calendar size={15} strokeWidth={2.2} className="text-[var(--gold)] shrink-0" />
                                 {formatMonthName(parsed.month) || parsed.month || "Joriy oy"}
                             </span>
                         </div>
@@ -140,26 +160,32 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                             </span>
                         </div>
                         <div>
-                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">Metod</p>
-                            <span className={payment.student_name?.includes("O'chirilgan") && payment.status !== 'cancelled' ? 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-1 rounded-lg text-xs uppercase' : ''}>
+                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">To'lov Usuli</p>
+                            <span className={payment.student_name?.includes("O'chirilgan") && payment.status !== 'cancelled' ? 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-1 rounded-lg text-xs uppercase' : 'text-[var(--text-primary)]'}>
                                 {payment.payment_details?.payment_method_display || payment.payment_details?.payment_method || (payment.payment_details ? "Click / Card" : "Noma'lum")}
                             </span>
                         </div>
                         <div className="text-right">
-                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">Qabul qildi</p>
-                            <span className="text-[var(--text-color)]">{payment.marked_by_name || "Tizim"}</span>
-                        </div>
-                        <div className="col-span-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs text-[var(--text-muted)]">
-                            <span className="flex items-center gap-1">
-                                <Clock size={12} />
-                                {new Date(payment.created_at || payment.date).toLocaleDateString('uz-UZ')} {new Date(payment.created_at || payment.date).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            {payment.payment_details?.is_verified && (
-                                <span className="text-emerald-400 font-bold flex items-center gap-1">
-                                    <CheckCircle2 size={13} />
+                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">Holati</p>
+                            {payment.status === 'cancelled' ? (
+                                <span className="text-red-400 font-black text-xs uppercase">Bekor qilingan</span>
+                            ) : payment.payment_details?.is_verified ? (
+                                <span className="text-emerald-400 font-black flex items-center justify-end gap-1 text-xs">
+                                    <CheckCircle2 size={15} strokeWidth={2.2} className="shrink-0" />
                                     Tasdiqlangan
                                 </span>
+                            ) : (
+                                <span className="text-amber-400 font-bold text-xs">Kutilmoqda</span>
                             )}
+                        </div>
+                        <div className="col-span-2 pt-2 border-t border-[var(--border-glass)] flex items-center justify-between text-xs text-[var(--text-muted)] flex-wrap gap-2">
+                            <span className="flex items-center gap-1.5 font-bold">
+                                <Clock size={15} strokeWidth={2.2} className="text-[var(--gold)] shrink-0" />
+                                Aniq vaqt: <span className="text-[var(--text-primary)] font-black">{formattedDate}, soat {formattedTime}</span>
+                            </span>
+                            <span className="text-[10px] uppercase font-black tracking-wider text-[var(--text-muted)]">
+                                Kassa operatsiyasi
+                            </span>
                         </div>
                     </div>
 
@@ -178,7 +204,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     {receiptUrl && (
                         <div className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-between">
                             <div className="flex items-center gap-2.5 text-blue-400">
-                                <ImageIcon size={18} />
+                                <ImageIcon size={20} strokeWidth={2.2} className="shrink-0" />
                                 <div>
                                     <span className="text-xs font-bold block">To'lov cheki mavjud</span>
                                     <span className="text-[10px] text-blue-400/70">Kvitansiya tasdiqlash uchun yuklangan</span>
@@ -188,14 +214,14 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                 <button
                                     type="button"
                                     onClick={() => setShowReceiptPreview(true)}
-                                    className="px-3.5 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-all shadow-sm flex items-center gap-1.5"
+                                    className="px-3.5 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
                                 >
                                     <span>Chekni ko'rish</span>
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => window.open(receiptUrl, '_blank')}
-                                    className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg transition-all"
+                                    className="px-2.5 py-1.5 bg-[var(--bg-void)] hover:bg-[var(--bg-panel)] text-white text-xs font-bold rounded-lg transition-all border border-[var(--border-glass)] cursor-pointer"
                                     title="Yangi oynada ochish"
                                 >
                                     ↗
@@ -238,10 +264,10 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     )}
 
                     {/* ================= GURUH VA ANIQ DAVOMAT BLOKI ================= */}
-                    <div className="p-4 sm:p-5 bg-gradient-to-br from-[var(--gold)]/10 via-[var(--bg-void)] to-[var(--gold)]/5 border border-[var(--gold)]/30 rounded-2xl space-y-3.5 shadow-lg">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--gold)]/15 pb-3">
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-[var(--gold)]/10 via-[var(--bg-void)] to-[var(--gold)]/5 border border-[var(--border-glass)] rounded-2xl space-y-3.5 shadow-lg">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-glass)] pb-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-[var(--gold)]/15 text-[var(--gold)] border border-[var(--gold)]/25 flex items-center justify-center shrink-0">
+                                <div className="w-9 h-9 rounded-xl bg-[var(--gold)]/15 text-[var(--gold)] border border-[var(--border-glass)] flex items-center justify-center shrink-0">
                                     <BookOpen size={18} />
                                 </div>
                                 <div>
@@ -264,21 +290,21 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
 
                         {/* Aniq davomat ko'rsatkichlari */}
                         <div className="grid grid-cols-3 gap-2.5">
-                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--gold)]/15 text-center">
+                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-center">
                                 <p className="text-[8px] uppercase tracking-wider text-[var(--text-muted)] font-black">Kelgan darslar</p>
                                 <p className="text-lg font-black text-emerald-400 mt-0.5">
                                     {parsed.presentCount ?? 0} ta
                                 </p>
                             </div>
-                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--gold)]/15 text-center">
+                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-center">
                                 <p className="text-[8px] uppercase tracking-wider text-[var(--text-muted)] font-black">Rejadagi darslar</p>
                                 <p className="text-lg font-black text-[var(--gold)] mt-0.5">
                                     {parsed.totalLessons ?? 0} ta
                                 </p>
                             </div>
-                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--gold)]/15 text-center">
+                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-center">
                                 <p className="text-[8px] uppercase tracking-wider text-[var(--text-muted)] font-black">Davomat foizi</p>
-                                <p className="text-lg font-black text-white mt-0.5">
+                                <p className="text-lg font-black text-[var(--text-primary)] mt-0.5">
                                     {parsed.totalLessons > 0 ? `${Math.round(((parsed.presentCount || 0) / parsed.totalLessons) * 100)}%` : "0%"}
                                 </p>
                             </div>
@@ -286,49 +312,70 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     </div>
 
                     {/* ================= TO'LOV IZOHI BLOKI ================= */}
-                    <div className="p-4 sm:p-5 bg-[var(--bg-panel)] border border-[var(--gold)]/20 rounded-2xl space-y-2 shadow-md">
+                    <div className="p-4 sm:p-5 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl space-y-3 shadow-md">
                         <div className="flex items-center justify-between">
                             <p className="text-[10px] text-[var(--gold)] uppercase font-black tracking-widest flex items-center gap-1.5">
                                 <FileText size={13} />
                                 To'lov izohi
                             </p>
                             {parsed.customNote && (
-                                <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
-                                    Admin tomonidan kiritilgan
+                                <span className="text-[9px] text-amber-400 bg-amber-500/15 px-2.5 py-0.5 rounded-full border border-amber-500/30 font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                    Admin Izohi
                                 </span>
                             )}
                         </div>
-                        <div className="p-3 rounded-xl bg-[var(--bg-void)]/60 border border-white/5 text-xs text-[var(--text-color)] font-medium leading-relaxed whitespace-pre-wrap">
-                            {parsed.customNote ? (
-                                <div className="space-y-1.5">
-                                    <p className="font-semibold text-white">{parsed.customNote}</p>
-                                    <p className="text-[10px] text-[var(--text-muted)] pt-1 border-t border-white/5">
-                                        Guruh: <strong className="text-[var(--gold)]">{parsed.groupName}</strong> | Davr: <strong className="text-[var(--text-color)]">{formatMonthName(parsed.month) || parsed.month}</strong> | Davomat: <strong className="text-emerald-400">{parsed.attendanceStr || "Ko'rsatilmagan"}</strong>
-                                    </p>
+
+                        {parsed.customNote ? (
+                            <div className="space-y-2.5">
+                                {/* Highlighted Note Card */}
+                                <div className="p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/5 border border-amber-500/35 shadow-sm space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-amber-400 text-[10px] font-black uppercase tracking-wider">
+                                        <FileText size={12} className="shrink-0" />
+                                        <span>Kiritilgan Izoh:</span>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-[var(--bg-void)]/90 border border-amber-500/25 text-amber-300 font-black text-sm leading-relaxed whitespace-pre-wrap select-text shadow-inner">
+                                        "{parsed.customNote}"
+                                    </div>
                                 </div>
-                            ) : (
-                                <p className="text-[var(--text-muted)]">
-                                    Guruh: <strong className="text-[var(--gold)] font-bold">{parsed.groupName}</strong> &bull; Davr: <strong className="text-[var(--text-color)] font-bold">{formatMonthName(parsed.month) || parsed.month}</strong> &bull; Davomat: <strong className="text-emerald-400 font-bold">{parsed.attendanceStr || "Ko'rsatilmagan"}</strong>
+
+                                <div className="p-2.5 rounded-xl bg-[var(--bg-void)]/50 border border-[var(--border-glass)] text-xs text-[var(--text-muted)] flex items-center justify-between flex-wrap gap-2">
+                                    <span>
+                                        Guruh: <strong className="text-[var(--gold)] font-bold">{parsed.groupName}</strong> &bull; Davr: <strong className="text-[var(--text-color)] font-bold">{formatMonthName(parsed.month) || parsed.month}</strong>
+                                    </span>
+                                    <span>
+                                        Davomat: <strong className="text-emerald-400 font-bold">{parsed.attendanceStr || "Ko'rsatilmagan"}</strong>
+                                    </span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-3.5 rounded-xl bg-[var(--bg-void)]/50 border border-[var(--border-glass)] text-xs text-[var(--text-muted)] space-y-1">
+                                <p>
+                                    Guruh: <strong className="text-[var(--gold)] font-bold">{parsed.groupName}</strong> &bull;
+                                    Davr: <strong className="text-[var(--text-color)] font-bold">{formatMonthName(parsed.month) || parsed.month}</strong> &bull; Davomat: <strong className="text-emerald-400 font-bold">{parsed.attendanceStr || "Ko'rsatilmagan"}</strong>
                                 </p>
-                            )}
-                        </div>
+                                <p className="text-[11px] text-[var(--text-muted)]/70 italic">
+                                    (Alohida qo'shimcha izoh kiritilmagan)
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 bg-[var(--bg-void)] border-t border-[var(--gold)]/10 flex gap-3">
+                <div className="p-6 bg-[var(--bg-void)] border-t border-[var(--border-glass)] flex gap-3">
                     {isSuperAdmin && !payment.payment_details?.is_verified && payment.status !== 'cancelled' && (
-                        <button 
-                            onClick={() => onVerify(payment.payment_details?.original_payment_id || payment.id)} 
-                            className="flex-1 h-12 bg-emerald-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-emerald-500 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                        <button
+                            onClick={() => onVerify(payment.payment_details?.original_payment_id || payment.id)}
+                            className="flex-1 h-12 bg-emerald-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-emerald-500 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
                         >
                             <CheckCircle2 size={16} />
                             Tasdiqlash
                         </button>
                     )}
-                    <button 
-                        onClick={onClose} 
-                        className="flex-1 h-12 bg-[var(--bg-panel)] text-[var(--text-color)] font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-[var(--gold-dim)] transition-all border border-[var(--gold)]/20 hover:border-[var(--gold)]"
+                    <button
+                        onClick={onClose}
+                        className="flex-1 h-12 bg-[var(--bg-panel)] text-[var(--text-color)] font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-[var(--gold-dim)] transition-all border border-[var(--border-glass)] hover:border-[var(--gold)] cursor-pointer"
                     >
                         Yopish
                     </button>
@@ -349,19 +396,19 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                     href={receiptUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors border border-white/10 flex items-center gap-1.5"
+                                    className="px-3 py-1.5 text-xs font-bold bg-[var(--bg-panel)] hover:bg-[var(--bg-void)] text-white rounded-xl transition-colors border border-[var(--border-glass)] flex items-center gap-1.5"
                                 >
                                     <span>Yangi oynada ochish</span>
                                 </a>
                                 <button
                                     onClick={() => setShowReceiptPreview(false)}
-                                    className="w-8 h-8 flex items-center justify-center bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                                    className="w-8 h-8 flex items-center justify-center bg-[var(--bg-panel)] text-white rounded-xl hover:bg-[var(--bg-void)] transition-all border border-[var(--border-glass)] cursor-pointer"
                                 >
                                     ✕
                                 </button>
                             </div>
                         </div>
-                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/60 p-2">
+                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-glass)] bg-black/60 p-2">
                             <img
                                 src={receiptUrl}
                                 alt="Chek rasmi"
@@ -370,7 +417,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                         </div>
 
                         {/* Guruh va Davomat ma'lumotlari chek modalida */}
-                        <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-[var(--gold)]/20 rounded-xl text-left space-y-2">
+                        <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-left space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-black uppercase text-[var(--gold)] tracking-widest flex items-center gap-1.5">
                                     <BookOpen size={13} />
@@ -382,13 +429,20 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                     </span>
                                 )}
                             </div>
-                            <p className="text-xs text-white font-medium leading-relaxed">
+                            <p className="text-xs text-[var(--text-color)] font-medium leading-relaxed">
                                 Guruh: <strong className="text-[var(--gold)]">{parsed.groupName}</strong> &bull; Davr: <strong>{formatMonthName(parsed.month) || parsed.month}</strong>
                             </p>
                             {parsed.customNote && (
-                                <p className="text-xs text-[var(--text-muted)] pt-1.5 border-t border-white/10">
-                                    Izoh: <span className="text-white font-medium">{parsed.customNote}</span>
-                                </p>
+                                <div className="pt-2 border-t border-[var(--border-glass)]">
+                                    <div className="p-3 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs space-y-1">
+                                        <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider block">
+                                            Kiritilgan Izoh:
+                                        </span>
+                                        <p className="text-sm font-black text-amber-300 leading-relaxed select-text">
+                                            "{parsed.customNote}"
+                                        </p>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

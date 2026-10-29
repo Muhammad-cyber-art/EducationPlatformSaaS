@@ -5,8 +5,13 @@ from .views import (
     StaffProfileViewSet, FinanceDashboardView, trigger_monthly_payments,
     FinanceTransactionViewSet, EmployeeAdvanceViewSet, AbsentTodayStudentsView,
     payment_statistics_view, MonthlyBranchTrendsView, AdminExpenseViewSet, MentorGroupSalaryConfigViewSet,
-    SpecialStudentsDashboardAPIView, generate_single_student_payment,
+    generate_single_student_payment,
     offline_finance_bundle
+)
+from .privileged_views import (
+    PrivilegedStudentsListView,
+    PrivilegedStudentAttendanceHistoryView,
+    PrivilegedStudentAttendanceOverrideView,
 )
 
 router = DefaultRouter()
@@ -27,5 +32,8 @@ urlpatterns = [
     path('statistics/monthly-branch-trends/', MonthlyBranchTrendsView.as_view(), name='monthly-branch-trends'),
     path('statistics/absent-students/<int:branch_id>/', AbsentTodayStudentsView.as_view(), name='absent-students-list'),
     path('payment-statistics/', payment_statistics_view, name='payment-statistics'),
-    path('statistics/special-students-dashboard/<int:branch_id>/', SpecialStudentsDashboardAPIView.as_view(), name='special-students-dashboard'),
+    # ── Maxsus / Imtiyozli o'quvchilar boshqaruvi (Privileged Students) ──────
+    path('privileged-students/', PrivilegedStudentsListView.as_view(), name='privileged-students-list'),
+    path('privileged-students/<int:id>/attendance-history/', PrivilegedStudentAttendanceHistoryView.as_view(), name='privileged-students-attendance-history'),
+    path('privileged-students/<int:id>/attendance-override/', PrivilegedStudentAttendanceOverrideView.as_view(), name='privileged-students-attendance-override'),
 ]

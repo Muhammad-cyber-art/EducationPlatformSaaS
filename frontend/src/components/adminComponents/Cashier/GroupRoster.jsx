@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  CreditCard, RotateCcw, Eye, Search, CheckCircle2, 
-  AlertCircle, Clock, Phone, BookOpen, Layers, Users, 
-  Sparkles, Filter, AlertTriangle 
+import {
+  CreditCard, RotateCcw, Eye, Search, CheckCircle2,
+  AlertCircle, Clock, Phone, BookOpen, Layers, Users,
+  Sparkles, Filter, AlertTriangle, Award
 } from 'lucide-react';
 
 export default function GroupRoster({
@@ -22,7 +22,7 @@ export default function GroupRoster({
 
   const rawList = useMemo(() => {
     if (isDebtorsTab) {
-      return debtors;
+      return (debtors || []).filter(s => s.status !== 'discount');
     }
     return selectedGroup?.students || [];
   }, [isDebtorsTab, debtors, selectedGroup]);
@@ -32,14 +32,14 @@ export default function GroupRoster({
     let list = rawList;
 
     if (!isDebtorsTab && filterMode === 'unpaid') {
-      list = list.filter(s => (s.remaining_amount || 0) > 0);
+      list = list.filter(s => (s.remaining_amount || 0) > 0 && s.status !== 'discount');
     } else if (!isDebtorsTab && filterMode === 'paid') {
-      list = list.filter(s => s.is_paid);
+      list = list.filter(s => s.is_paid || s.status === 'discount');
     }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(s => 
+      list = list.filter(s =>
         (s.student_name && s.student_name.toLowerCase().includes(q)) ||
         (s.student_phone && s.student_phone.includes(q)) ||
         (s.group_name && s.group_name.toLowerCase().includes(q))
@@ -114,31 +114,28 @@ export default function GroupRoster({
             <div className="flex items-center gap-1 bg-[var(--bg-void)] p-0.5 rounded-xl border border-[var(--border-glass)] w-full sm:w-auto">
               <button
                 onClick={() => setFilterMode('all')}
-                className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                  filterMode === 'all'
+                className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${filterMode === 'all'
                     ? 'bg-[var(--gold)] text-white font-bold'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
+                  }`}
               >
                 Barchasi ({selectedGroup.students_count || 0})
               </button>
               <button
                 onClick={() => setFilterMode('unpaid')}
-                className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                  filterMode === 'unpaid'
+                className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${filterMode === 'unpaid'
                     ? 'bg-rose-500 text-white'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
+                  }`}
               >
                 Qarzdorlar ({selectedGroup.unpaid_count || 0})
               </button>
               <button
                 onClick={() => setFilterMode('paid')}
-                className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                  filterMode === 'paid'
+                className={`flex-1 sm:flex-none px-3 py-1 text-xs font-bold rounded-lg transition-all ${filterMode === 'paid'
                     ? 'bg-emerald-500 text-white'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
+                  }`}
               >
                 To'laganlar ({selectedGroup.paid_count || 0})
               </button>
@@ -167,10 +164,11 @@ export default function GroupRoster({
         ) : (
           <div className="divide-y divide-[var(--border-glass)]">
             {filteredStudents.map((st) => {
-              const isPaid = st.is_paid;
-              const isPartial = st.is_partial;
-              const remaining = st.remaining_amount || 0;
-              const hasDebt = remaining > 0;
+              const isDiscount = Boolean(st.status === 'discount' || st.is_discount);
+              const isPaid = isDiscount || st.is_paid;
+              const isPartial = !isDiscount && st.is_partial;
+              const remaining = isDiscount ? 0 : (st.remaining_amount || 0);
+              const hasDebt = !isDiscount && remaining > 0;
 
               return (
                 <div
@@ -179,22 +177,23 @@ export default function GroupRoster({
                 >
                   {/* Student Details */}
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div 
+                    <div
                       onClick={() => onOpenDetails(st)}
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer transition-transform hover:scale-105 ${
-                        isPaid
-                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
-                          : isPartial
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer transition-transform hover:scale-105 ${isDiscount
                           ? 'bg-amber-500/15 border border-amber-500/30 text-amber-500'
-                          : 'bg-rose-500/15 border border-rose-500/30 text-rose-500'
-                      }`}
+                          : isPaid
+                            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
+                            : isPartial
+                              ? 'bg-amber-500/15 border border-amber-500/30 text-amber-500'
+                              : 'bg-rose-500/15 border border-rose-500/30 text-rose-500'
+                        }`}
                     >
                       {st.student_name ? st.student_name.charAt(0).toUpperCase() : 'O'}
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span 
+                        <span
                           onClick={() => onOpenDetails(st)}
                           className="font-bold text-sm text-[var(--text-primary)] hover:text-[var(--gold)] cursor-pointer truncate transition-colors"
                         >
@@ -202,14 +201,14 @@ export default function GroupRoster({
                         </span>
 
                         {st.status !== 'regular' && (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                            st.status === 'discount'
-                              ? 'bg-cyan-500/15 text-cyan-500 border border-cyan-500/30'
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 ${isDiscount
+                              ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
                               : st.status === 'negotiated'
-                              ? 'bg-purple-500/15 text-purple-500 border border-purple-500/30'
-                              : 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
-                          }`}>
-                            {st.status_display || st.status}
+                                ? 'bg-purple-500/15 text-purple-500 border border-purple-500/30'
+                                : 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
+                            }`}>
+                            {isDiscount && <Award size={10} />}
+                            {st.status_display || (isDiscount ? "Imtiyozli" : st.status)}
                           </span>
                         )}
 
@@ -246,7 +245,12 @@ export default function GroupRoster({
                   <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 shrink-0 pl-12 md:pl-0">
                     <div className="text-right">
                       <div className="flex items-center gap-1.5 justify-end">
-                        {hasDebt ? (
+                        {isDiscount ? (
+                          <span className="text-xs sm:text-sm font-black text-amber-500 flex items-center gap-1">
+                            <Award size={13} />
+                            Imtiyozli
+                          </span>
+                        ) : hasDebt ? (
                           <span className="text-xs sm:text-sm font-black text-rose-500 tabular-nums">
                             -{formatCurrency(remaining)}
                           </span>
@@ -258,13 +262,26 @@ export default function GroupRoster({
                         )}
                       </div>
                       <p className="text-[10px] text-[var(--text-muted)] tabular-nums mt-0.5">
-                        Jami: {formatCurrency(st.expected_amount)} {st.paid_amount > 0 ? `(To'langan: ${formatCurrency(st.paid_amount)})` : ''}
+                        {isDiscount
+                          ? "Davlat puli orqali qoplanadi"
+                          : `Jami: ${formatCurrency(st.expected_amount)} ${st.paid_amount > 0 ? `(To'langan: ${formatCurrency(st.paid_amount)})` : ''}`
+                        }
                       </p>
                     </div>
 
                     {/* Quick Buttons */}
                     <div className="flex items-center gap-1.5">
-                      {hasDebt ? (
+                      {isDiscount ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetails(st)}
+                          className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/25 text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1.5"
+                          title="Imtiyozli o'quvchi ma'lumotlari"
+                        >
+                          <Award size={13} />
+                          <span>Imtiyozli</span>
+                        </button>
+                      ) : hasDebt ? (
                         <button
                           type="button"
                           onClick={() => onOpenPayment(st)}

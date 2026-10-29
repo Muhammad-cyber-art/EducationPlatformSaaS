@@ -116,10 +116,12 @@ class PaymentSerializer(serializers.ModelSerializer):
                     in ["low_income", "negotiated", "discount", "teacher_negotiated"]
                     else obj.group.monthly_price
                 )
-                return float(floor_amount(float(base_price) / lessons_count))
-            return 0
+                from decimal import Decimal
+                raw_daily = Decimal(str(base_price or 0)) / Decimal(str(lessons_count))
+                return float(floor_amount(raw_daily, precision=1))
+            return 0.0
         except Exception:
-            return 0
+            return 0.0
 
     def get_absences_count(self, obj) -> int:
         try:
@@ -596,9 +598,13 @@ class EmployeePaymentSerializer(serializers.ModelSerializer):
                             "teacher_negotiated",
                             "low_income",
                         ]:
-                            base = Decimal(
-                                str(student.custom_fee or group.monthly_price or 0)
-                            )
+                            if student.status == "teacher_negotiated" and not student.custom_fee:
+                                from finance.utils import get_teacher_negotiated_center_fee
+                                base = get_teacher_negotiated_center_fee(group)
+                            else:
+                                base = Decimal(
+                                    str(student.custom_fee or group.monthly_price or 0)
+                                )
                             total += base
                             total += extra_map.get(key, Decimal("0"))
                             continue
@@ -1316,7 +1322,8 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
                             'is_receiptless': payment.is_receiptless,
                             'notes': payment.notes or "",
                             'group_name': group_name,
-                            'attendance_info': attendance_info
+                            'attendance_info': attendance_info,
+                            'paid_at': payment.paid_at.isoformat() if payment.paid_at else (payment.created_at.isoformat() if payment.created_at else None)
                         }
                     else:
                         # Fallback for deleted students where Payment was hard-deleted by migration 0013
@@ -1422,22 +1429,6 @@ class AdminExpenseSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "marked_by", "created_at"]
 
 
-class SpecialStudentFinancialSerializer(serializers.Serializer):
-    student_id = serializers.IntegerField()
-    full_name = serializers.CharField()
-    phone = serializers.CharField()
-    status = serializers.CharField()
-    status_display = serializers.CharField()
-    group_id = serializers.IntegerField()
-    group_name = serializers.CharField()
-    monthly_price = serializers.DecimalField(max_digits=12, decimal_places=2)
-    custom_fee = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    expected_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
-    paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
-    debt = serializers.DecimalField(max_digits=12, decimal_places=2)
-    wallet_total_paid = serializers.DecimalField(max_digits=12, decimal_places=2)
-    wallet_total_refunded = serializers.DecimalField(max_digits=12, decimal_places=2)
-    last_payment_date = serializers.DateField(allow_null=True)
 class BranchStatSerializer(serializers.Serializer):
     name = serializers.CharField()
     income = serializers.DecimalField(max_digits=15, decimal_places=2)
@@ -1459,15 +1450,3 @@ class FinanceDashboardSerializer(serializers.Serializer):
     pending_income = serializers.DecimalField(max_digits=15, decimal_places=2, required=False)
     branches = BranchStatSerializer(many=True)
     top_groups = GroupStatSerializer(many=True)
-
-
-class SpecialStudentDashboardSummarySerializer(serializers.Serializer):
-    total_expected = serializers.DecimalField(max_digits=15, decimal_places=2)
-    total_paid = serializers.DecimalField(max_digits=15, decimal_places=2)
-    total_debt = serializers.DecimalField(max_digits=15, decimal_places=2)
-    students_count = serializers.IntegerField()
-    status_counts = serializers.DictField(child=serializers.IntegerField(), required=False)
-
-class SpecialStudentDashboardResponseSerializer(serializers.Serializer):
-    summary = SpecialStudentDashboardSummarySerializer()
-    students = SpecialStudentFinancialSerializer(many=True)
