@@ -136,11 +136,11 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
             onTouchMove={(e) => e.stopPropagation()}
         >
             <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose}></div>
-            <div className="relative w-full max-w-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-2xl overflow-hidden animate-lux-pop">
+            <div className="relative w-full max-w-xl bg-[var(--bg-panel)] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-lux-pop">
                 {/* Header */}
-                <div className="p-6 sm:p-8 border-b border-[var(--border-glass)] flex items-center justify-between bg-gradient-to-r from-[var(--gold)]/10 to-transparent">
+                <div className="p-6 sm:p-8 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-amber-500/10 to-transparent">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-[var(--gold-dim)] flex items-center justify-center text-[var(--gold)] border border-[var(--border-glass)] shadow-inner">
+                        <div className="w-12 h-12 rounded-xl bg-[var(--gold-dim)] flex items-center justify-center text-[var(--gold)] border border-white/10 shadow-inner">
                             <FileText size={24} />
                         </div>
                         <div>
@@ -150,7 +150,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-10 h-10 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--border-glass)] text-[var(--text-muted)] hover:text-[var(--text-color)] hover:border-[var(--gold)] rounded-xl transition-all"
+                        className="w-10 h-10 flex items-center justify-center bg-[var(--bg-void)] border border-white/10 text-[var(--text-muted)] hover:text-[var(--text-color)] hover:border-amber-500 rounded-xl transition-all"
                     >
                         <X size={20} />
                     </button>
@@ -162,7 +162,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
 
 
                     {/* Basic Grid Info */}
-                    <div className="grid grid-cols-2 gap-4 sm:gap-6 font-bold text-sm bg-[var(--bg-void)]/40 p-4 rounded-xl border border-[var(--border-glass)]">
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6 font-bold text-sm bg-[var(--bg-void)]/40 p-4 rounded-xl border border-white/10">
                         <div>
                             <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest mb-1">O'quvchi</p>
                             <span className={payment.status === 'cancelled' ? 'line-through text-red-400' : payment.student_name?.includes("O'chirilgan") ? 'text-red-500 font-black' : 'text-[var(--text-primary)]'}>
@@ -205,7 +205,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                 <span className="text-amber-400 font-bold text-xs">Kutilmoqda</span>
                             )}
                         </div>
-                        <div className="col-span-2 pt-2 border-t border-[var(--border-glass)] flex items-center justify-between text-xs text-[var(--text-muted)] flex-wrap gap-2">
+                        <div className="col-span-2 pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs text-[var(--text-muted)] flex-wrap gap-2">
                             <span className="flex items-center gap-1.5 font-bold">
                                 <Clock size={15} strokeWidth={2.2} className="text-[var(--gold)] shrink-0" />
                                 Aniq vaqt: <span className="text-[var(--text-primary)] font-black">{formattedDate}, soat {formattedTime}</span>
@@ -248,7 +248,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                 <button
                                     type="button"
                                     onClick={() => window.open(receiptUrl, '_blank')}
-                                    className="px-2.5 py-1.5 bg-[var(--bg-void)] hover:bg-[var(--bg-panel)] text-white text-xs font-bold rounded-lg transition-all border border-[var(--border-glass)] cursor-pointer"
+                                    className="px-2.5 py-1.5 bg-[var(--bg-void)] hover:bg-[var(--bg-panel)] text-white text-xs font-bold rounded-lg transition-all border border-white/10 cursor-pointer"
                                     title="Yangi oynada ochish"
                                 >
                                     ↗
@@ -291,10 +291,10 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     )}
 
                     {/* ================= GURUH VA ANIQ DAVOMAT BLOKI ================= */}
-                    <div className="p-4 sm:p-5 bg-gradient-to-br from-[var(--gold)]/10 via-[var(--bg-void)] to-[var(--gold)]/5 border border-[var(--border-glass)] rounded-2xl space-y-3.5 shadow-lg">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-glass)] pb-3">
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-[var(--gold)]/10 via-[var(--bg-void)] to-[var(--gold)]/5 border border-white/10 rounded-2xl space-y-3.5 shadow-lg">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-[var(--gold)]/15 text-[var(--gold)] border border-[var(--border-glass)] flex items-center justify-center shrink-0">
+                                <div className="w-9 h-9 rounded-xl bg-[var(--gold)]/15 text-[var(--gold)] border border-white/10 flex items-center justify-center shrink-0">
                                     <BookOpen size={18} />
                                 </div>
                                 <div>
@@ -317,19 +317,19 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
 
                         {/* Aniq davomat ko'rsatkichlari */}
                         <div className="grid grid-cols-3 gap-2.5">
-                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-center">
+                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-white/10 text-center">
                                 <p className="text-[8px] uppercase tracking-wider text-[var(--text-muted)] font-black">Kelgan darslar</p>
                                 <p className="text-lg font-black text-emerald-400 mt-0.5">
                                     {parsed.presentCount ?? 0} ta
                                 </p>
                             </div>
-                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-center">
+                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-white/10 text-center">
                                 <p className="text-[8px] uppercase tracking-wider text-[var(--text-muted)] font-black">Rejadagi darslar</p>
                                 <p className="text-lg font-black text-[var(--gold)] mt-0.5">
                                     {parsed.totalLessons ?? 0} ta
                                 </p>
                             </div>
-                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] text-center">
+                            <div className="p-3 rounded-xl bg-[var(--bg-panel)] border border-white/10 text-center">
                                 <p className="text-[8px] uppercase tracking-wider text-[var(--text-muted)] font-black">Davomat foizi</p>
                                 <p className="text-lg font-black text-[var(--text-primary)] mt-0.5">
                                     {parsed.totalLessons > 0 ? `${Math.round(((parsed.presentCount || 0) / parsed.totalLessons) * 100)}%` : "0%"}
@@ -339,7 +339,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     </div>
 
                     {/* ================= TO'LOV IZOHI BLOKI ================= */}
-                    <div className="p-4 sm:p-5 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl space-y-3 shadow-md">
+                    <div className="p-4 sm:p-5 bg-[var(--bg-panel)] border border-white/10 rounded-2xl space-y-3 shadow-md">
                         <div className="flex items-center justify-between">
                             <p className="text-[10px] text-[var(--gold)] uppercase font-black tracking-widest flex items-center gap-1.5">
                                 <FileText size={13} />
@@ -366,7 +366,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                     </div>
                                 </div>
 
-                                <div className="p-2.5 rounded-xl bg-[var(--bg-void)]/50 border border-[var(--border-glass)] text-xs text-[var(--text-muted)] flex items-center justify-between flex-wrap gap-2">
+                                <div className="p-2.5 rounded-xl bg-[var(--bg-void)]/50 border border-white/10 text-xs text-[var(--text-muted)] flex items-center justify-between flex-wrap gap-2">
                                     <span>
                                         Guruh: <strong className="text-[var(--gold)] font-bold">{parsed.groupName}</strong> &bull; Davr: <strong className="text-[var(--text-color)] font-bold">{formatMonthName(parsed.month) || parsed.month}</strong>
                                     </span>
@@ -376,7 +376,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="p-3.5 rounded-xl bg-[var(--bg-void)]/50 border border-[var(--border-glass)] text-xs text-[var(--text-muted)] space-y-1">
+                            <div className="p-3.5 rounded-xl bg-[var(--bg-void)]/50 border border-white/10 text-xs text-[var(--text-muted)] space-y-1">
                                 <p>
                                     Guruh: <strong className="text-[var(--gold)] font-bold">{parsed.groupName}</strong> &bull;
                                     Davr: <strong className="text-[var(--text-color)] font-bold">{formatMonthName(parsed.month) || parsed.month}</strong> &bull; Davomat: <strong className="text-emerald-400 font-bold">{parsed.attendanceStr || "Ko'rsatilmagan"}</strong>
@@ -390,7 +390,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 bg-[var(--bg-void)] border-t border-[var(--border-glass)] flex gap-3">
+                <div className="p-6 bg-[var(--bg-void)] border-t border-white/[0.06] flex gap-3">
                     {isSuperAdmin && !payment.payment_details?.is_verified && payment.status !== 'cancelled' && (
                         <button
                             onClick={() => onVerify(payment.payment_details?.original_payment_id || payment.id)}
@@ -402,7 +402,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     )}
                     <button
                         onClick={onClose}
-                        className="flex-1 h-12 bg-[var(--bg-panel)] text-[var(--text-color)] font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-[var(--gold-dim)] transition-all border border-[var(--border-glass)] hover:border-[var(--gold)] cursor-pointer"
+                        className="flex-1 h-12 bg-[var(--bg-panel)] text-[var(--text-color)] font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-[var(--gold-dim)] transition-all border border-white/10 hover:border-[var(--gold)] cursor-pointer"
                     >
                         Yopish
                     </button>
@@ -423,19 +423,19 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                     href={receiptUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 text-xs font-bold bg-[var(--bg-panel)] hover:bg-[var(--bg-void)] text-white rounded-xl transition-colors border border-[var(--border-glass)] flex items-center gap-1.5"
+                                    className="px-3 py-1.5 text-xs font-bold bg-[var(--bg-panel)] hover:bg-[var(--bg-void)] text-white rounded-xl transition-colors border border-white/10 flex items-center gap-1.5"
                                 >
                                     <span>Yangi oynada ochish</span>
                                 </a>
                                 <button
                                     onClick={() => setShowReceiptPreview(false)}
-                                    className="w-8 h-8 flex items-center justify-center bg-[var(--bg-panel)] text-white rounded-xl hover:bg-[var(--bg-void)] transition-all border border-[var(--border-glass)] cursor-pointer"
+                                    className="w-8 h-8 flex items-center justify-center bg-[var(--bg-panel)] text-white rounded-xl hover:bg-[var(--bg-void)] transition-all border border-white/10 cursor-pointer"
                                 >
                                     ✕
                                 </button>
                             </div>
                         </div>
-                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-glass)] bg-black/60 p-2">
+                        <div className="w-full flex items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/60 p-2">
                             <img
                                 src={receiptUrl}
                                 alt="Chek rasmi"
@@ -444,7 +444,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                         </div>
 
                         {/* Guruh va Davomat ma'lumotlari chek modalida */}
-                        <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-xl text-left space-y-2.5">
+                        <div className="w-full mt-3 p-4 bg-[var(--bg-panel)] border border-white/10 rounded-xl text-left space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-black uppercase text-[var(--gold)] tracking-widest flex items-center gap-1.5">
                                     <BookOpen size={13} />
@@ -460,7 +460,7 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                                 Guruh: <strong className="text-[var(--gold)]">{parsed.groupName}</strong> &bull; Davr: <strong>{formatMonthName(parsed.month) || parsed.month}</strong>
                             </p>
                             {parsed.customNote && (
-                                <div className="pt-2 border-t border-[var(--border-glass)]">
+                                <div className="pt-2 border-t border-white/[0.06]">
                                     <div className="p-3 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs space-y-1">
                                         <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider block">
                                             Kiritilgan Izoh:

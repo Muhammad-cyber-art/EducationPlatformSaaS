@@ -4,14 +4,14 @@ import { formatCurrency } from "./useKassa";
 import ThemeToggle from "../../../ThemeToggle";
 
 const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWithdraw, isSuperAdmin }) => (
-    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 p-5 bg-[var(--bg-panel)]/40 border border-[var(--border-glass)] rounded-2xl shadow-xl backdrop-blur-xl relative overflow-hidden group">
+    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 p-5 bg-[var(--bg-panel)]/40 border border-white/[0.06] rounded-2xl shadow-xl backdrop-blur-xl relative overflow-hidden group">
         <div className="absolute inset-0 bg-gradient-to-r from-[var(--gold)]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
 
         <div className="flex items-center gap-4 sm:gap-6 relative z-10 w-full xl:w-auto justify-between xl:justify-start">
             <div className="flex items-center gap-4 sm:gap-6">
                 <button
                     onClick={() => navigate(-1)}
-                    className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[var(--bg-void)] border border-[var(--gold)]/20 rounded-xl text-[var(--gold)] hover:border-[var(--gold)] hover:bg-[var(--gold)] hover:text-white hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shrink-0"
+                    className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-[var(--bg-void)] border border-amber-500/20 rounded-xl text-[var(--gold)] hover:border-amber-500 hover:bg-[var(--gold)] hover:text-white hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shrink-0"
                 >
                     <ArrowLeft size={20} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.5} />
                 </button>
@@ -36,7 +36,7 @@ const KassaHeader = ({ navigate, totalToday, totalVerified, totalWithdrawn, onWi
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3 relative z-10 w-full xl:w-auto">
-            <div className="px-2.5 py-2.5 sm:px-5 sm:py-3 bg-[var(--bg-void)]/60 border border-[var(--gold)]/20 rounded-xl group/total flex flex-col justify-center">
+            <div className="px-2.5 py-2.5 sm:px-5 sm:py-3 bg-[var(--bg-void)]/60 border border-amber-500/20 rounded-xl group/total flex flex-col justify-center">
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-1 opacity-80">
                     <PlusCircle size={15} className="text-[var(--gold)] sm:w-4 sm:h-4 shrink-0" strokeWidth={2.2} />
                     <p className="text-[8px] sm:text-[10px] font-black text-[var(--gold)] uppercase tracking-wider sm:tracking-widest truncate">Umumiy Kirim</p>

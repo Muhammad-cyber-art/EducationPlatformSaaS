@@ -75,7 +75,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
     return (
         <table className="w-full text-left border-collapse">
             <thead>
-                <tr className="bg-[var(--bg-panel)] border-b border-[var(--border-glass)]">
+                <tr className="bg-[var(--bg-panel)] border-b border-white/[0.06]">
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">O'quvchi / Guruh</th>
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">To'lov Usuli</th>
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">Summa</th>
@@ -84,7 +84,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em] text-right">Amallar</th>
                 </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border-glass)]">
+            <tbody>
                 {loading && payments.length === 0 ? (
                     <tr><td colSpan="6" className="p-16 text-center text-[var(--gold)] animate-pulse uppercase font-black tracking-widest">Ma'lumotlar yuklanmoqda...</td></tr>
                 ) : payments.length === 0 ? (
@@ -103,9 +103,9 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                 <React.Fragment key={p.id}>
                                     {showBadge && (
                                         <tr>
-                                            <td colSpan="6" className="py-3 bg-[var(--bg-void)]/30 border-y border-[var(--gold)]/20">
+                                            <td colSpan="6" className="pt-6 pb-2.5 bg-transparent border-0 text-center">
                                                 <div className="flex justify-center">
-                                                    <span className="px-4 py-1 rounded-full bg-[var(--bg-panel)] border border-[var(--gold)]/30 text-[var(--text-color)] text-[11px] font-black uppercase tracking-widest shadow-sm">
+                                                    <span className="px-4 py-1 rounded-full bg-white/[0.04] text-[var(--gold)] text-[10px] font-black uppercase tracking-widest shadow-sm">
                                                         {dateBadge}
                                                     </span>
                                                 </div>
@@ -113,7 +113,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                         </tr>
                                     )}
                                     <tr
-                                        className={`transition-all duration-300 group/row ${isCancelled
+                                        className={`transition-all duration-300 group/row border-b border-white/[0.04] ${isCancelled
                                             ? 'opacity-50 bg-red-500/[0.04] border-l-2 border-red-500'
                                             : 'hover:bg-[var(--gold-dim)]'
                                             }`}
@@ -181,7 +181,7 @@ const IncomeTable = ({ payments, loading, loadingMore, hasMorePayments, loadMore
                                                             <ImageIcon size={16} />
                                                         </button>
                                                     )}
-                                                    <button onClick={() => onDetail(p)} className="w-9 h-9 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-[var(--gold)]/20 rounded-xl hover:bg-[var(--gold)] hover:text-white transition-all shadow-sm active:scale-90"><FileText size={16} /></button>
+                                                    <button onClick={() => onDetail(p)} className="w-9 h-9 flex items-center justify-center bg-[var(--gold-dim)] text-[var(--gold)] border border-amber-500/20 rounded-xl hover:bg-[var(--gold)] hover:text-white transition-all shadow-sm active:scale-90"><FileText size={16} /></button>
                                                 </div>
                                             )}
                                         </td>
@@ -215,7 +215,7 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
     return (
         <table className="w-full text-left border-collapse">
             <thead>
-                <tr className="bg-[var(--bg-panel)] border-b border-[#333]">
+                <tr className="bg-[var(--bg-panel)] border-b border-white/[0.06]">
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">Operatsiya</th>
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">Toifa</th>
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em]">Summa</th>
@@ -224,7 +224,7 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                     <th className="px-8 py-4 text-[10px] font-black text-[var(--gold)] uppercase tracking-[0.3em] text-right">Status</th>
                 </tr>
             </thead>
-            <tbody className="divide-y divide-[#333]">
+            <tbody>
                 {loading && withdrawals.length === 0 ? (
                     <tr><td colSpan="6" className="p-16 text-center text-red-500 animate-pulse uppercase font-black tracking-widest">Yuklanmoqda...</td></tr>
                 ) : withdrawals.length === 0 ? (
@@ -240,16 +240,16 @@ const ExpenseTable = ({ withdrawals, loading, loadingMore, hasMoreWithdrawals, l
                                 <React.Fragment key={w.id}>
                                     {showBadge && (
                                         <tr>
-                                            <td colSpan="6" className="py-3 bg-[var(--bg-void)]/30 border-y border-[var(--gold)]/20">
+                                            <td colSpan="6" className="pt-6 pb-2.5 bg-transparent border-0 text-center">
                                                 <div className="flex justify-center">
-                                                    <span className="px-4 py-1 rounded-full bg-[var(--bg-panel)] border border-[var(--gold)]/30 text-[var(--text-primary)] text-[11px] font-black uppercase tracking-widest shadow-sm">
+                                                    <span className="px-4 py-1 rounded-full bg-white/[0.04] text-[var(--gold)] text-[10px] font-black uppercase tracking-widest shadow-sm">
                                                         {dateBadge}
                                                     </span>
                                                 </div>
                                             </td>
                                         </tr>
                                     )}
-                                    <tr className="hover:bg-[var(--gold-dim)] transition-all duration-300 group/row">
+                                    <tr className="hover:bg-[var(--gold-dim)] transition-all duration-300 group/row border-b border-white/[0.04]">
                                         <td className="px-8 py-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-10 h-10 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 group-hover/row:bg-red-500 group-hover/row:text-white transition-all">
@@ -312,7 +312,7 @@ const MobileIncomeCard = ({ item, isSuperAdmin, onVerify, onDetail, onReceipt })
     const methodMeta = getMethodMeta(item.payment_details?.payment_method, item.payment_details?.payment_method_display);
 
     return (
-        <div className="flex items-center justify-between gap-2 p-4 bg-[var(--bg-panel)]/30 border border-[var(--border-glass)] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
+        <div className="flex items-center justify-between gap-2 p-4 bg-[var(--bg-panel)]/30 border border-white/[0.06] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
             <div className="flex-1 min-w-0">
                 <h3 className={`text-[13px] font-black capitalize truncate ${isCancelled ? 'text-red-400 line-through' : isDeleted ? 'text-red-500' : 'text-[var(--text-primary)]'}`}>{item.student_name}</h3>
                 <p className="text-[10px] text-[var(--text-muted)] font-bold truncate opacity-80">{item.payment_details?.group_name || item.group_name || 'Guruhsiz'}</p>
@@ -378,7 +378,7 @@ const MobileIncomeCard = ({ item, isSuperAdmin, onVerify, onDetail, onReceipt })
 };
 
 const MobileExpenseCard = ({ item }) => (
-    <div className="flex items-center justify-between p-4 bg-[var(--bg-panel)]/30 border border-[var(--border-glass)] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
+    <div className="flex items-center justify-between p-4 bg-[var(--bg-panel)]/30 border border-white/[0.06] rounded-xl backdrop-blur-md relative overflow-hidden active:scale-[0.98] transition-all">
         <div className="flex items-center gap-3 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-red-500/10 border border-red-500/25 flex items-center justify-center text-red-500 shrink-0 shadow-sm">
                 <TrendingDown size={20} strokeWidth={2.2} />
@@ -437,7 +437,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
     return (
         <div className="relative">
             {/* Desktop Table View */}
-            <div className="hidden lg:block !p-0 rounded-2xl overflow-hidden border border-[var(--border-glass)] shadow-xl bg-[var(--bg-panel)]/20 backdrop-blur-md">
+            <div className="hidden lg:block !p-0 rounded-2xl overflow-hidden border border-white/[0.06] shadow-xl bg-[var(--bg-panel)]/40 backdrop-blur-md">
                 <div className="overflow-x-auto">
                     {activeTab === "incomes" ? (
                         <IncomeTable
@@ -480,7 +480,7 @@ const KassaContent = ({ activeTab, payments, withdrawals, loading, loadingMore, 
                                 <React.Fragment key={item.id}>
                                     {showBadge && (
                                         <div className="flex justify-center my-6">
-                                            <span className="px-4 py-1.5 rounded-full bg-[var(--bg-panel)] border border-[var(--gold)]/30 text-[var(--text-primary)] text-[11px] font-black uppercase tracking-widest shadow-sm">
+                                            <span className="px-4 py-1.5 rounded-full bg-white/[0.04] text-[var(--gold)] text-[10px] font-black uppercase tracking-widest shadow-sm">
                                                 {dateBadge}
                                             </span>
                                         </div>
