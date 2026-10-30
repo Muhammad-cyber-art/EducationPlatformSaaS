@@ -1199,18 +1199,22 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                         ]:
                             employee_groups.setdefault(uid, []).append(g)
 
-            # 3. Lesson dates cache (har guruh uchun bir marta)
+            # 3. Lesson dates cache (har guruh va har oy uchun aniq saqlanadi)
             lesson_dates_cache = {}
             for g in groups_qs:
                 for (eid, month_str) in employee_months:
                     if eid in employee_groups and g.id in [
                         gg.id for gg in employee_groups.get(eid, [])
                     ]:
-                        if g.id not in lesson_dates_cache:
-                            parts = month_str.split('-')
-                            lesson_dates_cache[g.id] = g.get_lesson_dates(
-                                int(parts[0]), int(parts[1])
-                            )
+                        parts = month_str.split('-')
+                        y, m = int(parts[0]), int(parts[1])
+                        cache_key = (g.id, y, m)
+                        if cache_key not in lesson_dates_cache:
+                            ldates = g.get_lesson_dates(y, m)
+                            lesson_dates_cache[cache_key] = ldates
+                            # Faqat ko'rilayotgan oylik (asosiy item) bo'lsagina legacy g.id kalitiga yozamiz
+                            if items and y == items[0].month.year and m == items[0].month.month:
+                                lesson_dates_cache[g.id] = ldates
 
             # 4. Payments batch
             payment_conditions = Q()
@@ -1247,21 +1251,25 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                     else:
                         extras_map_global[key] = extras_map_global.get(key, Decimal('0')) - amt
 
-            # 6. Attendance cache
+            # 6. Attendance cache (har oy va har guruh uchun)
             all_group_ids = list(group_by_id.keys())
             attendance_cache = {}
             if all_group_ids:
                 for month_str in set(m for _, m in employee_months):
                     parts = month_str.split('-')
+                    y, m = int(parts[0]), int(parts[1])
                     for row in Attendance.objects.filter(
                         group_id__in=all_group_ids,
-                        date__year=int(parts[0]),
-                        date__month=int(parts[1]),
+                        date__year=y,
+                        date__month=m,
                         is_present=True,
-                        marked_by__isnull=False,
+                    ).filter(
+                        Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
                     ).values('group_id', 'student_id'):
-                        k = (row['group_id'], row['student_id'])
-                        attendance_cache[k] = attendance_cache.get(k, 0) + 1
+                        k_month = (row['group_id'], row['student_id'], y, m)
+                        attendance_cache[k_month] = attendance_cache.get(k_month, 0) + 1
+                        k_legacy = (row['group_id'], row['student_id'])
+                        attendance_cache[k_legacy] = attendance_cache.get(k_legacy, 0) + 1
 
             # 7. Enrollment cache — FAQAT FAOL o'quvchilar (is_active=True)
             enrollment_cache = {}
@@ -1489,13 +1497,22 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
             group_dates_map = {}
             missing_gids = []
             for gid in group_ids:
-                if gid in lesson_dates_cache:
-                    group_dates_map[gid] = lesson_dates_cache[gid]
+                cache_key = (gid, payment.month.year, payment.month.month)
+                if cache_key in lesson_dates_cache:
+                    group_dates_map[gid] = lesson_dates_cache[cache_key]
+                elif gid in lesson_dates_cache and isinstance(lesson_dates_cache[gid], list):
+                    dates = lesson_dates_cache[gid]
+                    if dates and dates[0].year == payment.month.year and dates[0].month == payment.month.month:
+                        group_dates_map[gid] = dates
+                    else:
+                        missing_gids.append(gid)
                 else:
                     missing_gids.append(gid)
             if missing_gids:
                 for grp in Group.objects.filter(id__in=missing_gids).prefetch_related('special_lesson_days', 'canceled_lesson_days'):
-                    group_dates_map[grp.id] = grp.get_lesson_dates(payment.month.year, payment.month.month)
+                    dates = grp.get_lesson_dates(payment.month.year, payment.month.month)
+                    group_dates_map[grp.id] = dates
+                    lesson_dates_cache[(grp.id, payment.month.year, payment.month.month)] = dates
 
             # 2. Barcha o'quvchilar ro'yxati (to'laganlar + barcha maxsus maqomdagilar)
             candidates_map = {}
@@ -1533,7 +1550,8 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                     student_id__in=student_ids,
                     group_id__in=group_ids,
                     date__range=(month_start, month_end),
-                    marked_by__isnull=False,
+                ).filter(
+                    Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
                 ).values('student_id', 'group_id', 'date', 'is_present', 'is_manually_adjusted')
                 for a in att_qs:
                     att_map[(a['student_id'], a['group_id'])].append(a)
@@ -1597,11 +1615,15 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
 
             for (sid, gid), s in candidates_map.items():
                 lesson_dates = group_dates_map.get(gid, [])
-                n_total = len(lesson_dates) if lesson_dates else 1
-
                 st_atts = att_map.get((sid, gid), [])
-                attended_dates = {a['date'] for a in st_atts if a['is_present'] and a['date'] in lesson_dates}
+                attended_dates = {
+                    a['date'] for a in st_atts 
+                    if a['is_present']
+                }
                 n_attended = len(attended_dates)
+                n_total = len(lesson_dates) if lesson_dates else 1
+                if n_attended > n_total:
+                    n_total = n_attended
                 has_manual = any(a.get('is_manually_adjusted') for a in st_atts)
                 att_rate = round((n_attended / n_total * 100), 1) if n_total > 0 else 0.0
 

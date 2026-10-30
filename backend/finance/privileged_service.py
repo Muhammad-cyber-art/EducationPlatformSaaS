@@ -80,18 +80,24 @@ def get_privileged_students_summary(
     search=None,
     page=1,
     page_size=20,
+    status=None,
 ):
     """
-    Maxsus / Imtiyozli talabalar ro'yxati va real vaqtda hisoblangan moliyaviy ko'rsatkichlar.
+    Maxsus / Imtiyozli va Kelishilgan narxdagi talabalar ro'yxati va real vaqtda hisoblangan moliyaviy ko'rsatkichlar.
     """
     if month is None:
         month = timezone.localdate().replace(day=1)
     else:
         month = normalize_month(month)
 
+    if status and status in ["discount", "negotiated"]:
+        target_statuses = [status]
+    else:
+        target_statuses = ["discount", "negotiated"]
+
     enrollments_qs = GroupEnrollment.objects.filter(
         is_active=True,
-        student__status="discount",
+        student__status__in=target_statuses,
         student__is_active=True,
         student__is_archived=False,
     ).select_related("student", "group", "group__mentor", "group__branch")
@@ -258,7 +264,7 @@ def get_privileged_students_summary(
         attended_dates = {
             a["date"]
             for a in att_list
-            if a["is_present"] and a["marked_by_id"] is not None and a["date"] in lesson_dates
+            if a["is_present"] and (a["marked_by_id"] is not None or a.get("is_manually_adjusted")) and a["date"] in lesson_dates
         }
         n_attended = min(n_total, len(attended_dates))
         has_manual = any(a.get("is_manually_adjusted") for a in att_list)
@@ -295,6 +301,9 @@ def get_privileged_students_summary(
             "student_id": student.id,
             "student_name": student.full_name,
             "student_phone": student.phone or "",
+            "student_status": student.status,
+            "student_status_label": student.get_status_display(),
+            "custom_fee": float(student.custom_fee) if student.custom_fee is not None else None,
             "group_id": group.id,
             "group_name": group.name,
             "branch_id": group.branch_id,
@@ -384,7 +393,7 @@ def get_privileged_student_attendance_history(student_id: int, group_id: int = N
 
     for idx, d in enumerate(lesson_dates, start=1):
         att = att_by_date.get(d)
-        is_present = bool(att.is_present and att.marked_by_id is not None) if att else False
+        is_present = bool(att.is_present and (att.marked_by_id is not None or att.is_manually_adjusted)) if att else False
         is_manual = att.is_manually_adjusted if att else False
         marked_by_name = (att.marked_by.get_full_name() or att.marked_by.username) if (att and att.marked_by) else None
         updated_at = att.updated_at.strftime("%Y-%m-%d %H:%M") if att else None
@@ -646,14 +655,15 @@ def update_privileged_attendance(
         new_center_margin = max(Decimal("0"), new_state_receivable - new_teacher_share)
 
         # 4. MOLIYAVIY HISOB-KITOBNI RE-TRIGGER QILISH (Idempotent Payment update)
+        is_discount = (student.status == "discount")
         payment, _ = Payment.objects.get_or_create(
             student=student,
             group=group,
             month=month,
-            defaults={"is_auto_discount": True, "amount": new_state_receivable},
+            defaults={"is_auto_discount": is_discount, "amount": new_state_receivable},
         )
         payment.amount = new_state_receivable
-        payment.is_auto_discount = True
+        payment.is_auto_discount = is_discount
         payment.save(update_fields=["amount", "is_auto_discount"])
 
         # O'qituvchining oylik paymentlarini yangilash

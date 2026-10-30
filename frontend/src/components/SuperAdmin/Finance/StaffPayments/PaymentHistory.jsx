@@ -1,6 +1,5 @@
 import React from "react";
 import { History, Trash2, Bookmark, CheckCircle, DollarSign } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 const DetailRow = ({ label, value }) => (
     <div className="flex items-center justify-between py-0.5">
@@ -19,7 +18,6 @@ const PaymentHistory = ({
     setPayModal,
     setSelectedHistoryItem
 }) => {
-    const navigate = useNavigate();
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -39,8 +37,7 @@ const PaymentHistory = ({
                                 return (
                                     <tr
                                         key={item.id}
-                                        onClick={() => !isActive && navigate(`/super_admin/all-payments/staff_payments/staff/${item.id}`)}
-                                        className={`hover:bg-[var(--gold-dim)] transition-colors group cursor-pointer ${isActive ? 'bg-[var(--gold)]/5' : ''}`}
+                                        className={`hover:bg-[var(--gold-dim)] transition-colors group ${isActive ? 'bg-[var(--gold)]/5' : ''}`}
                                     >
                                         <td className="px-5 py-3">
                                             <p className="text-[10px] font-black text-[var(--text-primary)]">{item.month}</p>

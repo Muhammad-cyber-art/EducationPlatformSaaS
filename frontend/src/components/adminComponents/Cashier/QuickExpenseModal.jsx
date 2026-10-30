@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, TrendingDown, DollarSign, FileText, Calendar, Loader2 } from 'lucide-react';
 import api from '../../../tokenUpdater/updater';
 import toast from 'react-hot-toast';
@@ -14,6 +15,28 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollContainer = document.querySelector('.lux-scroll');
+    const originalScrollOverflow = scrollContainer ? scrollContainer.style.overflow : '';
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (scrollContainer) {
+      scrollContainer.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      if (scrollContainer) {
+        scrollContainer.style.overflow = originalScrollOverflow;
+      }
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -88,8 +111,15 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+    >
       <div className="w-full max-w-md bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-2xl overflow-hidden p-6 relative">
         <button
           onClick={onClose}
@@ -190,6 +220,7 @@ export default function QuickExpenseModal({ isOpen, onClose, branchId, onExpense
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -680,3 +680,491 @@ class PrivilegedStudentsAPITests(APITestCase):
 
 
 
+
+
+    def test_negotiated_students_included_in_privileged_list_and_filtered(self):
+        """Kelishilgan narx (negotiated) statusidagi talabalar ham ro'yxatga kirishi va status parametri orqali filtrlanishi kerak"""
+        student_neg = Student.objects.create(
+            full_name="Bobur Mirzo",
+            group=self.group,
+            branch=self.branch,
+            status="negotiated",
+            custom_fee=Decimal("300000"),
+        )
+        GroupEnrollment.objects.filter(student=student_neg, group=self.group).update(
+            joined_at=timezone.now().date().replace(day=1),
+            is_active=True,
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        month_str = self.payment_month.strftime("%Y-%m")
+
+        # 1. Barcha maxsus talabalar: discount + negotiated bo'lishi kerak (jami 2 ta)
+        url_all = f"/api/v1/finance/privileged-students/?month={month_str}"
+        resp_all = self.client.get(url_all)
+        self.assertEqual(resp_all.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp_all.data["summary"]["total_students"], 2)
+        names = [r["student_name"] for r in resp_all.data["results"]]
+        self.assertIn("Alisher Navoiy", names)
+        self.assertIn("Bobur Mirzo", names)
+
+        # 2. Faqat kelishilgan narxdagilar (?status=negotiated)
+        url_neg = f"/api/v1/finance/privileged-students/?month={month_str}&status=negotiated"
+        resp_neg = self.client.get(url_neg)
+        self.assertEqual(resp_neg.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp_neg.data["results"]), 1)
+        self.assertEqual(resp_neg.data["results"][0]["student_name"], "Bobur Mirzo")
+        self.assertEqual(resp_neg.data["results"][0]["student_status"], "negotiated")
+        self.assertEqual(resp_neg.data["results"][0]["course_fee"], 300000.0)
+
+        # 3. Faqat imtiyozlilar (?status=discount)
+        url_disc = f"/api/v1/finance/privileged-students/?month={month_str}&status=discount"
+        resp_disc = self.client.get(url_disc)
+        self.assertEqual(resp_disc.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp_disc.data["results"]), 1)
+        self.assertEqual(resp_disc.data["results"][0]["student_name"], "Alisher Navoiy")
+        self.assertEqual(resp_disc.data["results"][0]["student_status"], "discount")
+
+    def test_paid_students_attendance_accurate_with_unpaid_previous_months(self):
+        """O'tgan to'lanmagan oylar bo'lganda ham joriy oydagi darslar va davomat aniq hisoblanishi kerak (kesh buzilmasligi)"""
+        from datetime import date
+        # Yangi mentor va guruh yaratamiz (mustaqil izolyatsiya)
+        test_mentor = User.objects.create_user(username='mentor_test_att', password='pw', role='mentor', branch=self.branch)
+        StaffProfile.objects.create(
+            user=test_mentor,
+            salary_type='percentage',
+            commission_percentage=Decimal('50.0')
+        )
+        test_group = Group.objects.create(
+            name="Mohigul Ingliz tili juft 16:30",
+            branch=self.branch,
+            mentor=test_mentor,
+            monthly_price=Decimal("400000"),
+            days='even'  # Se-Pay-Shan: Sentabrda 13 dars, Oktabrda 14 dars
+        )
+        
+        sep_month = date(2026, 9, 1)
+        oct_month = date(2026, 10, 1)
+        
+        ep_sep = EmployeePayment.objects.create(
+            employee=test_mentor,
+            month=sep_month,
+            is_paid=False,
+            salary_base=Decimal("1000000")
+        )
+        ep_oct = EmployeePayment.objects.create(
+            employee=test_mentor,
+            month=oct_month,
+            is_paid=False,
+            salary_base=Decimal("1000000")
+        )
+
+        # Oddiy statusdagi o'quvchi
+        st_regular = Student.objects.create(
+            full_name="Qodirova Gulbahor",
+            group=test_group,
+            branch=self.branch,
+            status="regular"
+        )
+        GroupEnrollment.objects.filter(student=st_regular, group=test_group).update(
+            joined_at=oct_month,
+            is_active=True,
+        )
+
+        # Oktabr oyidagi 14 ta darsdan 10 tasiga davomat yozamiz
+        oct_lesson_dates = test_group.get_lesson_dates(2026, 10)
+        self.assertEqual(len(oct_lesson_dates), 14) # Oktabrda 14 dars
+
+        for d in oct_lesson_dates[:10]:
+            Attendance.objects.create(
+                student=st_regular,
+                group=test_group,
+                date=d,
+                is_present=True,
+                marked_by=test_mentor
+            )
+
+        self.client.force_authenticate(user=self.admin)
+        url = f"/api/v1/finance/employee-payments/{ep_oct.id}/paid-students/"
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        target_st = next((s for s in resp.data["students"] if s["id"] == st_regular.id), None)
+        self.assertIsNotNone(target_st)
+        # Reja darslar 14 bo'lishi kerak (Sentabrning 13 darsi emas!)
+        self.assertEqual(target_st["n_total"], 14)
+        # Davomat 10 bo'lishi kerak (0 emas!)
+        self.assertEqual(target_st["n_attended"], 10)
+        self.assertEqual(target_st["attendance_rate"], 71.4)
+
+
+class SeniorQADeepLogicTests(APITestCase):
+    """
+    SENIOR QA CHUQUR LOGIK TEST SUITE:
+    Real hayotiy chegaraviy holatlar (Edge Cases, Boundaries, Stress Cases):
+    1. Status o'zgartirish (Status transition & Custom fee integrity)
+    2. Qo'lda davomatni tahrirlash va Audit log propagation
+    3. Jadvaldan tashqari kunda o'tilgan qo'shimcha darslar (Off-schedule makeup lessons)
+    4. Oy o'rtasida qo'shilgan o'quvchi hisob-kitobi (Mid-month joining rate integrity)
+    5. 0 ta darsga qatnashgan o'quvchi (Zero-division & Boundary safety)
+    6. Qarzdor vs Qisman to'lagan o'quvchi klassifikatsiyasi va ulushlar
+    7. O'qituvchi kelishgan talaba (teacher_negotiated) moliyaviy izolyatsiyasi
+    8. Bir vaqtda 2 ta guruhga qatnashuvchi talaba davomati aralashib ketmasligi
+    9. Hali dars jadvali bo'lmagan bo'sh guruh xavfsizligi
+    10. Paid Students jadvali va Student Calculation Drawer o'rtasidagi 1:1 mutanosiblik
+    """
+
+    def setUp(self):
+        from datetime import date
+        self.branch = Branch.objects.create(name="QA Everest Branch")
+        self.super_admin = User.objects.create_user(username='qa_super', password='pw', role='super_admin')
+        self.admin = User.objects.create_user(username='qa_admin', password='pw', role='admin', branch=self.branch)
+        
+        # Mentor 1: Foizli (50%)
+        self.mentor1 = User.objects.create_user(username='qa_mentor1', password='pw', role='mentor', branch=self.branch)
+        StaffProfile.objects.create(user=self.mentor1, salary_type='percentage', commission_percentage=Decimal('50.0'))
+        
+        # Mentor 2: O'quvchi boshiga stavka (100,000 UZS)
+        self.mentor2 = User.objects.create_user(username='qa_mentor2', password='pw', role='mentor', branch=self.branch)
+        StaffProfile.objects.create(user=self.mentor2, salary_type='student_count', per_student_amount=Decimal('100000.0'))
+
+        # Guruh 1: Juft kunlar (Oktabr 2026 da 14 dars)
+        self.group1 = Group.objects.create(
+            name="QA Ingliz tili juft",
+            branch=self.branch,
+            mentor=self.mentor1,
+            monthly_price=Decimal("400000.0"),
+            days='even'
+        )
+        
+        # Guruh 2: Toq kunlar (Oktabr 2026 da 13 dars)
+        self.group2 = Group.objects.create(
+            name="QA Matematika toq",
+            branch=self.branch,
+            mentor=self.mentor2,
+            monthly_price=Decimal("300000.0"),
+            days='odd'
+        )
+
+        self.test_month = date(2026, 10, 1)
+
+        # Xodim oylik hisob yozuvlari
+        self.ep1 = EmployeePayment.objects.create(
+            employee=self.mentor1,
+            month=self.test_month,
+            is_paid=False,
+            salary_base=Decimal("1500000.0")
+        )
+        self.ep2 = EmployeePayment.objects.create(
+            employee=self.mentor2,
+            month=self.test_month,
+            is_paid=False,
+            salary_base=Decimal("1200000.0")
+        )
+
+    def test_qa_scenario_1_status_transition_and_fee_integrity(self):
+        """1-Ssenariy: O'quvchi statusini ketma-ket o'zgartirish (Regular -> Negotiated -> Discount -> Regular)"""
+        st = Student.objects.create(
+            full_name="Status Test O'quvchi",
+            group=self.group1,
+            branch=self.branch,
+            status="regular"
+        )
+        self.client.force_authenticate(user=self.admin)
+
+        # 1. Regular -> Negotiated (Kelishilgan narx: 250,000 UZS)
+        url = f"/api/groups/students/{st.id}/"
+        res1 = self.client.patch(url, {
+            "status": "negotiated",
+            "custom_fee": 250000
+        }, format='json')
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        st.refresh_from_db()
+        self.assertEqual(st.status, "negotiated")
+        self.assertEqual(float(st.custom_fee), 250000.0)
+
+        # 2. Negotiated -> Discount (Davlat granti/Imtiyoz)
+        res2 = self.client.patch(url, {
+            "status": "discount",
+            "custom_fee": None
+        }, format='json')
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        st.refresh_from_db()
+        self.assertEqual(st.status, "discount")
+
+        # 3. Discount -> Regular (Oddiy holatga qaytarish)
+        res3 = self.client.patch(url, {
+            "status": "regular",
+            "custom_fee": None
+        }, format='json')
+        self.assertEqual(res3.status_code, status.HTTP_200_OK)
+        st.refresh_from_db()
+        self.assertEqual(st.status, "regular")
+        self.assertIsNone(st.custom_fee)
+
+    def test_qa_scenario_2_attendance_override_and_audit_propagation(self):
+        """2-Ssenariy: Maxsus sahifadan davomatni qo'lda tahrirlash va Audit log saqlanishi"""
+        from datetime import date
+        from finance.models import AttendanceAuditLog
+        st = Student.objects.create(
+            full_name="Audit Test O'quvchi",
+            group=self.group1,
+            branch=self.branch,
+            status="discount"
+        )
+        GroupEnrollment.objects.filter(student=st, group=self.group1).update(joined_at=self.test_month, is_active=True)
+
+        # Boshida 5 ta darsga kelgan
+        dates = self.group1.get_lesson_dates(2026, 10)[:5]
+        for d in dates:
+            Attendance.objects.create(student=st, group=self.group1, date=d, is_present=True, marked_by=self.mentor1)
+
+        self.client.force_authenticate(user=self.admin)
+        override_url = f"/api/v1/finance/privileged-students/{st.id}/attendance-override/"
+        res = self.client.patch(override_url, {
+            "group_id": self.group1.id,
+            "month": "2026-10",
+            "new_attended_count": 8,
+            "reason_for_change": "Kamera nosozligi sababli 3 ta dars qo'shildi"
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        # Audit log yaratilganini tekshiramiz
+        audit = AttendanceAuditLog.objects.filter(student=st, group=self.group1).first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.previous_attended_count, 5)
+        self.assertEqual(audit.new_attended_count, 8)
+        self.assertEqual(audit.modified_by, self.admin)
+        self.assertEqual(audit.reason_for_change, "Kamera nosozligi sababli 3 ta dars qo'shildi")
+
+        # Paid students API da ham yangilangan davomat va manual nishon borligini tekshiramiz
+        paid_url = f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/"
+        p_res = self.client.get(paid_url)
+        self.assertEqual(p_res.status_code, status.HTTP_200_OK)
+        target = next((s for s in p_res.data["students"] if s["id"] == st.id), None)
+        self.assertIsNotNone(target)
+        self.assertEqual(target["n_attended"], 8)
+        self.assertTrue(target["has_manual_adjustment"])
+
+    def test_qa_scenario_3_off_schedule_extra_lesson_counted(self):
+        """3-Ssenariy: Guruh jadvalidan tashqari o'tilgan dars (yakshanba/bayram darsi) davomati yo'qolib ketmasligi"""
+        from datetime import date
+        st = Student.objects.create(
+            full_name="Extra Lesson O'quvchi",
+            group=self.group1,
+            branch=self.branch,
+            status="regular"
+        )
+        GroupEnrollment.objects.filter(student=st, group=self.group1).update(joined_at=self.test_month, is_active=True)
+
+        # Juft kunlar darsi: 1, 3, 6, 8, ...
+        # Jadvaldan tashqari sana: 2026-10-04 (Yakshanba - guruh jadvalida yo'q)
+        extra_date = date(2026, 10, 4)
+        self.assertFalse(self.group1.is_lesson_day(extra_date)) # Jadvalda yo'q
+
+        # O'qituvchi qo'shimcha dars o'tdi va davomat qildi
+        Attendance.objects.create(student=st, group=self.group1, date=extra_date, is_present=True, marked_by=self.mentor1)
+        # Shuningdek 1 ta rejadagi dars
+        reg_date = self.group1.get_lesson_dates(2026, 10)[0]
+        Attendance.objects.create(student=st, group=self.group1, date=reg_date, is_present=True, marked_by=self.mentor1)
+
+        self.client.force_authenticate(user=self.admin)
+        paid_url = f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/"
+        res = self.client.get(paid_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        target = next((s for s in res.data["students"] if s["id"] == st.id), None)
+        self.assertIsNotNone(target)
+        # Ikkala dars ham (rejadagi + qo'shimcha yakshanba kungi) n_attended ga kirishi shart!
+        self.assertEqual(target["n_attended"], 2)
+
+    def test_qa_scenario_4_mid_month_join_fair_calculation(self):
+        """4-Ssenariy: Oy o'rtasida qo'shilgan o'quvchi bir kunlik narxi to'liq oydagi darslarga bo'linishi kerak"""
+        from datetime import date
+        st = Student.objects.create(
+            full_name="Kech Qo'shilgan O'quvchi",
+            group=self.group1,
+            branch=self.branch,
+            status="discount"
+        )
+        mid_date = date(2026, 10, 15)
+        GroupEnrollment.objects.filter(student=st, group=self.group1).update(joined_at=mid_date, is_active=True)
+
+        # 15-oktabrdan keyingi 4 ta darsga qatnashdi
+        oct_dates = [d for d in self.group1.get_lesson_dates(2026, 10) if d >= mid_date][:4]
+        for d in oct_dates:
+            Attendance.objects.create(student=st, group=self.group1, date=d, is_present=True, marked_by=self.mentor1)
+
+        self.client.force_authenticate(user=self.admin)
+        paid_url = f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/"
+        res = self.client.get(paid_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        target = next((s for s in res.data["students"] if s["id"] == st.id), None)
+        self.assertIsNotNone(target)
+
+        # Guruh narxi: 400,000 UZS, Oydagi darslar: 14 ta
+        # Bir kunlik narx: 400,000 / 14 = 28,571.42 UZS
+        # 4 ta dars uchun: 28,571.42 * 4 = 114,286 UZS
+        expected_state = round(Decimal("400000") / Decimal("14") * Decimal("4"))
+        self.assertAlmostEqual(target["estimated_state_receivable"], float(expected_state), delta=100)
+
+    def test_qa_scenario_5_zero_attendance_boundary_no_division_error(self):
+        """5-Ssenariy: Butun oy 0 ta darsga kelgan imtiyozli talaba uchun xatoliksiz 0 hisoblanishi"""
+        st = Student.objects.create(
+            full_name="Kelmagan O'quvchi",
+            group=self.group1,
+            branch=self.branch,
+            status="discount"
+        )
+        GroupEnrollment.objects.filter(student=st, group=self.group1).update(joined_at=self.test_month, is_active=True)
+
+        self.client.force_authenticate(user=self.admin)
+        paid_url = f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/"
+        res = self.client.get(paid_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        target = next((s for s in res.data["students"] if s["id"] == st.id), None)
+        self.assertIsNotNone(target)
+        self.assertEqual(target["n_attended"], 0)
+        self.assertEqual(target["attendance_rate"], 0.0)
+        self.assertEqual(target["estimated_state_receivable"], 0.0)
+        self.assertEqual(target["mentor_share"], 0.0)
+
+    def test_qa_scenario_6_debtor_vs_partial_payer_classification(self):
+        """6-Ssenariy: To'liq to'lagan, qisman to'lagan va 0 to'lagan qarzdor o'quvchilar aniq ajratilishi"""
+        # St1: To'liq to'lagan (400,000 UZS)
+        st_full = Student.objects.create(full_name="To'liq To'lagan", group=self.group1, branch=self.branch, status="regular")
+        Payment.objects.create(student=st_full, group=self.group1, month=self.test_month, amount=Decimal("400000"), paid_amount=Decimal("400000"), is_paid=True, marked_by=self.admin)
+
+        # St2: Qisman to'lagan (150,000 UZS)
+        st_part = Student.objects.create(full_name="Qisman To'lagan", group=self.group1, branch=self.branch, status="regular")
+        Payment.objects.create(student=st_part, group=self.group1, month=self.test_month, amount=Decimal("400000"), paid_amount=Decimal("150000"), is_paid=False, is_partial=True, marked_by=self.admin)
+
+        # St3: 0 to'lagan (To'liq qarzdor)
+        st_debt = Student.objects.create(full_name="Qarzdor", group=self.group1, branch=self.branch, status="regular")
+
+        # St4: Imtiyozli (Davlat puli, kassa to'lovi 0 bo'lsa ham qarzdor emas!)
+        st_disc = Student.objects.create(full_name="Imtiyozli Davlat", group=self.group1, branch=self.branch, status="discount")
+
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        m = {s["id"]: s for s in res.data["students"]}
+
+        # Full payer
+        self.assertFalse(m[st_full.id]["is_debtor"])
+        self.assertFalse(m[st_full.id]["is_partial"])
+        self.assertEqual(m[st_full.id]["paid_amount"], 400000.0)
+
+        # Partial payer (Qisman to'lagan - qarzdor EMAS!)
+        self.assertFalse(m[st_part.id]["is_debtor"])
+        self.assertTrue(m[st_part.id]["is_partial"])
+        self.assertEqual(m[st_part.id]["paid_amount"], 150000.0)
+
+        # Debtor (Qarzdor)
+        self.assertTrue(m[st_debt.id]["is_debtor"])
+        self.assertFalse(m[st_debt.id]["is_partial"])
+        self.assertEqual(m[st_debt.id]["paid_amount"], 0.0)
+
+        # Discount (Imtiyozli - qarzdor EMAS!)
+        self.assertFalse(m[st_disc.id]["is_debtor"])
+
+    def test_qa_scenario_7_teacher_negotiated_mentor_share_is_zero(self):
+        """7-Ssenariy: O'qituvchi o'zi kelishgan talabadan o'qituvchiga ulush 0, markaz marjasi 100% bo'lishi"""
+        st_neg = Student.objects.create(
+            full_name="Mentor Kelishgan O'quvchi",
+            group=self.group1,
+            branch=self.branch,
+            status="teacher_negotiated"
+        )
+        Payment.objects.create(
+            student=st_neg,
+            group=self.group1,
+            month=self.test_month,
+            amount=Decimal("200000"),
+            paid_amount=Decimal("200000"),
+            is_paid=True,
+            marked_by=self.admin
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        target = next((s for s in res.data["students"] if s["id"] == st_neg.id), None)
+        self.assertIsNotNone(target)
+        self.assertEqual(target["mentor_share"], 0.0) # Mentor ulushi 0!
+        self.assertTrue(target["mentor_salary_excluded"])
+
+    def test_qa_scenario_8_multi_group_attendance_isolation(self):
+        """8-Ssenariy: Bir talaba bir vaqtda 2 ta guruhda o'qiganda har bir mentor faqat o'z darsini ko'rishi"""
+        st_multi = Student.objects.create(full_name="Ikkita Guruhdagi Talaba", group=self.group1, branch=self.branch, status="regular")
+        GroupEnrollment.objects.create(student=st_multi, group=self.group2, is_active=True, joined_at=self.test_month)
+
+        # Guruh 1 da 7 ta darsga keldi
+        for d in self.group1.get_lesson_dates(2026, 10)[:7]:
+            Attendance.objects.create(student=st_multi, group=self.group1, date=d, is_present=True, marked_by=self.mentor1)
+
+        # Guruh 2 da 3 ta darsga keldi
+        for d in self.group2.get_lesson_dates(2026, 10)[:3]:
+            Attendance.objects.create(student=st_multi, group=self.group2, date=d, is_present=True, marked_by=self.mentor2)
+
+        self.client.force_authenticate(user=self.admin)
+
+        # Mentor 1 ning sahifasi
+        res1 = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/")
+        st1_info = next((s for s in res1.data["students"] if s["id"] == st_multi.id), None)
+        self.assertIsNotNone(st1_info)
+        self.assertEqual(st1_info["n_attended"], 7) # Faqat guruh 1 darsi!
+
+        # Mentor 2 ning sahifasi
+        res2 = self.client.get(f"/api/v1/finance/employee-payments/{self.ep2.id}/paid-students/")
+        st2_info = next((s for s in res2.data["students"] if s["id"] == st_multi.id), None)
+        self.assertIsNotNone(st2_info)
+        self.assertEqual(st2_info["n_attended"], 3) # Faqat guruh 2 darsi!
+
+    def test_qa_scenario_9_empty_group_boundary_safety(self):
+        """9-Ssenariy: Dars jadvali hali boshlanmagan guruhda nolga bo'lish xatosi bo'lmasligi"""
+        from datetime import date
+        empty_group = Group.objects.create(
+            name="Kelasi Oy Boshlanadigan Guruh",
+            branch=self.branch,
+            mentor=self.mentor1,
+            monthly_price=Decimal("200000"),
+            start_date=date(2026, 11, 1) # Kelasi oy boshlanadi, 2026-10 da darsi 0 ta!
+        )
+        st_empty = Student.objects.create(full_name="Bo'sh Guruh Talabasi", group=empty_group, branch=self.branch, status="regular")
+
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        target = next((s for s in res.data["students"] if s["id"] == st_empty.id), None)
+        self.assertIsNotNone(target)
+        self.assertEqual(target["n_total"], 1) # Fallback 1 dars xavfsizligi
+        self.assertEqual(target["attendance_rate"], 0.0)
+
+    def test_qa_scenario_10_drawer_and_table_attendance_parity(self):
+        """10-Ssenariy: Paid Students jadvalidagi davomat va Drawer (student-calculation-detail) 1:1 bir xil bo'lishi"""
+        st_drawer = Student.objects.create(full_name="Drawer Test Talaba", group=self.group1, branch=self.branch, status="regular")
+        GroupEnrollment.objects.filter(student=st_drawer, group=self.group1).update(joined_at=self.test_month, is_active=True)
+
+        dates = self.group1.get_lesson_dates(2026, 10)[:9]
+        for d in dates:
+            Attendance.objects.create(student=st_drawer, group=self.group1, date=d, is_present=True, marked_by=self.mentor1)
+
+        self.client.force_authenticate(user=self.admin)
+
+        # 1. Paid-students API
+        t_res = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/")
+        t_info = next((s for s in t_res.data["students"] if s["id"] == st_drawer.id), None)
+
+        # 2. Student-calculation-detail (Drawer) API
+        d_res = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/student-calculation-detail/?student_id={st_drawer.id}&group_id={self.group1.id}")
+        self.assertEqual(d_res.status_code, status.HTTP_200_OK)
+        d_info = d_res.data
+
+        # Qat'iy tenglik tekshiruvi:
+        att = d_info["attendance"]
+        self.assertEqual(t_info["n_attended"], att["present_count"])
+        self.assertEqual(t_info["n_total"], att["total_lessons"])
+        self.assertEqual(t_info["attendance_rate"], att["attendance_percentage"])
+        self.assertEqual(t_info["n_attended"], 9)
+        self.assertEqual(t_info["n_total"], 14)
+

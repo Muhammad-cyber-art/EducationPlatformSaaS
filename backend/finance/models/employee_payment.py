@@ -718,7 +718,16 @@ class StaffProfile(models.Model):
 
         # === OPTIMIZATSIYA: cache'larni bir marta qurish ===
         if prefetch_cache and 'lesson_dates_cache' in prefetch_cache:
-            lesson_dates_cache = prefetch_cache['lesson_dates_cache']
+            pf_ld = prefetch_cache['lesson_dates_cache']
+            lesson_dates_cache = {}
+            for g in mentor_groups:
+                c_key = (g.id, month.year, month.month)
+                if c_key in pf_ld:
+                    lesson_dates_cache[g.id] = pf_ld[c_key]
+                elif g.id in pf_ld and isinstance(pf_ld[g.id], list) and pf_ld[g.id] and pf_ld[g.id][0].year == month.year and pf_ld[g.id][0].month == month.month:
+                    lesson_dates_cache[g.id] = pf_ld[g.id]
+                else:
+                    lesson_dates_cache[g.id] = g.get_lesson_dates(month.year, month.month)
         else:
             lesson_dates_cache = {}
             for g in mentor_groups:
@@ -728,15 +737,19 @@ class StaffProfile(models.Model):
             attendance_cache = prefetch_cache['attendance_cache']
         else:
             from homework_attends.models import Attendance
+            from django.db.models import Q
             _all_att = Attendance.objects.filter(
                 group_id__in=mentor_group_ids,
                 date__year=month.year,
                 date__month=month.month,
                 is_present=True,
-                marked_by__isnull=False,
+            ).filter(
+                Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
             ).values("group_id", "student_id")
             attendance_cache = {}
             for row in _all_att:
+                k_m = (row["group_id"], row["student_id"], month.year, month.month)
+                attendance_cache[k_m] = attendance_cache.get(k_m, 0) + 1
                 k = (row["group_id"], row["student_id"])
                 attendance_cache[k] = attendance_cache.get(k, 0) + 1
 
@@ -862,7 +875,16 @@ class StaffProfile(models.Model):
 
         # === OPTIMIZATSIYA: lesson_dates, attendance, enrollment cache'larni bir marta qurish ===
         if prefetch_cache and 'lesson_dates_cache' in prefetch_cache:
-            lesson_dates_cache = prefetch_cache['lesson_dates_cache']
+            pf_ld = prefetch_cache['lesson_dates_cache']
+            lesson_dates_cache = {}
+            for g in mentor_groups:
+                c_key = (g.id, month.year, month.month)
+                if c_key in pf_ld:
+                    lesson_dates_cache[g.id] = pf_ld[c_key]
+                elif g.id in pf_ld and isinstance(pf_ld[g.id], list) and pf_ld[g.id] and pf_ld[g.id][0].year == month.year and pf_ld[g.id][0].month == month.month:
+                    lesson_dates_cache[g.id] = pf_ld[g.id]
+                else:
+                    lesson_dates_cache[g.id] = g.get_lesson_dates(month.year, month.month)
         else:
             lesson_dates_cache = {}
             for g in mentor_groups:
@@ -873,15 +895,19 @@ class StaffProfile(models.Model):
         else:
             # Attendance cache: bitta query bilan barcha guruhlar uchun davomatni olish
             from homework_attends.models import Attendance
+            from django.db.models import Q
             _all_att = Attendance.objects.filter(
                 group_id__in=mentor_group_ids,
                 date__year=month.year,
                 date__month=month.month,
                 is_present=True,
-                marked_by__isnull=False,
+            ).filter(
+                Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
             ).values("group_id", "student_id")
             attendance_cache = {}
             for row in _all_att:
+                k_m = (row["group_id"], row["student_id"], month.year, month.month)
+                attendance_cache[k_m] = attendance_cache.get(k_m, 0) + 1
                 k = (row["group_id"], row["student_id"])
                 attendance_cache[k] = attendance_cache.get(k, 0) + 1
 

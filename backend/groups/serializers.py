@@ -334,32 +334,32 @@ class StudentSerializer(serializers.ModelSerializer):
             # Agar guruh yoki custom_fee o'zgargan bo'lsa, joriy oy to'lovini yangilash
             # Eslatma: transfer-group action'i services.py orqali ishlaydi,
             # bu yerda esa Profile edit dagi o'zgarishlarni ushlaymiz.
-            if new_group:
-                today = timezone.now().date()
-                month_start = today.replace(day=1)
+            # Agar guruh, status yoki custom_fee o'zgargan bo'lsa, joriy oy to'lovlarini yangilash
+            today = timezone.now().date()
+            month_start = today.replace(day=1)
 
-                # Joriy oy uchun to'lovni qidiramiz
+            target_groups = set()
+            if new_group:
+                target_groups.add(new_group)
+            for g in instance.groups.filter(enrollments__is_active=True).distinct():
+                target_groups.add(g)
+
+            for grp in target_groups:
                 payment = Payment.objects.filter(
-                    student=instance, group=new_group, month=month_start
+                    student=instance, group=grp, month=month_start
                 ).first()
 
                 if payment and not payment.is_paid:
-                    # Statusga mos to'lovni yangilash
-                    if instance.status == "discount":
-                        from finance.utils import (
-                            calculate_attendance_based_student_payment,
-                        )
-
+                    is_discount = (instance.status == "discount")
+                    payment.is_auto_discount = is_discount
+                    if is_discount:
+                        from finance.utils import calculate_attendance_based_student_payment
                         payment.amount = calculate_attendance_based_student_payment(
-                            instance, new_group, month_start
+                            instance, grp, month_start
                         )
                     else:
-                        # User talabi: Advanced guruhda negotiated statusi o'tmaydi
-                        if (
-                            new_group.group_type == "advanced"
-                            and instance.status == "negotiated"
-                        ):
-                            base_price = new_group.monthly_price
+                        if grp.group_type == "advanced" and instance.status == "negotiated":
+                            base_price = grp.monthly_price
                         elif instance.status in [
                             "low_income",
                             "negotiated",
@@ -369,15 +369,18 @@ class StudentSerializer(serializers.ModelSerializer):
                                 base_price = instance.custom_fee
                             elif instance.status == "teacher_negotiated":
                                 from finance.utils import get_teacher_negotiated_center_fee
-                                base_price = get_teacher_negotiated_center_fee(new_group)
+                                base_price = get_teacher_negotiated_center_fee(grp)
                             else:
                                 base_price = Decimal("0")
                         else:
-                            base_price = new_group.monthly_price
+                            base_price = grp.monthly_price
 
                         payment.amount = floor_amount(base_price)
 
-                    payment.save()
+                    payment.save(update_fields=["amount", "is_auto_discount"])
+
+                    if grp.mentor and hasattr(grp.mentor, "staff_profile"):
+                        grp.mentor.staff_profile._update_unpaid_payments()
 
         return instance
 

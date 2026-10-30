@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, FileText, CheckCircle2, Image as ImageIcon, BookOpen, Calendar, Clock, AlertCircle, Award } from "lucide-react";
 import { formatCurrency } from "./useKassa";
 
@@ -86,6 +87,28 @@ const parsePaymentDetails = (payment) => {
 
 const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
     const [showReceiptPreview, setShowReceiptPreview] = React.useState(false);
+
+    useEffect(() => {
+        if (!show || !payment) return;
+        const originalBodyOverflow = document.body.style.overflow;
+        const originalHtmlOverflow = document.documentElement.style.overflow;
+        const scrollContainer = document.querySelector('.lux-scroll');
+        const originalScrollOverflow = scrollContainer ? scrollContainer.style.overflow : '';
+
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        if (scrollContainer) {
+            scrollContainer.style.overflow = 'hidden';
+        }
+
+        return () => {
+            document.body.style.overflow = originalBodyOverflow;
+            document.documentElement.style.overflow = originalHtmlOverflow;
+            if (scrollContainer) {
+                scrollContainer.style.overflow = originalScrollOverflow;
+            }
+        };
+    }, [show, payment]);
     if (!show || !payment) return null;
 
     const receiptUrl = payment.payment_details?.receipt_image;
@@ -106,9 +129,13 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
         ? paymentDateObj.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         : "—";
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 overflow-y-auto"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+        >
+            <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose}></div>
             <div className="relative w-full max-w-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] rounded-2xl shadow-2xl overflow-hidden animate-lux-pop">
                 {/* Header */}
                 <div className="p-6 sm:p-8 border-b border-[var(--border-glass)] flex items-center justify-between bg-gradient-to-r from-[var(--gold)]/10 to-transparent">
@@ -448,7 +475,8 @@ const DetailModal = ({ show, payment, onClose, onVerify, isSuperAdmin }) => {
                     </div>
                 </div>
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 

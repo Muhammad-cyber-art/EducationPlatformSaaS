@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, CreditCard, Calendar, CheckCircle2, 
   AlertCircle, Phone, MapPin, User, FileText, Upload, 
@@ -34,6 +35,28 @@ export default function StudentDetailDrawer({
   const [submitting, setSubmitting] = useState(false);
 
   const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollContainer = document.querySelector('.lux-scroll');
+    const originalScrollOverflow = scrollContainer ? scrollContainer.style.overflow : '';
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (scrollContainer) {
+      scrollContainer.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      if (scrollContainer) {
+        scrollContainer.style.overflow = originalScrollOverflow;
+      }
+    };
+  }, [isOpen]);
 
   // Fetch student drill-down details when opened
   useEffect(() => {
@@ -301,8 +324,15 @@ export default function StudentDetailDrawer({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] overflow-hidden bg-black/75 backdrop-blur-sm flex justify-end animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+    >
       <div className="w-full max-w-xl bg-[var(--bg-panel)] border-l border-[var(--border-glass)] h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-300">
         
         {/* Drawer Header */}
@@ -691,6 +721,7 @@ export default function StudentDetailDrawer({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

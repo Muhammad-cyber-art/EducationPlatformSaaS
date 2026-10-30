@@ -18,177 +18,145 @@ const StaffPaidKPICards = React.memo(({ pageData, filteredStudentsLength, filter
   const showDavlatPuliBanner = (pageData?.total_estimated_state_receivable > 0 || filteredTotals.estimatedStateReceivable > 0);
 
   return (
-    <div className="space-y-4">
-      {/* 7 Rich KPI Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
+    <div className="space-y-3.5">
+      {/* 7 Clean Modern KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 sm:gap-3">
         {/* Card 1: Students count */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-md hover:border-blue-500/30 transition-all border-t-4 border-t-blue-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-1">
-              <Users size={12} /> O'quvchilar
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              {filteredStudentsLength} / {pageData?.total_students_count || 0}
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm hover:border-blue-500/40 transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-1.5">
+            <Users size={13} />
+            <span>O'quvchilar</span>
+          </div>
+          <div className="text-lg sm:text-xl font-black text-[var(--text-primary)] tabular-nums">
+            {filteredStudentsLength}
+            <span className="text-xs text-[var(--text-muted)] font-normal ml-1">
+              / {pageData?.total_students_count || 0}
             </span>
           </div>
-          <h3 className="text-xl sm:text-2xl font-black text-[var(--text-primary)] tabular-nums">
-            {filteredStudentsLength} <span className="text-[10px] text-[var(--text-muted)] font-bold">st.</span>
-          </h3>
-          <p className="text-[8px] text-[var(--text-muted)] mt-1 truncate">
-            Guruhlar: {pageData?.groups?.length || 0} ta
-          </p>
+          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">
+            {pageData?.groups?.length || 0} ta guruhda
+          </div>
         </div>
 
-        {/* Card 2: Total paid (Faqat Real Kassa Tushumi) */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-md hover:border-emerald-500/30 transition-all border-t-4 border-t-emerald-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1">
-              <Receipt size={12} /> Real Tushum
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              Faqat Kassa
-            </span>
+        {/* Card 2: Total paid (Real Kassa Tushumi) */}
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm hover:border-emerald-500/40 transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1.5">
+            <Receipt size={13} />
+            <span>Kassa Tushumi</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-black text-emerald-400 tabular-nums">
+          <div className="text-base sm:text-lg font-black text-emerald-400 tabular-nums truncate">
             {formatCurrency(filteredTotals.paid)}
-          </h3>
-          <p className="text-[8px] text-[var(--text-muted)] mt-1 truncate">
-            Haqiqiy to'lovlar summasi
-          </p>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">
+            To'langan mablag'lar
+          </div>
         </div>
 
         {/* Card 3: Teacher share */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-[var(--gold)]/10 to-[var(--bg-panel)] border border-[var(--gold)]/40 shadow-md hover:border-[var(--gold)] transition-all border-t-4 border-t-[var(--gold)]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--gold)] flex items-center gap-1">
-              <Calculator size={12} /> O'qituvchi Ulushi
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-[var(--gold)]/20 text-[var(--gold)] border border-[var(--gold)]/30 animate-pulse">
-              Maosh
-            </span>
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--gold)]/30 shadow-sm hover:border-[var(--gold)] transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--gold)] mb-1.5">
+            <Calculator size={13} />
+            <span>O'qituvchi Maoshi</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-black text-[var(--text-primary)] tabular-nums">
+          <div className="text-base sm:text-lg font-black text-[var(--gold)] tabular-nums truncate">
             {formatCurrency(filteredTotals.share)}
-          </h3>
-          <p className="text-[8px] text-[var(--gold)] font-bold mt-1 truncate">
-            Hisoblangan jami maosh
-          </p>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">
+            Ulush va stavkalar
+          </div>
         </div>
 
-        {/* Card 4: Center Gross Margin (Real Kassa Marjasi) */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-md hover:border-amber-500/30 transition-all border-t-4 border-t-amber-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-amber-400 flex items-center gap-1">
-              <TrendingUp size={12} /> Markaz Marjasi
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              Kassadan
-            </span>
+        {/* Card 4: Center Margin */}
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm hover:border-amber-500/40 transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-1.5">
+            <TrendingUp size={13} />
+            <span>Markaz Marjasi</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-black text-amber-400 tabular-nums">
+          <div className="text-base sm:text-lg font-black text-amber-400 tabular-nums truncate">
             {formatCurrency(filteredTotals.margin)}
-          </h3>
-          <p className="text-[8px] text-[var(--text-muted)] mt-1 truncate">
-            Kassa tushumi − O'qituvchi ulushi
-          </p>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">
+            Kassadan sof qoldiq
+          </div>
         </div>
 
-        {/* Card 5: Taxminiy Davlat Puli & Taxminiy Markaz Ulushi */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-panel)] border border-purple-500/30 shadow-md hover:border-purple-500/50 transition-all border-t-4 border-t-purple-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-purple-400 flex items-center gap-1">
-              <Landmark size={12} /> Davlat Puli
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              Taxminiy
-            </span>
+        {/* Card 5: State receivable */}
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm hover:border-purple-500/40 transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-purple-400 mb-1.5">
+            <Landmark size={13} />
+            <span>Davlat Puli</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-black text-purple-400 tabular-nums">
+          <div className="text-base sm:text-lg font-black text-purple-400 tabular-nums truncate">
             {formatCurrency(filteredTotals.estimatedStateReceivable)}
-          </h3>
-          <p className="text-[8px] text-amber-400/90 mt-1 truncate font-semibold">
-            Markaz ulushi: ~{formatCurrency(filteredTotals.estimatedStateMargin)}
-          </p>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">
+            Markaz: ~{formatCurrency(filteredTotals.estimatedStateMargin)}
+          </div>
         </div>
 
-        {/* Card 6: Total planned & attended lessons */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-md hover:border-indigo-500/30 transition-all border-t-4 border-t-indigo-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-1">
-              <BookOpen size={12} /> Darslar Rejasi
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              Davomat
-            </span>
+        {/* Card 6: Lesson Attendance */}
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm hover:border-indigo-500/40 transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-1.5">
+            <BookOpen size={13} />
+            <span>Darslar</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-black text-[var(--text-primary)] tabular-nums">
-            ------
-            <span className="text-[10px] text-[var(--text-muted)] font-bold">Oy</span>
-          </h3>
-          <p className="text-[8px] text-[var(--text-muted)] mt-1 truncate">
-            Oyiga
-          </p>
+          <div className="text-base sm:text-lg font-black text-[var(--text-primary)] tabular-nums truncate">
+            {filteredTotals.planned > 0
+              ? `${filteredTotals.attended} / ${filteredTotals.planned}`
+              : `${pageData?.total_lessons_attended || 0} / ${pageData?.total_lessons_planned || 0}`}
+            <span className="text-[10px] text-[var(--text-muted)] font-normal ml-1">dars</span>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">
+            Qatnashilgan / Reja
+          </div>
         </div>
 
         {/* Card 7: Attendance Rate % */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-md hover:border-teal-500/30 transition-all border-t-4 border-t-teal-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-teal-400 flex items-center gap-1">
-              <Percent size={12} /> O'rtacha Davomat
-            </span>
-            <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20">
-              Foiz
-            </span>
+        <div className="p-3.5 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-glass)] shadow-sm hover:border-teal-500/40 transition-all">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-teal-400 mb-1.5">
+            <Percent size={13} />
+            <span>Davomat</span>
           </div>
-          <h3 className="text-xl sm:text-2xl font-black text-[var(--text-primary)] tabular-nums">
+          <div className="text-base sm:text-lg font-black text-teal-400 tabular-nums">
             {attendanceRate}%
-          </h3>
+          </div>
           <div className="w-full bg-[var(--bg-void)] rounded-full h-1 mt-1.5 overflow-hidden">
             <div
-              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+              className="bg-teal-400 h-full rounded-full transition-all duration-500"
               style={{ width: `${Math.min(100, attendanceRate)}%` }}
             />
           </div>
         </div>
       </div>
 
-      {/* Dedicated Davlat Puli Info Card / Section */}
+      {/* Modern, Compact Davlat Puli Banner */}
       {showDavlatPuliBanner && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-[var(--bg-panel)] to-amber-500/10 border border-purple-500/30 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center flex-shrink-0">
-              <Landmark size={20} />
+        <div className="px-4 py-2.5 rounded-xl bg-purple-500/5 border border-purple-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/25 flex items-center justify-center shrink-0">
+              <Landmark size={14} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-xs font-black uppercase tracking-wider text-[var(--text-primary)]">
-                  Imtiyozli O'quvchilar (Davlat Puli) Bo'limi
-                </h4>
-                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                  Alohida hisob
-                </span>
-              </div>
-              <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
-                Davlat tomonidan aynan qancha summa tushishi oldindan aniq bo'lmagani sababli, bu summa umumiy kassa kirimiga va kassa marjasiga qo'shilmaydi. O'qituvchiga ulush esa davomat (Face ID) bo'yicha to'liq hisoblangan.
-              </p>
+            <div className="min-w-0 truncate">
+              <span className="text-xs font-bold text-[var(--text-primary)] mr-2">
+                Imtiyozli O'quvchilar (Davlat Puli):
+              </span>
+              <span className="text-[11px] text-[var(--text-muted)] hidden md:inline truncate">
+                Kassa tushumiga kirmaydi, o'qituvchi ulushi davomat bo'yicha to'liq hisoblangan.
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 flex-shrink-0">
-            <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-void)]/80 border border-[var(--border-glass)] text-right">
-              <span className="text-[8px] font-black uppercase tracking-wider text-purple-400 block">
-                Taxminiy Davlat Puli
-              </span>
-              <span className="text-sm font-black text-purple-400 tabular-nums">
+          <div className="flex items-center gap-4 shrink-0 text-right self-end sm:self-center">
+            <div>
+              <span className="text-[9px] text-[var(--text-muted)] block uppercase font-bold">Kutilayotgan davlat puli</span>
+              <span className="text-xs sm:text-sm font-black text-purple-400 tabular-nums">
                 {formatCurrency(filteredTotals.estimatedStateReceivable || pageData?.total_estimated_state_receivable || 0)}
               </span>
             </div>
-
-            <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-void)]/80 border border-[var(--border-glass)] text-right">
-              <span className="text-[8px] font-black uppercase tracking-wider text-amber-400 block">
-                Taxminiy Markaz Ulushi
-              </span>
-              <span className="text-sm font-black text-amber-400 tabular-nums">
+            <div className="h-5 w-px bg-[var(--border-glass)]" />
+            <div>
+              <span className="text-[9px] text-[var(--text-muted)] block uppercase font-bold">Markaz ulushi</span>
+              <span className="text-xs sm:text-sm font-black text-amber-400 tabular-nums">
                 {formatCurrency(filteredTotals.estimatedStateMargin || pageData?.total_estimated_center_margin || 0)}
               </span>
             </div>

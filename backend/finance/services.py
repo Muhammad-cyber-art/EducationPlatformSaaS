@@ -2052,19 +2052,25 @@ def build_student_calculation_detail_dict(payment, student_id, group_id=None):
 
     # Darslar va davomat
     lesson_dates = grp.get_lesson_dates(month_date.year, month_date.month) if grp else []
-    total_lessons = len(lesson_dates)
     attendances = Attendance.objects.filter(
         student=student, group=grp,
         date__year=month_date.year, date__month=month_date.month,
-        marked_by__isnull=False
+    ).filter(
+        Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
     ).select_related('marked_by').order_by('date') if grp else []
 
     att_by_date = {att.date: att for att in attendances}
+    # Rejadagi darslar + davomat tasdiqlangan sanalar
+    all_dates = sorted(set(lesson_dates) | set(att_by_date.keys()))
+    total_lessons = len(lesson_dates) if len(lesson_dates) >= len(all_dates) else len(all_dates)
+    if total_lessons <= 0:
+        total_lessons = 1
+
     present_count = 0
     calendar_lessons = []
     weekdays_uz = {0: "Dushanba", 1: "Seshanba", 2: "Chorshanba", 3: "Payshanba", 4: "Juma", 5: "Shanba", 6: "Yakshanba"}
 
-    for d in sorted(lesson_dates):
+    for d in all_dates:
         att_entry = att_by_date.get(d)
         is_pres = att_entry.is_present if att_entry else False
         if is_pres:
@@ -2078,6 +2084,9 @@ def build_student_calculation_detail_dict(payment, student_id, group_id=None):
             'marked_by': (att_entry.marked_by.get_full_name() or att_entry.marked_by.username) if att_entry and att_entry.marked_by else None,
             'marked_at': att_entry.created_at.strftime("%Y-%m-%d %H:%M") if att_entry and hasattr(att_entry, 'created_at') and att_entry.created_at else None,
         })
+
+    if present_count > total_lessons:
+        total_lessons = present_count
 
     attendance_percent = round((present_count / total_lessons * 100.0), 1) if total_lessons > 0 else 0.0
 

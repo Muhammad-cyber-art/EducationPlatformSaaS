@@ -95,6 +95,7 @@ class PrivilegedStudentsListView(APIView):
                 group_id = None
 
         search = request.query_params.get("search", "").strip() or None
+        status_filter = request.query_params.get("status", "").strip().lower() or None
 
         try:
             page = int(request.query_params.get("page", 1))
@@ -110,6 +111,7 @@ class PrivilegedStudentsListView(APIView):
             search=search,
             page=page,
             page_size=page_size,
+            status=status_filter,
         )
 
         return Response(data, status=status.HTTP_200_OK)

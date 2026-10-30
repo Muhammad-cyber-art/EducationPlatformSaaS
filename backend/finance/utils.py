@@ -111,7 +111,8 @@ def calculate_attendance_based_student_payment(student, group, month_date, ignor
             group=group,
             date__range=(month_start, month_end),
             is_present=True,
-            marked_by__isnull=False,
+        ).filter(
+            Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
         )
         .order_by("date")
         .values_list("date", flat=True)
@@ -121,11 +122,21 @@ def calculate_attendance_based_student_payment(student, group, month_date, ignor
         join_date = earliest_att_date
 
     # Guruh dars kunlari shu oyda (cache'dan foydalanish optimizatsiyasi)
-    if lesson_dates_cache is not None and group.id in lesson_dates_cache:
-        full_month_lessons = list(lesson_dates_cache[group.id])
+    cache_key = (group.id, month_date.year, month_date.month)
+    if lesson_dates_cache is not None and cache_key in lesson_dates_cache:
+        full_month_lessons = list(lesson_dates_cache[cache_key])
+    elif lesson_dates_cache is not None and group.id in lesson_dates_cache:
+        cached = lesson_dates_cache[group.id]
+        if cached and cached[0].year == month_date.year and cached[0].month == month_date.month:
+            full_month_lessons = list(cached)
+        else:
+            full_month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
+            if lesson_dates_cache is not None:
+                lesson_dates_cache[cache_key] = full_month_lessons
     else:
         full_month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
         if lesson_dates_cache is not None:
+            lesson_dates_cache[cache_key] = full_month_lessons
             lesson_dates_cache[group.id] = full_month_lessons
 
     # BUG FIX: Bir kunlik narx to'liq oydagi darslar soniga (masalan 12) bo'linishi kerak.
@@ -156,35 +167,28 @@ def calculate_attendance_based_student_payment(student, group, month_date, ignor
                 student=student,
                 group=group,
                 date__range=(month_start, month_end),
-                marked_by__isnull=False,
+            ).filter(
+                Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
             ).values_list("date", flat=True)
         )
-        active_lesson_dates = [d for d in lesson_dates if d <= today or d in marked_dates]
+        active_lesson_dates = sorted(set(d for d in lesson_dates if d <= today) | marked_dates)
     else:
         active_lesson_dates = lesson_dates
 
-    # Kelgan darslar sonini hisoblash:
-    # - Faqat oydagi dars kunlari
-    # - join_date'dan keyin
-    # - is_present=True
-    # - faqat tasdiqlangan (marked_by mavjud)
-    attendance_filters = {
-        "student": student,
-        "group": group,
-        "date__range": (month_start, month_end),
-        "date__in": active_lesson_dates,
-        "is_present": True,
-        "marked_by__isnull": False,
-    }
+    # Kelgan darslar sonini hisoblash
+    att_qs = Attendance.objects.filter(
+        student=student,
+        group=group,
+        date__range=(month_start, month_end),
+        date__in=active_lesson_dates,
+        is_present=True,
+    ).filter(
+        Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
+    )
     if join_date:
-        attendance_filters["date__gte"] = join_date
+        att_qs = att_qs.filter(date__gte=join_date)
 
-    # BUG #2 FIX: attendance_cache ishlatilganda active_lesson_dates va join_date
-    # filtrlari QOLDIRIB KETILADI — bu kelajakdagi darslarni yoki join_date'dan oldingi
-    # davomatlarni ham hisoblashga olib keladi (noto'g'ri natija).
-    # Shuning uchun HAR DOIM DB dan to'g'ri so'rov yuboramiz.
-    # Cache faqat bulk-read uchun mos, real-time hisob uchun emas.
-    present_count = Attendance.objects.filter(**attendance_filters).count()
+    present_count = att_qs.count()
 
     # BUG #1 FIX (davomi): ko'paytmadan KEYIN yaxlitlaymiz
     total_amount = raw_daily * Decimal(str(present_count))
@@ -257,7 +261,8 @@ def calculate_attendance_based_mentor_share(
             group=group,
             date__range=(month_start, month_end),
             is_present=True,
-            marked_by__isnull=False,
+        ).filter(
+            Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
         )
         .order_by("date")
         .values_list("date", flat=True)
@@ -267,11 +272,21 @@ def calculate_attendance_based_mentor_share(
         join_date = earliest_att_date
 
     # Step 2: Guruh dars kunlari shu oyda (cache'dan foydalanish)
-    if lesson_dates_cache is not None and group.id in lesson_dates_cache:
-        full_month_lessons = list(lesson_dates_cache[group.id])
+    cache_key = (group.id, month_date.year, month_date.month)
+    if lesson_dates_cache is not None and cache_key in lesson_dates_cache:
+        full_month_lessons = list(lesson_dates_cache[cache_key])
+    elif lesson_dates_cache is not None and group.id in lesson_dates_cache:
+        cached = lesson_dates_cache[group.id]
+        if cached and cached[0].year == month_date.year and cached[0].month == month_date.month:
+            full_month_lessons = list(cached)
+        else:
+            full_month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
+            if lesson_dates_cache is not None:
+                lesson_dates_cache[cache_key] = full_month_lessons
     else:
         full_month_lessons = group.get_lesson_dates(month_date.year, month_date.month)
         if lesson_dates_cache is not None:
+            lesson_dates_cache[cache_key] = full_month_lessons
             lesson_dates_cache[group.id] = full_month_lessons
     
     # BUG FIX: Xuddi student to'lovidagi kabi, bir kunlik narx to'liq darslar sonidan chiqadi
@@ -296,26 +311,28 @@ def calculate_attendance_based_mentor_share(
                 student=student,
                 group=group,
                 date__range=(month_start, month_end),
-                marked_by__isnull=False,
+            ).filter(
+                Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
             ).values_list("date", flat=True)
         )
-        active_lesson_dates = [d for d in lesson_dates if d <= today or d in marked_dates]
+        active_lesson_dates = sorted(set(d for d in lesson_dates if d <= today) | marked_dates)
     else:
         active_lesson_dates = lesson_dates
 
     # Kelgan darslar sonini hisoblash
-    attendance_filters = {
-        "student": student,
-        "group": group,
-        "date__range": (month_start, month_end),
-        "date__in": active_lesson_dates,
-        "is_present": True,
-        "marked_by__isnull": False,
-    }
+    att_qs = Attendance.objects.filter(
+        student=student,
+        group=group,
+        date__range=(month_start, month_end),
+        date__in=active_lesson_dates,
+        is_present=True,
+    ).filter(
+        Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
+    )
     if join_date:
-        attendance_filters["date__gte"] = join_date
+        att_qs = att_qs.filter(date__gte=join_date)
 
-    present_count = Attendance.objects.filter(**attendance_filters).count()
+    present_count = att_qs.count()
 
     # Step 4: O'quvchining total summasi (kelgan darslar asosida)
     student_total = raw_daily * Decimal(str(present_count))
@@ -648,12 +665,24 @@ def calculate_group_revenue_and_mentor_share(
             # Birinchi, kelgan darslar sonini hisoblash (barcha statuslar uchun kerak)
             present_count = 0
             # Cache'dan foydalanish (optimizatsiya)
-            _cached_ld = lesson_dates_cache.get(group.id) if lesson_dates_cache is not None else None
+            cache_key = (group.id, month_date.year, month_date.month)
+            _cached_ld = None
+            if lesson_dates_cache is not None:
+                if cache_key in lesson_dates_cache:
+                    _cached_ld = lesson_dates_cache[cache_key]
+                elif group.id in lesson_dates_cache:
+                    c = lesson_dates_cache[group.id]
+                    if c and c[0].year == month_date.year and c[0].month == month_date.month:
+                        _cached_ld = c
             _group_lesson_dates = _cached_ld if _cached_ld is not None else group.get_lesson_dates(month_date.year, month_date.month)
-            if lesson_dates_cache is not None and group.id not in lesson_dates_cache:
+            if lesson_dates_cache is not None:
+                lesson_dates_cache[cache_key] = _group_lesson_dates
                 lesson_dates_cache[group.id] = _group_lesson_dates
             try:
-                if attendance_cache is not None and (group.id, student.id) in attendance_cache:
+                cache_key_m = (group.id, student.id, month_date.year, month_date.month)
+                if attendance_cache is not None and cache_key_m in attendance_cache:
+                    present_count = attendance_cache[cache_key_m]
+                elif attendance_cache is not None and (group.id, student.id) in attendance_cache:
                     present_count = attendance_cache[(group.id, student.id)]
                 else:
                     from homework_attends.models import Attendance
@@ -664,7 +693,8 @@ def calculate_group_revenue_and_mentor_share(
                         date__month=month_date.month,
                         date__in=_group_lesson_dates,
                         is_present=True,
-                        marked_by__isnull=False,
+                    ).filter(
+                        Q(marked_by__isnull=False) | Q(is_manually_adjusted=True)
                     ).count()
             except Exception:
                 present_count = 0
@@ -917,9 +947,17 @@ def calculate_transfer_salary_adjustment(
 
     def _lesson_dates(group):
         """Guruh dars kunlarini cache dan olib qaytaradi."""
-        if group.id not in lesson_dates_cache:
-            lesson_dates_cache[group.id] = group.get_lesson_dates(month_date.year, month_date.month)
-        return lesson_dates_cache[group.id]
+        cache_key = (group.id, month_date.year, month_date.month)
+        if cache_key in lesson_dates_cache:
+            return lesson_dates_cache[cache_key]
+        if group.id in lesson_dates_cache:
+            c = lesson_dates_cache[group.id]
+            if c and c[0].year == month_date.year and c[0].month == month_date.month:
+                return c
+        ld = group.get_lesson_dates(month_date.year, month_date.month)
+        lesson_dates_cache[cache_key] = ld
+        lesson_dates_cache[group.id] = ld
+        return ld
 
     net_adjustment = Decimal("0")
 

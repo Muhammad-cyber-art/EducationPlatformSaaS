@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../tokenUpdater/updater';
@@ -35,6 +36,8 @@ import {
   CalendarDays,
   Sparkles,
   ArrowLeft,
+  SlidersHorizontal,
+  Save,
 } from 'lucide-react';
 
 const formatMoney = (val) => {
@@ -80,11 +83,14 @@ export default function PrivilegedStudentsPage() {
   }, [searchTerm]);
 
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
   // Selected student for edit modal
   const [editingStudent, setEditingStudent] = useState(null);
+  // Selected student for status quick edit modal
+  const [statusEditingStudent, setStatusEditingStudent] = useState(null);
 
   // Month navigation helpers
   const handlePrevMonth = () => {
@@ -112,7 +118,7 @@ export default function PrivilegedStudentsPage() {
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ['privileged-students', selectedMonth, selectedGroup, debouncedSearch, page, activeBranchId],
+    queryKey: ['privileged-students', selectedMonth, selectedGroup, selectedStatus, debouncedSearch, page, activeBranchId],
     queryFn: async () => {
       const params = new URLSearchParams({
         month: selectedMonth,
@@ -121,6 +127,7 @@ export default function PrivilegedStudentsPage() {
       });
       if (activeBranchId) params.append('branch_id', activeBranchId);
       if (selectedGroup) params.append('group_id', selectedGroup);
+      if (selectedStatus) params.append('status', selectedStatus);
       if (debouncedSearch.trim()) params.append('search', debouncedSearch.trim());
 
       const res = await api.get(`/finance/privileged-students/?${params.toString()}`);
@@ -398,7 +405,7 @@ export default function PrivilegedStudentsPage() {
           )}
 
           {/* Group Filter Dropdown */}
-          <div className="w-64 hidden sm:block">
+          <div className="w-56 hidden sm:block">
             <select
               value={selectedGroup}
               onChange={(e) => {
@@ -413,6 +420,22 @@ export default function PrivilegedStudentsPage() {
                   {g.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <div className="w-52 hidden sm:block">
+            <select
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-color)] dark:border-transparent rounded-xl text-xs sm:text-sm text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-amber-500 transition cursor-pointer"
+            >
+              <option value="">Barcha maxsus (Hammasi)</option>
+              <option value="discount">Imtiyozli (Grant / Kelajak.uz)</option>
+              <option value="negotiated">Kelishilgan narx</option>
             </select>
           </div>
         </div>
@@ -457,7 +480,7 @@ export default function PrivilegedStudentsPage() {
                   <td colSpan={isSuperAdmin ? 8 : 6} className="py-12 text-center text-[var(--text-secondary)]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Award size={36} className="text-gray-400" />
-                      <p className="font-semibold">Tanlangan oyda birorta ham imtiyozli o'quvchi topilmadi.</p>
+                      <p className="font-semibold">Tanlangan oyda birorta ham maxsus (imtiyozli yoki kelishilgan narx) o'quvchi topilmadi.</p>
                       <p className="text-xs">Qidiruv parametrlarini o'zgartirib ko'ring.</p>
                     </div>
                   </td>
@@ -468,16 +491,34 @@ export default function PrivilegedStudentsPage() {
                     key={`${row.student_id}-${row.group_id}`}
                     className="hover:bg-[var(--bg-primary)]/40 transition group"
                   >
-                    {/* Student Full Name & ID */}
+                    {/* Student Full Name, Status & ID */}
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-[var(--text-primary)]">
-                        {row.student_name}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-[var(--text-primary)]">
+                          {row.student_name}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                            row.student_status === 'discount'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : row.student_status === 'negotiated'
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                              : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                          }`}
+                        >
+                          {row.student_status_label || (row.student_status === 'discount' ? 'Imtiyozli' : 'Kelishilgan')}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-[var(--text-secondary)]">
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-[var(--text-secondary)] flex-wrap">
                         <span className="font-mono bg-[var(--bg-primary)] px-1.5 py-0.5 rounded border border-[var(--border-color)] dark:border-transparent">
                           ID: #{row.student_id}
                         </span>
                         {row.student_phone && <span>{row.student_phone}</span>}
+                        {row.custom_fee && (
+                          <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                            (Kelishilgan: {formatMoney(row.custom_fee)})
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -546,15 +587,26 @@ export default function PrivilegedStudentsPage() {
                       </td>
                     )}
 
-                    {/* Action: Edit Attendance */}
+                    {/* Action: Edit Status & Edit Attendance */}
                     <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => setEditingStudent(row)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow transition"
-                      >
-                        <Edit3 size={14} />
-                        <span>Davomat & Audit</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        <button
+                          onClick={() => setStatusEditingStudent(row)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold transition shadow-xs"
+                          title="Status va individual narxni tahrirlash"
+                        >
+                          <SlidersHorizontal size={13} />
+                          <span>Status</span>
+                        </button>
+                        <button
+                          onClick={() => setEditingStudent(row)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow transition"
+                          title="Davomat darslarini to'g'rilash va audit ko'rish"
+                        >
+                          <Edit3 size={13} />
+                          <span>Davomat & Audit</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -598,12 +650,237 @@ export default function PrivilegedStudentsPage() {
           isSuperAdmin={isSuperAdmin}
           onClose={() => setEditingStudent(null)}
           onSuccess={() => {
-            queryClient.invalidateQueries(['privileged-students']);
+            queryClient.invalidateQueries({ queryKey: ['privileged-students'] });
             setEditingStudent(null);
           }}
         />
       )}
+
+      {/* ── EDIT STUDENT STATUS & CUSTOM FEE MODAL ─────────────────────── */}
+      {statusEditingStudent && (
+        <EditStudentStatusModal
+          student={statusEditingStudent}
+          onClose={() => setStatusEditingStudent(null)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['privileged-students'] });
+            queryClient.invalidateQueries({ queryKey: ['groups'] });
+            queryClient.invalidateQueries({ queryKey: ['students'] });
+            queryClient.invalidateQueries({ queryKey: ['cashier-desk'] });
+            setStatusEditingStudent(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDIT STUDENT STATUS & INDIVIDUAL FEE MODAL (SAFE INLINE STATUS UPDATE)
+// ─────────────────────────────────────────────────────────────────────────────
+function EditStudentStatusModal({ student, onClose, onSuccess }) {
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollContainer = document.querySelector('.lux-scroll');
+    const originalScrollOverflow = scrollContainer ? scrollContainer.style.overflow : '';
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (scrollContainer) {
+      scrollContainer.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      if (scrollContainer) {
+        scrollContainer.style.overflow = originalScrollOverflow;
+      }
+    };
+  }, []);
+  const [newStatus, setNewStatus] = useState(student.student_status || 'discount');
+  const [customFee, setCustomFee] = useState(
+    student.custom_fee !== null && student.custom_fee !== undefined ? String(student.custom_fee) : ''
+  );
+  const [includeMentorSalary, setIncludeMentorSalary] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const payload = {
+        status: newStatus,
+        include_in_mentor_salary: includeMentorSalary,
+      };
+
+      if (['low_income', 'negotiated', 'teacher_negotiated'].includes(newStatus)) {
+        payload.custom_fee = customFee === '' ? 0 : Number(customFee);
+      } else {
+        payload.custom_fee = null;
+      }
+
+      await api.patch(`/groups/students/${student.student_id}/`, payload);
+      toast.success(`${student.student_name} statusi muvaffaqiyatli yangilandi`);
+      onSuccess();
+    } catch (err) {
+      console.error('Status edit error:', err);
+      toast.error(err.response?.data?.detail || "Statusni o'zgartirishda xatolik yuz berdi");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+    >
+      <div
+        className="bg-[var(--card-bg)] w-full max-w-lg rounded-2xl border border-[var(--border-color)] dark:border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] dark:border-white/10 bg-[var(--bg-primary)]/50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20">
+              <SlidersHorizontal size={18} />
+            </div>
+            <div>
+              <h3 className="font-bold text-[var(--text-primary)] text-sm sm:text-base">
+                O'quvchi Statusi & Narxini Tahrirlash
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)]">
+                {student.student_name} • ID: #{student.student_id}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)] rounded-lg transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Info Banner */}
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-600 dark:text-blue-400 flex items-start gap-2.5">
+            <Info size={16} className="shrink-0 mt-0.5" />
+            <span>
+              Status o'zgartirilganda o'quvchining joriy oydagi barcha to'lovlari, dars narxlari va o'qituvchi ulushlari avtomatik qayta hisoblanadi.
+            </span>
+          </div>
+
+          {/* Group & Current Info */}
+          <div className="grid grid-cols-2 gap-3 p-3 bg-[var(--bg-primary)] rounded-xl text-xs">
+            <div>
+              <span className="text-[var(--text-secondary)] block">Guruh:</span>
+              <span className="font-semibold text-[var(--text-primary)]">{student.group_name}</span>
+            </div>
+            <div>
+              <span className="text-[var(--text-secondary)] block">Guruh Oylik Narxi:</span>
+              <span className="font-semibold text-[var(--text-primary)]">{formatMoney(student.course_fee)}</span>
+            </div>
+          </div>
+
+          {/* Status Selection */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[var(--text-primary)]">
+              O'quvchi Moliyaviy Statusi <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={newStatus}
+              onChange={(e) => {
+                const s = e.target.value;
+                setNewStatus(s);
+                if (s === 'discount' || s === 'regular') {
+                  setCustomFee('');
+                }
+              }}
+              className="w-full px-3.5 py-2.5 bg-[var(--bg-primary)] border border-[var(--border-color)] dark:border-white/10 rounded-xl text-xs sm:text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500 transition cursor-pointer font-medium"
+            >
+              <option value="discount">Imtiyozli (Davlat granti / Kelajak.uz)</option>
+              <option value="negotiated">Kelishilgan narx (Individual chegirma)</option>
+              <option value="regular">Oddiy (Standart to'lov)</option>
+              <option value="low_income">Kam ta'minlangan</option>
+              <option value="teacher_negotiated">O'qituvchi kelishgan</option>
+            </select>
+          </div>
+
+          {/* Individual Fee Input (for negotiated / low_income / teacher_negotiated) */}
+          {['negotiated', 'low_income', 'teacher_negotiated'].includes(newStatus) && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+              <label className="text-xs font-bold text-[var(--text-primary)] flex items-center justify-between">
+                <span>Individual To'lov Summasi (UZS)</span>
+                <span className="text-[11px] font-normal text-[var(--text-secondary)]">
+                  Guruh narxi: {formatMoney(student.course_fee)}
+                </span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  placeholder="Masalan: 350000"
+                  value={customFee}
+                  onChange={(e) => setCustomFee(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-[var(--bg-primary)] border border-[var(--border-color)] dark:border-white/10 rounded-xl text-xs sm:text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500 transition font-mono"
+                  required={newStatus === 'negotiated'}
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-secondary)] pointer-events-none font-semibold">
+                  UZS
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                Agar o'quvchi guruh narxidan kam yoki ko'p to'laydigan bo'lsa, oylik to'lov summasini kiriting.
+              </p>
+            </div>
+          )}
+
+          {/* Teacher negotiated checkbox */}
+          {newStatus === 'teacher_negotiated' && (
+            <label className="flex items-center gap-2.5 p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] dark:border-white/10 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeMentorSalary}
+                onChange={(e) => setIncludeMentorSalary(e.target.checked)}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-xs text-[var(--text-primary)]">
+                Mentor oyligiga ushbu o'quvchi bo'yicha to'lov hisoblansinmi?
+              </span>
+            </label>
+          )}
+
+          {/* Modal Actions */}
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[var(--border-color)] dark:border-white/10">
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-[var(--border-color)] dark:border-transparent text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] transition"
+            >
+              Bekor qilish
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm"
+            >
+              <Save size={14} className={isSaving ? 'animate-spin' : ''} />
+              <span>{isSaving ? 'Saqlanmoqda...' : 'Statusni Saqlash'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -629,6 +906,26 @@ const MONTH_NAMES_UZ = [
 // EDIT ATTENDANCE MODAL: 100% CALENDAR-BASED AUDIT SYNCED WITH REAL ATTENDANCE
 // ─────────────────────────────────────────────────────────────────────────────
 function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess }) {
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollContainer = document.querySelector('.lux-scroll');
+    const originalScrollOverflow = scrollContainer ? scrollContainer.style.overflow : '';
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (scrollContainer) {
+      scrollContainer.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      if (scrollContainer) {
+        scrollContainer.style.overflow = originalScrollOverflow;
+      }
+    };
+  }, []);
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('edit'); // 'edit' | 'audit'
   const [reason, setReason] = useState('');
@@ -883,65 +1180,92 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
     },
   });
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-[var(--card-bg)] border border-[var(--border-color)] dark:border-transparent rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[var(--border-color)] dark:border-b-white/[0.04] bg-[var(--bg-primary)]/40">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-xl shrink-0">
-              <Award size={24} />
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+    >
+      <div
+        className="relative w-full max-w-4xl bg-[var(--card-bg)] border border-[var(--border-color)] dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh] animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header (Pinned at top) */}
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)] dark:border-white/10 bg-[var(--card-bg)]">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-xs">
+              <Award size={22} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)] truncate">
                   {student.student_name}
                 </h3>
-                <span className="font-mono text-[11px] bg-[var(--bg-primary)] px-2 py-0.5 rounded border border-[var(--border-color)] dark:border-transparent text-[var(--text-secondary)]">
+                <span className="font-mono text-[11px] bg-[var(--bg-primary)] px-2 py-0.5 rounded-md border border-[var(--border-color)] dark:border-white/10 text-[var(--text-secondary)] font-semibold">
                   ID: #{student.student_id}
                 </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                  student.student_status === 'discount'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                }`}>
+                  {student.student_status_label || (student.student_status === 'discount' ? 'Imtiyozli' : 'Kelishilgan')}
+                </span>
               </div>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Guruh: <span className="text-[var(--text-primary)] font-semibold">{student.group_name}</span> | Kurs narxi: <span className="font-semibold text-emerald-500">{formatMoney(courseFee)}</span>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>Guruh: <strong className="text-[var(--text-primary)]">{student.group_name}</strong></span>
+                <span>•</span>
+                <span>Ustoz: <strong className="text-[var(--text-primary)]">{student.mentor_name}</strong></span>
+                <span>•</span>
+                <span>Kurs narxi: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatMoney(courseFee)}</strong></span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-[var(--border-color)] rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
+            className="p-2 hover:bg-[var(--bg-primary)] rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition shrink-0 ml-2"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-[var(--border-color)] dark:border-b-white/[0.04] px-5 bg-[var(--card-bg)]">
-          <button
-            onClick={() => setActiveTab('edit')}
-            className={`py-3 px-4 font-bold text-xs flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'edit'
-                ? 'border-amber-500 text-amber-500'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <CalendarDays size={15} />
-            <span>Davomat Kalendari</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`py-3 px-4 font-bold text-xs flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'audit'
-                ? 'border-amber-500 text-amber-500'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <History size={15} />
-            <span>Audit Tarixi ({historyData?.audit_logs?.length || 0})</span>
-          </button>
+        {/* Modal Navigation Tabs (Pinned) */}
+        <div className="shrink-0 flex items-center justify-between border-b border-[var(--border-color)] dark:border-white/10 px-5 bg-[var(--bg-primary)]/40">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('edit')}
+              className={`py-3 px-4 font-bold text-xs sm:text-sm flex items-center gap-2 border-b-2 transition ${
+                activeTab === 'edit'
+                  ? 'border-amber-500 text-amber-500'
+                  : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <CalendarDays size={16} />
+              <span>Davomat Kalendari</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('audit')}
+              className={`py-3 px-4 font-bold text-xs sm:text-sm flex items-center gap-2 border-b-2 transition ${
+                activeTab === 'audit'
+                  ? 'border-amber-500 text-amber-500'
+                  : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <History size={16} />
+              <span>Audit Tarixi ({historyData?.audit_logs?.length || 0})</span>
+            </button>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+            <Calendar size={14} className="text-amber-500" />
+            <span>{monthName} {year}</span>
+          </div>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        {/* Modal Body (Scrollable with min-h-0 so it doesn't push the header/footer out) */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
           {isLoading ? (
             <div className="py-20 text-center text-[var(--text-secondary)] flex flex-col items-center justify-center gap-3">
               <div className="w-9 h-9 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -950,50 +1274,33 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
           ) : activeTab === 'edit' ? (
             <>
               {/* Calendar Top Stats & Actions Bar */}
-              <div className="bg-[var(--bg-primary)] p-4 rounded-2xl border border-[var(--border-color)] dark:border-transparent space-y-3">
+              <div className="bg-[var(--bg-primary)] p-3.5 sm:p-4 rounded-2xl border border-[var(--border-color)] dark:border-white/5 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl">
-                      <CalendarDays size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm sm:text-base text-[var(--text-primary)] flex items-center gap-1.5">
-                        <span>{monthName} {year}</span>
-                        <span className="text-xs font-normal text-[var(--text-secondary)]">— Davomat Kalendari</span>
-                      </h4>
-                      <p className="text-[11px] text-[var(--text-secondary)]">
-                        Guruh dars sanalarini bosib "Keldi" yoki "Kelmadi" holatiga o'tkazing
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Attendance KPI metrics */}
-                  <div className="flex items-center gap-2">
-                    <div className="px-3 py-1.5 bg-[var(--card-bg)] rounded-xl border border-[var(--border-color)] dark:border-transparent text-center">
-                      <span className="block text-[9px] uppercase font-bold text-[var(--text-secondary)]">Reja</span>
+                  {/* Left: KPI metrics */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="px-3 py-1.5 bg-[var(--card-bg)] rounded-xl border border-[var(--border-color)] dark:border-white/5 text-center shadow-2xs">
+                      <span className="block text-[9px] uppercase font-bold text-[var(--text-secondary)]">Rejadagi Dars</span>
                       <span className="text-xs sm:text-sm font-black text-[var(--text-primary)]">{nTotal} dars</span>
                     </div>
-                    <div className="px-3 py-1.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-center">
-                      <span className="block text-[9px] uppercase font-bold text-emerald-600 dark:text-emerald-400">Keldi ($N_{'{attended}'}$)</span>
+                    <div className="px-3 py-1.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-center shadow-2xs">
+                      <span className="block text-[9px] uppercase font-bold text-emerald-600 dark:text-emerald-400">Tasdiqlangan</span>
                       <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">{attendedCount} ta</span>
                     </div>
-                    <div className="px-3 py-1.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-center">
-                      <span className="block text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400">Ko'rsatkich</span>
+                    <div className="px-3 py-1.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-center shadow-2xs">
+                      <span className="block text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400">Davomat Ulushi</span>
                       <span className="text-xs sm:text-sm font-black text-amber-600 dark:text-amber-400">{attendanceRate}%</span>
                     </div>
                   </div>
-                </div>
 
-                {/* Quick Bulk Action Buttons & Reset */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-[var(--border-color)] dark:border-white/[0.04]">
-                  <div className="flex items-center gap-2">
+                  {/* Right: Quick Bulk Action Buttons & Reset */}
+                  <div className="flex items-center gap-2 flex-wrap ml-auto">
                     <button
                       type="button"
                       onClick={handleSelectAll}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-semibold transition"
                     >
                       <CheckCheck size={14} />
-                      <span>Barchasini "Keldi" qilish</span>
+                      <span>Barchasini "Keldi"</span>
                     </button>
                     <button
                       type="button"
@@ -1001,31 +1308,31 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-xl text-xs font-semibold transition"
                     >
                       <XCircle size={14} />
-                      <span>Barchasini "Kelmadi" qilish</span>
+                      <span>Barchasini "Kelmadi"</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetToInitial}
+                      disabled={!isModified}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--card-bg)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] dark:border-white/10 rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Dastlabki holatga qaytarish"
+                    >
+                      <RotateCcw size={13} />
+                      <span className="hidden sm:inline">Qaytarish</span>
                     </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={handleResetToInitial}
-                    disabled={!isModified}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--card-bg)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] dark:border-transparent rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <RotateCcw size={13} />
-                    <span>Dastlabki holatga qaytarish</span>
-                  </button>
                 </div>
               </div>
 
               {/* ── 7-COLUMN MONTHLY CALENDAR GRID ──────────────────────────────── */}
               <div className="space-y-2">
                 {/* Weekday Column Headers */}
-                <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                   {WEEKDAYS_UZ.map((wd) => (
                     <div
                       key={wd.short}
                       title={wd.full}
-                      className="py-1.5 sm:py-2 text-center rounded-lg sm:rounded-xl bg-[var(--bg-primary)]/80 text-[10px] sm:text-xs font-bold text-[var(--text-secondary)] border border-[var(--border-color)] dark:border-transparent"
+                      className="py-1.5 sm:py-2 text-center rounded-lg sm:rounded-xl bg-[var(--bg-primary)] text-[11px] sm:text-xs font-bold text-[var(--text-secondary)] border border-[var(--border-color)] dark:border-white/5"
                     >
                       <span className="hidden sm:inline">{wd.full}</span>
                       <span className="sm:hidden">{wd.short}</span>
@@ -1033,14 +1340,14 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                   ))}
                 </div>
 
-                {/* Days Grid */}
-                <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {/* Days Grid (Optimized cell height so full calendar fits comfortably) */}
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                   {calendarCells.map((cell) => {
                     if (cell.type === 'empty') {
                       return (
                         <div
                           key={cell.key}
-                          className="min-h-[58px] sm:min-h-[76px] md:min-h-[90px] rounded-lg sm:rounded-xl bg-transparent opacity-20 pointer-events-none"
+                          className="min-h-[50px] sm:min-h-[60px] md:min-h-[68px] rounded-lg sm:rounded-xl bg-transparent opacity-20 pointer-events-none"
                         />
                       );
                     }
@@ -1051,16 +1358,17 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                       return (
                         <div
                           key={cell.key}
-                          onClick={() => toast('Ushbu kunda guruh dars jadvalida dars belgilanmagan.', { icon: 'ℹ️' })}
-                          className="min-h-[58px] sm:min-h-[76px] md:min-h-[90px] p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-[var(--bg-primary)]/20 border border-dashed border-[var(--border-color)] dark:border-white/[0.04] opacity-40 select-none flex flex-col justify-between cursor-not-allowed hover:opacity-60 transition"
+                          onClick={() => toast('Ushbu kunda dars jadvalida dars yo\'q.', { icon: 'ℹ️' })}
+                          className="min-h-[50px] sm:min-h-[60px] md:min-h-[68px] p-1.5 rounded-lg sm:rounded-xl bg-slate-50/40 dark:bg-white/[0.01] border border-dashed border-slate-200 dark:border-white/5 opacity-40 select-none flex flex-col justify-between cursor-not-allowed hover:opacity-60 transition"
                           title="Guruh jadvalida ushbu sanada dars yo'q"
                         >
-                          <span className="text-[11px] sm:text-xs font-semibold text-[var(--text-secondary)]">
+                          <span className="text-[11px] sm:text-xs font-semibold text-slate-400">
                             {dayNumber}
                           </span>
-                          <span className="text-[9px] sm:text-[10px] text-[var(--text-secondary)] text-center hidden xs:inline sm:inline">
-                            Dars yo'q
+                          <span className="text-[9px] text-slate-400 text-center hidden xs:inline sm:inline">
+                            —
                           </span>
+                          <div className="h-2" />
                         </div>
                       );
                     }
@@ -1078,41 +1386,41 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                           handleToggleDate(date);
                         }}
                         title={`${date}: Dars #${session.lesson_number} (${isPresent ? "Keldi" : "Kelmadi"}). Bosib o'zgartiring.`}
-                        className={`min-h-[58px] sm:min-h-[76px] md:min-h-[90px] p-1 sm:p-2 rounded-lg sm:rounded-xl border text-left transition-all duration-200 flex flex-col justify-between group active:scale-95 cursor-pointer relative overflow-hidden select-none ${
+                        className={`min-h-[50px] sm:min-h-[60px] md:min-h-[68px] p-1.5 sm:p-2 rounded-lg sm:rounded-xl border text-left transition-all duration-150 flex flex-col justify-between group active:scale-95 cursor-pointer relative select-none shadow-2xs ${
                           isPresent
-                            ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/50 hover:border-emerald-500 text-emerald-400 shadow-sm shadow-emerald-500/10'
-                            : 'bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 hover:border-rose-500 text-rose-400'
+                            ? 'bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100/80 dark:hover:bg-emerald-500/25 border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100/80 dark:hover:bg-rose-500/25 border-rose-300 dark:border-rose-500/40 text-rose-800 dark:text-rose-300'
                         }`}
                       >
                         {/* Top: Lesson Number Badge & Day Number */}
                         <div className="flex items-center justify-between w-full">
                           <span
-                            className={`text-[8px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded-md ${
+                            className={`text-[8px] sm:text-[9px] font-bold px-1 sm:px-1.5 py-0.2 rounded ${
                               isPresent
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : 'bg-rose-500/20 text-rose-300'
+                                ? 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-200'
+                                : 'bg-rose-500/20 text-rose-900 dark:text-rose-200'
                             }`}
                           >
                             #{session.lesson_number}
                           </span>
-                          <span className="text-[11px] sm:text-xs md:text-sm font-black text-[var(--text-primary)]">
+                          <span className="text-xs sm:text-sm font-black text-[var(--text-primary)]">
                             {dayNumber}
                           </span>
                         </div>
 
                         {/* Center: Status Icon & Label */}
-                        <div className="flex items-center justify-center gap-1 sm:gap-1.5 py-0.5 sm:py-1">
+                        <div className="flex items-center justify-center gap-1 py-0.5">
                           {isPresent ? (
                             <>
-                              <CheckCircle2 size={14} className="text-emerald-500 shrink-0 sm:w-4 sm:h-4" />
-                              <span className="text-[10px] sm:text-xs md:text-sm font-bold text-emerald-500 dark:text-emerald-400 hidden xs:inline sm:inline">
+                              <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-300">
                                 Keldi
                               </span>
                             </>
                           ) : (
                             <>
-                              <XCircle size={14} className="text-rose-500 shrink-0 sm:w-4 sm:h-4" />
-                              <span className="text-[10px] sm:text-xs md:text-sm font-bold text-rose-500 dark:text-rose-400 hidden xs:inline sm:inline">
+                              <XCircle size={13} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-rose-700 dark:text-rose-300">
                                 Kelmadi
                               </span>
                             </>
@@ -1120,17 +1428,17 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                         </div>
 
                         {/* Bottom: Subtitle or Manual Indicator */}
-                        <div className="text-[9px] sm:text-[10px] text-center w-full truncate">
+                        <div className="text-[9px] text-center w-full truncate">
                           {isManual ? (
-                            <span className="inline-flex items-center gap-0.5 text-purple-400 font-semibold bg-purple-500/10 px-1 py-0.5 rounded text-[8px] sm:text-[9px]">
+                            <span className="inline-flex items-center gap-0.5 text-purple-600 dark:text-purple-400 font-semibold bg-purple-500/10 px-1 py-0.2 rounded text-[8px]">
                               <Sparkles size={8} /> Qo'lda
                             </span>
                           ) : session.marked_by ? (
-                            <span className="text-[var(--text-secondary)] text-[8px] sm:text-[9px] truncate">
+                            <span className="text-[var(--text-secondary)] text-[8px] truncate">
                               {session.marked_by}
                             </span>
                           ) : (
-                            <span className="text-[var(--text-secondary)] text-[8px] sm:text-[9px]">
+                            <span className="text-[var(--text-secondary)] text-[8px]">
                               {isPresent ? 'Dars' : "Yo'qlama"}
                             </span>
                           )}
@@ -1141,11 +1449,11 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                 </div>
 
                 {/* Calendar Legend */}
-                <div className="flex flex-wrap items-center justify-between text-[11px] text-[var(--text-secondary)] pt-2 px-1">
+                <div className="flex flex-wrap items-center justify-between text-[11px] text-[var(--text-secondary)] pt-1 px-1">
                   <div className="flex items-center gap-4">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      Kelgan dars (Tasdiqlangan)
+                      Kelgan dars
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
@@ -1157,21 +1465,21 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                     </span>
                   </div>
                   <span className="text-[10px] italic text-[var(--text-secondary)]">
-                    * Ushbu kalendar o'quvchi profili va dars jurnali bilan 100% bir xil sinxron ishlaydi
+                    * Sanani bosish orqali "Keldi" va "Kelmadi" o'rtasida almashtiring
                   </span>
                 </div>
               </div>
 
               {/* ── REAL-TIME LIVE FINANCIAL PREVIEW DIFF ─────────────────── */}
-              <div className="bg-gradient-to-br from-amber-500/5 via-blue-500/5 to-emerald-500/5 p-4 rounded-xl border border-amber-500/20 dark:border-transparent space-y-3">
+              <div className="bg-gradient-to-br from-amber-500/5 via-blue-500/5 to-emerald-500/5 p-3.5 sm:p-4 rounded-xl border border-amber-500/20 dark:border-white/5 space-y-2.5">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-500">
-                  <TrendingUp size={16} />
-                  <span>Real Vaqtda {isSuperAdmin ? "Moliyaviy Ta'sir (Live Preview)" : "Davomat Ta'siri"}</span>
+                  <TrendingUp size={15} />
+                  <span>Real Vaqtda {isSuperAdmin ? "Moliyaviy Qayta Hisob (Live Preview)" : "Davomat Ta'siri"}</span>
                 </div>
 
                 <div className={`grid grid-cols-1 ${isSuperAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-1'} gap-3`}>
                   {/* Attendance Count */}
-                  <div className="bg-[var(--card-bg)] p-3 rounded-lg border border-[var(--border-color)] dark:border-transparent">
+                  <div className="bg-[var(--card-bg)] p-3 rounded-xl border border-[var(--border-color)] dark:border-white/5">
                     <div className="text-[11px] font-semibold text-[var(--text-secondary)]">
                       Davomat (Darslar)
                     </div>
@@ -1181,24 +1489,24 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                     <div className="text-sm font-black text-amber-500 dark:text-amber-400 mt-0.5">
                       Yangi: {livePreview.after.attended} / {nTotal} dars
                     </div>
-                    <div className={`text-[10px] font-bold mt-1 ${livePreview.delta.attended >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    <div className={`text-[10px] font-bold mt-1 ${livePreview.delta.attended >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       Farq: {livePreview.delta.attended >= 0 ? '+' : ''}{livePreview.delta.attended} dars
                     </div>
                   </div>
 
                   {/* Teacher Share - Super Admin Only */}
                   {isSuperAdmin && (
-                    <div className="bg-[var(--card-bg)] p-3 rounded-lg border border-[var(--border-color)] dark:border-transparent">
+                    <div className="bg-[var(--card-bg)] p-3 rounded-xl border border-[var(--border-color)] dark:border-white/5">
                       <div className="text-[11px] font-semibold text-[var(--text-secondary)]">
                         O'qituvchi Maoshi
                       </div>
                       <div className="text-xs text-[var(--text-secondary)] mt-0.5 line-through">
                         Oldin: {formatMoney(livePreview.before.teacherShare)}
                       </div>
-                      <div className="text-sm font-black text-indigo-500 dark:text-indigo-400 mt-0.5">
+                      <div className="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
                         Yangi: {formatMoney(livePreview.after.teacherShare)}
                       </div>
-                      <div className={`text-[10px] font-bold mt-1 ${livePreview.delta.teacherShare >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <div className={`text-[10px] font-bold mt-1 ${livePreview.delta.teacherShare >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         Farq: {livePreview.delta.teacherShare >= 0 ? '+' : ''}{formatMoney(livePreview.delta.teacherShare)}
                       </div>
                     </div>
@@ -1206,17 +1514,17 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
 
                   {/* Center Margin - Super Admin Only */}
                   {isSuperAdmin && (
-                    <div className="bg-[var(--card-bg)] p-3 rounded-lg border border-[var(--border-color)] dark:border-transparent">
+                    <div className="bg-[var(--card-bg)] p-3 rounded-xl border border-[var(--border-color)] dark:border-white/5">
                       <div className="text-[11px] font-semibold text-[var(--text-secondary)]">
                         Markaz Marjasi
                       </div>
                       <div className="text-xs text-[var(--text-secondary)] mt-0.5 line-through">
                         Oldin: {formatMoney(livePreview.before.centerMargin)}
                       </div>
-                      <div className="text-sm font-black text-emerald-500 dark:text-emerald-400 mt-0.5">
+                      <div className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
                         Yangi: {formatMoney(livePreview.after.centerMargin)}
                       </div>
-                      <div className={`text-[10px] font-bold mt-1 ${livePreview.delta.centerMargin >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <div className={`text-[10px] font-bold mt-1 ${livePreview.delta.centerMargin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         Farq: {livePreview.delta.centerMargin >= 0 ? '+' : ''}{formatMoney(livePreview.delta.centerMargin)}
                       </div>
                     </div>
@@ -1226,19 +1534,19 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
 
               {/* Optional Reason for Change (Audit Trail) */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1">
                   O'zgarish Sababi / Izoh <span className="text-[var(--text-secondary)] font-normal text-[11px] lowercase">(ixtiyoriy)</span>
                 </label>
                 <textarea
                   rows={2}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Izoh kiritish ixtiyoriy... Masalan: Face ID tizimi kelajak.uz platformasida kechikkan, dars jurnali orqali tekshirilib tasdiqlandi..."
-                  className="w-full p-3 bg-[var(--bg-primary)] border border-[var(--border-color)] dark:border-transparent rounded-xl text-xs sm:text-sm text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-amber-500 transition"
+                  placeholder="Izoh kiritish ixtiyoriy... Masalan: Face ID tizimi kelajak.uz platformasida kechikkan, monitoring tasdiqladi..."
+                  className="w-full p-2.5 bg-[var(--bg-primary)] border border-[var(--border-color)] dark:border-white/10 rounded-xl text-xs sm:text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
                 />
                 <p className="text-[11px] text-[var(--text-secondary)] mt-1 flex items-center gap-1">
-                  <ShieldAlert size={13} className="text-amber-500" />
-                  Har bir qo'lda kiritilgan o'zgarish tizimda mas'ul xodim IDsi va vaqti bilan muhrlanadi.
+                  <ShieldAlert size={13} className="text-amber-500 shrink-0" />
+                  Har bir qo'lda kiritilgan o'zgarish tizimda mas'ul xodim IDsi va vaqti bilan audit jurnaliga muhrlanadi.
                 </p>
               </div>
             </>
@@ -1254,18 +1562,18 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                 historyData?.audit_logs?.map((log) => (
                   <div
                     key={log.id}
-                    className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-color)] dark:border-transparent space-y-2 text-xs"
+                    className="p-3.5 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-color)] dark:border-white/5 space-y-2 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-[var(--text-primary)]">
                         Mas'ul: {log.modified_by}
                       </span>
-                      <span className="text-[var(--text-secondary)] font-mono">
+                      <span className="text-[var(--text-secondary)] font-mono text-[11px]">
                         {log.created_at}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-[11px] bg-[var(--card-bg)] p-2.5 rounded-lg border border-[var(--border-color)] dark:border-transparent">
+                    <div className="grid grid-cols-2 gap-2 text-[11px] bg-[var(--card-bg)] p-2.5 rounded-lg border border-[var(--border-color)] dark:border-white/5">
                       <div>
                         <span className="text-[var(--text-secondary)]">Davomat: </span>
                         <span className="font-bold text-[var(--text-primary)]">
@@ -1274,15 +1582,17 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
                       </div>
                       <div>
                         <span className="text-[var(--text-secondary)]">O'qituvchi: </span>
-                        <span className="font-bold text-indigo-500 dark:text-indigo-400">
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
                           {formatMoney(log.previous_teacher_share)} &rarr; {formatMoney(log.new_teacher_share)}
                         </span>
                       </div>
                     </div>
 
-                    <div className="text-[var(--text-secondary)] italic">
-                      Sabab: "{log.reason}"
-                    </div>
+                    {log.reason && (
+                      <div className="text-[var(--text-secondary)] italic">
+                        Sabab: "{log.reason}"
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -1290,35 +1600,35 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
           )}
         </div>
 
-        {/* Modal Footer */}
+        {/* Modal Footer (Pinned at bottom) */}
         {activeTab === 'edit' && (
-          <div className="flex items-center justify-between p-4 sm:p-5 border-t border-[var(--border-color)] dark:border-t-white/[0.04] bg-[var(--bg-primary)]/40">
+          <div className="shrink-0 flex items-center justify-between p-3.5 sm:p-4 border-t border-[var(--border-color)] dark:border-white/10 bg-[var(--card-bg)]">
             <div className="text-xs text-[var(--text-secondary)]">
               {isModified ? (
-                <span className="text-amber-500 font-semibold flex items-center gap-1">
+                <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5">
                   <AlertTriangle size={14} /> O'zgarishlar kiritildi, saqlash talab etiladi
                 </span>
               ) : (
-                <span>O'quvchi profilidagi haqiqiy davomat bilan bir xil</span>
+                <span className="text-[var(--text-secondary)]">O'quvchi profilidagi haqiqiy davomat bilan bir xil</span>
               )}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-[var(--border-color)] dark:border-transparent text-xs sm:text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--card-bg)] transition"
+                className="px-4 py-2 rounded-xl border border-[var(--border-color)] dark:border-white/10 text-xs sm:text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)] transition"
               >
                 Bekor qilish
               </button>
 
               <button
                 type="button"
-                disabled={overrideMutation.isLoading}
+                disabled={overrideMutation.isPending || overrideMutation.isLoading}
                 onClick={() => overrideMutation.mutate()}
-                className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition"
+                className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition cursor-pointer"
               >
-                {overrideMutation.isLoading ? (
+                {overrideMutation.isPending || overrideMutation.isLoading ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <CheckCircle size={16} />
@@ -1329,6 +1639,7 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
