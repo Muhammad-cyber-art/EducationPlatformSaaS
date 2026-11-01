@@ -209,7 +209,7 @@ const StaffPaymentDetails = () => {
             <PaymentStats {...{ data: mergedData, isPercentageType, isStudentCountType, formatCurrency, studentCountSummary, finalTotalAmount, isSuperAdmin, kpiLoading }} />
 
             {/* 2. Payment History - To'lov tarixi */}
-            <PaymentHistory {...{ data, staff_id, formatCurrency, isSuperAdmin, handleDeleteHistory, dispatch, setPayModal, setSelectedHistoryItem }} />
+            <PaymentHistory {...{ data, staff_id, formatCurrency, isSuperAdmin, handleDeleteHistory, dispatch, setPayModal, setSelectedHistoryItem, navigate }} />
 
             {/* 3. KPI Table - Guruhlar va o'quvchilar */}
             {data?.salary_type !== 'fixed' && (

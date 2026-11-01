@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Calendar, CreditCard, Building2, BookOpen, ChevronRight, FilterX, PlusCircle, TrendingDown } from "lucide-react";
+import { Search, Calendar, CreditCard, Building2, BookOpen, ChevronRight, ChevronLeft, FilterX, PlusCircle, TrendingDown } from "lucide-react";
 
 const KassaFilters = ({
     filters,
@@ -28,6 +28,21 @@ const KassaFilters = ({
         }, 350);
         return () => clearTimeout(handler);
     }, [localSearch, filters.search, setFilters]);
+    const handlePrevMonth = () => {
+        if (!filters.month) return;
+        const [year, month] = filters.month.split("-").map(Number);
+        const prevDate = new Date(year, month - 2, 1);
+        const prevStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+        setFilters(prev => ({ ...prev, month: prevStr }));
+    };
+
+    const handleNextMonth = () => {
+        if (!filters.month) return;
+        const [year, month] = filters.month.split("-").map(Number);
+        const nextDate = new Date(year, month, 1);
+        const nextStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+        setFilters(prev => ({ ...prev, month: nextStr }));
+    };
 
     return (
     <>
@@ -44,15 +59,32 @@ const KassaFilters = ({
             </div>
 
             <div className="flex flex-wrap md:flex-nowrap items-center gap-3">
-                {/* 1. Month Picker */}
-                <div className="relative min-w-[140px] flex-1 md:flex-none">
-                    <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--gold)] opacity-70 pointer-events-none" size={17} strokeWidth={2.2} />
-                    <input
-                        type="month"
-                        value={filters.month}
-                        onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
-                        className="w-full h-12 bg-[var(--input-bg)] border border-white/[0.06] rounded-xl pl-4 pr-10 text-[12px] font-black text-[var(--gold)] outline-none focus:border-amber-500/50 transition-all [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-10 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                    />
+                {/* 1. Month Picker with Prev/Next Navigation */}
+                <div className="flex items-center bg-[var(--input-bg)] border border-white/[0.06] rounded-xl h-12 px-1 focus-within:border-amber-500/50 transition-all min-w-[160px] flex-1 md:flex-none shadow-sm">
+                    <button
+                        type="button"
+                        onClick={handlePrevMonth}
+                        title="Oldingi oy"
+                        className="w-8 h-8 flex items-center justify-center text-[var(--gold)] hover:bg-[var(--gold)]/10 rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <div className="relative flex-1 min-w-[100px] px-1 text-center">
+                        <input
+                            type="month"
+                            value={filters.month}
+                            onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
+                            className="w-full bg-transparent text-[12px] font-black text-[var(--gold)] outline-none text-center cursor-pointer"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleNextMonth}
+                        title="Keyingi oy"
+                        className="w-8 h-8 flex items-center justify-center text-[var(--gold)] hover:bg-[var(--gold)]/10 rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
                 </div>
 
                 {/* 2. Branch Selector */}

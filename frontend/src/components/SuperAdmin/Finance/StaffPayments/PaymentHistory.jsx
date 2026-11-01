@@ -16,7 +16,8 @@ const PaymentHistory = ({
     handleDeleteHistory,
     dispatch,
     setPayModal,
-    setSelectedHistoryItem
+    setSelectedHistoryItem,
+    navigate
 }) => {
 
     return (
@@ -37,10 +38,33 @@ const PaymentHistory = ({
                                 return (
                                     <tr
                                         key={item.id}
-                                        className={`hover:bg-[var(--gold-dim)] transition-colors group ${isActive ? 'bg-[var(--gold)]/5' : ''}`}
+                                        onClick={() => {
+                                            if (navigate && parseInt(staff_id) !== item.id) {
+                                                const currentPath = window.location.pathname;
+                                                const targetPath = currentPath.replace(new RegExp(`/staff/${staff_id}.*`), `/staff/${item.id}`);
+                                                if (targetPath !== currentPath && targetPath.includes(`/staff/${item.id}`)) {
+                                                    navigate(targetPath);
+                                                } else {
+                                                    navigate(`/super_admin/all-payments/staff-payments/staff/${item.id}`);
+                                                }
+                                            }
+                                        }}
+                                        className={`transition-all group cursor-pointer border-l-2 ${
+                                            isActive
+                                                ? 'bg-[var(--gold)]/10 border-l-[var(--gold)]'
+                                                : 'hover:bg-[var(--gold-dim)] border-l-transparent'
+                                        }`}
+                                        title={`${item.month} maosh vedomostiga o'tish`}
                                     >
                                         <td className="px-5 py-3">
-                                            <p className="text-[10px] font-black text-[var(--text-primary)]">{item.month}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-[10px] font-black text-[var(--text-primary)] group-hover:text-[var(--gold)] transition-colors">{item.month}</p>
+                                                {isActive && (
+                                                    <span className="px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider bg-[var(--gold)] text-black rounded font-mono">
+                                                        Joriy
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-[8px] font-bold text-[var(--text-muted)] capitalize">{item.is_paid ? "To'langan" : "Kutilmoqda"}</p>
                                         </td>
                                         <td className="px-5 py-3 text-[11px] font-black text-[var(--text-primary)] tabular-nums text-right flex items-center justify-end gap-3">

@@ -253,12 +253,43 @@ class EmployeePaymentSerializer(serializers.ModelSerializer):
             return pf['employee_groups'][obj.employee_id]
         return None
 
-    def _get_prefetched_payment_map(self):
+    def _get_prefetched_payment_map(self, obj=None):
         pf = self._get_prefetch()
+        if not pf:
+            return None
+        # Oy bo'yicha aniq to'lovlarni olish (oylar aro kesh chalkashmasligi uchun)
+        if obj and hasattr(obj, 'month') and obj.month:
+            ym = (obj.month.year, obj.month.month)
+            by_month = pf.get('payment_map_by_month')
+            if by_month is not None:
+                return by_month.get(ym, {})
+            raw_pm = pf.get('payment_map')
+            if raw_pm is not None:
+                res = {}
+                for k, p in raw_pm.items():
+                    if len(k) == 4 and (k[2], k[3]) == ym:
+                        res[(k[0], k[1])] = p
+                    elif len(k) == 2 and getattr(p, 'month', None) and (p.month.year, p.month.month) == ym:
+                        res[k] = p
+                return res
         return pf.get('payment_map', {}) if pf else None
 
-    def _get_prefetched_extras_map(self):
+    def _get_prefetched_extras_map(self, obj=None):
         pf = self._get_prefetch()
+        if not pf:
+            return None
+        if obj and hasattr(obj, 'month') and obj.month:
+            ym = (obj.month.year, obj.month.month)
+            by_month = pf.get('extras_map_by_month')
+            if by_month is not None:
+                return by_month.get(ym, {})
+            raw_em = pf.get('extras_map')
+            if raw_em is not None:
+                res = {}
+                for k, v in raw_em.items():
+                    if len(k) == 4 and (k[2], k[3]) == ym:
+                        res[(k[0], k[1])] = v
+                return res
         return pf.get('extras_map', {}) if pf else None
 
     def _is_lite(self) -> bool:
@@ -358,8 +389,8 @@ class EmployeePaymentSerializer(serializers.ModelSerializer):
 
                 # === OPTIMIZATSIYA: Prefetch context'dan foydalanish ===
                 prefetched_groups = self._get_prefetched_groups(obj)
-                prefetched_pm = self._get_prefetched_payment_map()
-                prefetched_em = self._get_prefetched_extras_map()
+                prefetched_pm = self._get_prefetched_payment_map(obj)
+                prefetched_em = self._get_prefetched_extras_map(obj)
                 pf = self._get_prefetch()
                 enrollment_cache = pf.get('enrollment_cache', {}) if pf else None
                 lesson_dates_cache = pf.get('lesson_dates_cache', {}) if pf else None
@@ -537,7 +568,7 @@ class EmployeePaymentSerializer(serializers.ModelSerializer):
 
                 # === OPTIMIZATSIYA: Prefetch context'dan foydalanish ===
                 prefetched_groups = self._get_prefetched_groups(obj)
-                prefetched_em = self._get_prefetched_extras_map()
+                prefetched_em = self._get_prefetched_extras_map(obj)
                 pf = self._get_prefetch()
                 enrollment_cache = pf.get('enrollment_cache', {}) if pf else None
                 lesson_dates_cache = pf.get('lesson_dates_cache', {}) if pf else None
@@ -613,7 +644,7 @@ class EmployeePaymentSerializer(serializers.ModelSerializer):
                         total += extra_map.get(key, Decimal("0"))
 
                 # Add expected revenue from deleted students
-                prefetched_pm = self._get_prefetched_payment_map()
+                prefetched_pm = self._get_prefetched_payment_map(obj)
                 if prefetched_pm is not None:
                     deleted_payments = [p for p in prefetched_pm.values() if getattr(p, 'student_id', None) is None]
                     for p in deleted_payments:
@@ -724,8 +755,8 @@ class EmployeePaymentSerializer(serializers.ModelSerializer):
             # === OPTIMIZATSIYA: Prefetch context'dan foydalanish ===
             pf = self._get_prefetch()
             prefetched_groups = self._get_prefetched_groups(obj)
-            prefetched_pm = self._get_prefetched_payment_map()
-            prefetched_em = self._get_prefetched_extras_map()
+            prefetched_pm = self._get_prefetched_payment_map(obj)
+            prefetched_em = self._get_prefetched_extras_map(obj)
             enrollment_cache = pf.get('enrollment_cache', {}) if pf else None
             lesson_dates_cache = pf.get('lesson_dates_cache', {}) if pf else None
             attendance_cache = pf.get('attendance_cache', {}) if pf else None

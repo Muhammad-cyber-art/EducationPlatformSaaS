@@ -755,9 +755,8 @@ def calculate_group_revenue_and_mentor_share(
     from archivebase.models import ArchivedStudent
     
     month_prefix = month_date.strftime("%Y-%m")
-    # For performance in very large datasets, this could be optimized, 
-    # but since it's monthly it should be fine.
-    archived_students = ArchivedStudent.objects.all()
+    # Optimizatsiya: barcha yillardagi arxivlanganlarni emas, aynan shu oydagi to'lovlari borlarini olamiz
+    archived_students = ArchivedStudent.objects.filter(metadata__icontains=month_prefix)
     for arch in archived_students:
         meta = arch.metadata
         if not meta or 'payments' not in meta:

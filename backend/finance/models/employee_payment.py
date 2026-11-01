@@ -701,8 +701,17 @@ class StaffProfile(models.Model):
         # Barcha to'lovlarni bitta queryda olamiz (optimizatsiya)
         mentor_group_ids = [g.id for g in mentor_groups]
         payment_map = {}
-        if prefetch_cache and 'payment_map' in prefetch_cache:
-            payment_map = prefetch_cache['payment_map']
+        ym = (month.year, month.month)
+        if prefetch_cache and 'payment_map_by_month' in prefetch_cache:
+            payment_map = prefetch_cache['payment_map_by_month'].get(ym, {})
+        elif prefetch_cache and 'payment_map' in prefetch_cache:
+            raw_pm = prefetch_cache['payment_map']
+            payment_map = {}
+            for k, p in raw_pm.items():
+                if len(k) == 4 and (k[2], k[3]) == ym:
+                    payment_map[(k[0], k[1])] = p
+                elif len(k) == 2 and getattr(p, 'month', None) and (p.month.year, p.month.month) == ym:
+                    payment_map[k] = p
         else:
             payment_qs = Payment.objects.filter(
                 group_id__in=mentor_group_ids,
@@ -856,9 +865,18 @@ class StaffProfile(models.Model):
         # Barcha to'lovlarni bitta queryda olamiz (optimizatsiya)
         mentor_group_ids = [g.id for g in mentor_groups]
         payment_map = {}
-        # Bo'lib to'lgan to'lovlarni ham hisoblash uchun, hammasini olamiz!
-        if prefetch_cache and 'payment_map' in prefetch_cache:
-            payment_map = prefetch_cache['payment_map']
+        # Bo'lib to'lgan to'lovlarni ham hisoblash uchun, hammasini olamiz! (OY BO'YICHA IZOLYATSIYA)
+        ym = (month.year, month.month)
+        if prefetch_cache and 'payment_map_by_month' in prefetch_cache:
+            payment_map = prefetch_cache['payment_map_by_month'].get(ym, {})
+        elif prefetch_cache and 'payment_map' in prefetch_cache:
+            raw_pm = prefetch_cache['payment_map']
+            payment_map = {}
+            for k, p in raw_pm.items():
+                if len(k) == 4 and (k[2], k[3]) == ym:
+                    payment_map[(k[0], k[1])] = p
+                elif len(k) == 2 and getattr(p, 'month', None) and (p.month.year, p.month.month) == ym:
+                    payment_map[k] = p
         else:
             payment_qs = Payment.objects.filter(
                 group_id__in=mentor_group_ids,

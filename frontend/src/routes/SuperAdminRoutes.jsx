@@ -64,10 +64,43 @@ export const SuperAdminRoutes = (
  <Route index element={<StaffPayments />} />
  <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
  <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
+ <Route path="staff/:staff_id/paid_students" element={<StaffPaidStudents />} />
+ </Route>
+ <Route path="staff_payments" element={<StaffPaymentsLayout />} >
+ <Route index element={<StaffPayments />} />
+ <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
+ <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
+ <Route path="staff/:staff_id/paid_students" element={<StaffPaidStudents />} />
  </Route>
  <Route path="utility-payments" element={<UtilityPayments />} />
  <Route path="kassa" element={<Kassa />} />
  <Route path="branch-details/:b_id" element={<BranchFinance />} />
+ <Route path="branch-details/:b_id/special-students" element={<PrivilegedStudentsPage />} />
+ <Route path="special-students" element={<PrivilegedStudentsPage />} />
+ </Route>
+
+ {/* Finance Section (Underscore URL Alias for full backward & URL compatibility) */}
+ <Route path="all_payments" element={<AllPaymentsLayout />}>
+ <Route index element={<AllPayments />} />
+ <Route path="payments-history" element={<PaymentHistory />} />
+ <Route path="payments_history" element={<PaymentHistory />} />
+ <Route path="staff-payments" element={<StaffPaymentsLayout />} >
+ <Route index element={<StaffPayments />} />
+ <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
+ <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
+ <Route path="staff/:staff_id/paid_students" element={<StaffPaidStudents />} />
+ </Route>
+ <Route path="staff_payments" element={<StaffPaymentsLayout />} >
+ <Route index element={<StaffPayments />} />
+ <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
+ <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
+ <Route path="staff/:staff_id/paid_students" element={<StaffPaidStudents />} />
+ </Route>
+ <Route path="utility-payments" element={<UtilityPayments />} />
+ <Route path="utility_payments" element={<UtilityPayments />} />
+ <Route path="kassa" element={<Kassa />} />
+ <Route path="branch-details/:b_id" element={<BranchFinance />} />
+ <Route path="branch_details/:b_id" element={<BranchFinance />} />
  <Route path="branch-details/:b_id/special-students" element={<PrivilegedStudentsPage />} />
  <Route path="special-students" element={<PrivilegedStudentsPage />} />
  </Route>
@@ -77,6 +110,13 @@ export const SuperAdminRoutes = (
  <Route index element={<StaffPayments />} />
  <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
  <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
+ <Route path="staff/:staff_id/paid_students" element={<StaffPaidStudents />} />
+ </Route>
+ <Route path="staff_payments" element={<StaffPaymentsLayout />}>
+ <Route index element={<StaffPayments />} />
+ <Route path="staff/:staff_id" element={<StaffPaymentDetails />} />
+ <Route path="staff/:staff_id/paid-students" element={<StaffPaidStudents />} />
+ <Route path="staff/:staff_id/paid_students" element={<StaffPaidStudents />} />
  </Route>
 
  {/* Branches Management Section */}

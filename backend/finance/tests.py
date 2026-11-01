@@ -1168,3 +1168,69 @@ class SeniorQADeepLogicTests(APITestCase):
         self.assertEqual(t_info["n_attended"], 9)
         self.assertEqual(t_info["n_total"], 14)
 
+    def test_cross_month_payment_isolation_debtor_in_new_month(self):
+        """Oylar aro to'lov izolyatsiyasi: Oktabrda to'lagan talaba Noyabrda to'lamagan bo'lsa,
+        Noyabr vedomostida qarzdor deb topilishi va o'qituvchiga ortiqcha haq hisoblanmasligi kerak."""
+        from datetime import date
+        oct_month = date(2026, 10, 1)
+        nov_month = date(2026, 11, 1)
+
+        ep_nov = EmployeePayment.objects.create(
+            employee=self.mentor1,
+            month=nov_month,
+            is_paid=False,
+            salary_base=Decimal("0")
+        )
+
+        st_test = Student.objects.create(
+            full_name="Noyabr Qarzdor Talaba",
+            group=self.group1,
+            branch=self.branch,
+            status="regular"
+        )
+        GroupEnrollment.objects.filter(student=st_test, group=self.group1).update(
+            joined_at=oct_month,
+            is_active=True
+        )
+
+        # Oktabr oyi uchun to'lov qilingan
+        Payment.objects.create(
+            student=st_test,
+            group=self.group1,
+            month=oct_month,
+            amount=Decimal("400000"),
+            paid_amount=Decimal("400000"),
+            is_paid=True
+        )
+
+        # Noyabr oyi uchun to'lov QILINMAGAN (yangi oy boshlandi, qarz)
+        Payment.objects.create(
+            student=st_test,
+            group=self.group1,
+            month=nov_month,
+            amount=Decimal("400000"),
+            paid_amount=Decimal("0"),
+            is_paid=False
+        )
+
+        self.client.force_authenticate(user=self.admin)
+
+        # Noyabr vedomosti so'rovi
+        resp_nov = self.client.get(f"/api/v1/finance/employee-payments/{ep_nov.id}/paid-students/")
+        self.assertEqual(resp_nov.status_code, status.HTTP_200_OK)
+
+        st_nov = next((s for s in resp_nov.data["students"] if s["id"] == st_test.id), None)
+        self.assertIsNotNone(st_nov)
+        # O'quvchi Noyabrda qarzdor bo'lishi va to'langan summasi 0 bo'lishi SHART!
+        self.assertEqual(st_nov["paid_amount"], 0.0)
+        self.assertEqual(st_nov["mentor_share"], 0.0)
+        self.assertTrue(st_nov["is_debtor"])
+
+        # Oktabr vedomostida esa to'lagan bo'lishi shart
+        resp_oct = self.client.get(f"/api/v1/finance/employee-payments/{self.ep1.id}/paid-students/")
+        self.assertEqual(resp_oct.status_code, status.HTTP_200_OK)
+        st_oct = next((s for s in resp_oct.data["students"] if s["id"] == st_test.id), None)
+        self.assertIsNotNone(st_oct)
+        self.assertEqual(st_oct["paid_amount"], 400000.0)
+        self.assertFalse(st_oct["is_debtor"])
+

@@ -91,6 +91,21 @@ const StaffPaidStudents = () => {
     navigate(-1);
   }, [navigate]);
 
+  const handleSelectMonth = useCallback(
+    (paymentId) => {
+      if (!paymentId || String(paymentId) === String(staff_id)) return;
+      const groupParam = selectedGroup && selectedGroup !== "all" ? `?group_id=${selectedGroup}` : "";
+      const currentPath = window.location.pathname;
+      const targetPath = currentPath.replace(new RegExp(`/staff/${staff_id}.*`), `/staff/${paymentId}/paid-students${groupParam}`);
+      if (targetPath !== currentPath && targetPath.includes(`/staff/${paymentId}`)) {
+        navigate(targetPath);
+      } else {
+        navigate(`/super_admin/all-payments/staff-payments/staff/${paymentId}/paid-students${groupParam}`);
+      }
+    },
+    [navigate, staff_id, selectedGroup]
+  );
+
   // Total debtors count across all loaded students
   const totalDebtorsCount = useMemo(() => {
     if (pageData?.total_debtors_count !== undefined) {
@@ -199,6 +214,7 @@ const StaffPaidStudents = () => {
           onBack={handleBack}
           onRefresh={fetchPaidStudents}
           loading={loading}
+          onSelectMonth={handleSelectMonth}
         />
 
         {/* 7 KPI Summary Cards Subcomponent */}

@@ -34,8 +34,8 @@ const StaffPaidTableRow = React.memo(({ st, idx, isSelected, onSelect }) => {
       </td>
 
       {/* 2. O'quvchi: Ismi, Avatar, Badges, Telefon */}
-      <td className="px-3.5 py-3">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <td className="px-3.5 py-3 whitespace-nowrap">
+        <div className="flex items-center gap-2.5 min-w-max">
           <div
             className={`w-7 h-7 rounded-lg font-bold text-xs flex items-center justify-center shrink-0 shadow-sm ${
               isDebtor
@@ -45,10 +45,10 @@ const StaffPaidTableRow = React.memo(({ st, idx, isSelected, onSelect }) => {
           >
             {st.name?.charAt(0) || "O"}
           </div>
-          <div className="min-w-0 flex-1 max-w-[200px]">
-            <div className="flex items-center gap-1.5 flex-nowrap min-w-0">
+          <div className="min-w-max">
+            <div className="flex items-center gap-1.5 flex-nowrap">
               <span
-                className={`text-xs font-bold leading-tight truncate shrink min-w-0 ${
+                className={`text-xs font-bold leading-tight whitespace-nowrap ${
                   isDebtor ? "text-rose-400" : "text-[var(--text-primary)]"
                 }`}
                 title={st.name}
@@ -58,7 +58,7 @@ const StaffPaidTableRow = React.memo(({ st, idx, isSelected, onSelect }) => {
               {isDebtor && <DebtorBadge />}
               {isPartial && <PartialBadge />}
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap min-w-0">
+            <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap">
               <StudentStatusBadge status={st.status} label={st.status_label} />
               {st.phone && (
                 <span className="text-[9px] text-[var(--text-muted)] font-medium flex items-center gap-0.5 whitespace-nowrap shrink-0">
@@ -71,10 +71,10 @@ const StaffPaidTableRow = React.memo(({ st, idx, isSelected, onSelect }) => {
       </td>
 
       {/* 3. Guruh */}
-      <td className="px-3.5 py-3">
-        <div className="min-w-0 max-w-[170px]">
+      <td className="px-3.5 py-3 whitespace-nowrap">
+        <div className="min-w-max">
           <span
-            className="text-xs font-semibold text-[var(--text-primary)] leading-tight truncate block"
+            className="text-xs font-semibold text-[var(--text-primary)] leading-tight whitespace-nowrap block"
             title={st.group_name}
           >
             {st.group_name}
@@ -202,8 +202,8 @@ const StaffPaidTable = React.memo(({ filteredStudents, selectedStudent, onSelect
           <thead>
             <tr className="border-b border-[var(--border-glass)] bg-[var(--bg-void)]/60 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] select-none">
               <th className="px-3 py-3 w-10 text-center whitespace-nowrap">#</th>
-              <th className="px-3.5 py-3 w-[220px] min-w-[190px] whitespace-nowrap">O'quvchi</th>
-              <th className="px-3.5 py-3 w-[170px] min-w-[150px] whitespace-nowrap">Guruh</th>
+              <th className="px-3.5 py-3 min-w-[220px] whitespace-nowrap">O'quvchi</th>
+              <th className="px-3.5 py-3 min-w-[160px] whitespace-nowrap">Guruh</th>
               <th className="px-3 py-3 w-[110px] text-right whitespace-nowrap">Kurs Narxi</th>
               <th className="px-3 py-3 w-[80px] text-center whitespace-nowrap">Reja</th>
               <th className="px-3 py-3 w-[120px] text-center whitespace-nowrap">Davomat</th>

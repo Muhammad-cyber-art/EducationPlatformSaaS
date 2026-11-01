@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.db import transaction, models
 from django.db.models import Sum, Q, F, Count
 from django.shortcuts import get_object_or_404
+from django_filters import rest_framework as django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, permissions, filters, status, serializers
 from rest_framework.decorators import action, api_view, permission_classes
@@ -96,6 +97,8 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        if not user or not user.is_authenticated:
+            return Payment.objects.none()
         qs = super().get_queryset()
         if user.role == 'admin':
             allowed_branches = [user.branch_id] if user.branch_id else []
@@ -121,8 +124,10 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             if self.action == 'list':
                 page = self.paginate_queryset(queryset)
                 items = page if page is not None else list(queryset)
-            else:
+            elif self.kwargs.get(getattr(self, 'lookup_url_kwarg', None) or getattr(self, 'lookup_field', None) or 'pk'):
                 items = [self.get_object()]
+            else:
+                items = []
 
             group_months = set()
             for p in items:
@@ -1098,6 +1103,19 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "data": PaymentSerializer(updated_payment).data
             })
 
+class EmployeePaymentFilter(django_filters.FilterSet):
+    employee_role = django_filters.CharFilter(field_name='employee__role')
+    employee_branch = django_filters.NumberFilter(field_name='employee__branch_id')
+
+    class Meta:
+        model = EmployeePayment
+        fields = {
+            'is_paid': ['exact'],
+            'month': ['exact', 'gte', 'lte'],
+            'employee': ['exact'],
+        }
+
+
 class EmployeePaymentViewSet(viewsets.ModelViewSet):
     """Xodimlar maoshlarini boshqarish"""
     queryset = EmployeePayment.objects.select_related('employee', 'employee__branch', 'marked_by').all()
@@ -1106,13 +1124,15 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
     module_name = 'finance'
     
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_paid', 'month', 'employee__role', 'employee__branch']
+    filterset_class = EmployeePaymentFilter
     search_fields = ['employee__first_name', 'employee__last_name', 'employee__username']
     ordering_fields = ['month', 'salary_base']
     ordering = ['-month']
 
     def get_queryset(self):
         user = self.request.user
+        if not user or not user.is_authenticated:
+            return EmployeePayment.objects.none()
         qs = super().get_queryset()
         if user.role == 'admin':
             return qs.filter(employee__branch=user.branch)
@@ -1133,8 +1153,10 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
             if self.action == 'list':
                 page = self.paginate_queryset(queryset)
                 items = page if page is not None else list(queryset)
-            else:
+            elif self.kwargs.get(getattr(self, 'lookup_url_kwarg', None) or getattr(self, 'lookup_field', None) or 'pk'):
                 items = [self.get_object()]
+            else:
+                items = []
 
             if not items:
                 return context
@@ -1216,7 +1238,7 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                             if items and y == items[0].month.year and m == items[0].month.month:
                                 lesson_dates_cache[g.id] = ldates
 
-            # 4. Payments batch
+            # 4. Payments batch (OY BO'YICHA IZOLYATSIYA - oylar aro to'lovlar aralashib ketmasligi uchun)
             payment_conditions = Q()
             for eid, month_str in employee_months:
                 parts = month_str.split('-')
@@ -1225,14 +1247,20 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                 if g_ids:
                     payment_conditions |= Q(group_id__in=g_ids, month=month_date)
 
-            payment_map_global = {}
+            payment_map_by_month = {}  # (y, m) -> {(student_id, group_id): p}
+            payment_map_global = {}    # fallback va composite kalit
             if payment_conditions != Q():
                 for p in Payment.objects.filter(
                     payment_conditions
                 ).select_related('student'):
+                    if p.month:
+                        ym = (p.month.year, p.month.month)
+                        payment_map_by_month.setdefault(ym, {})[(p.student_id, p.group_id)] = p
+                        payment_map_global[(p.student_id, p.group_id, ym[0], ym[1])] = p
                     payment_map_global[(p.student_id, p.group_id)] = p
 
-            # 5. Extra transactions batch
+            # 5. Extra transactions batch (OY BO'YICHA IZOLYATSIYA)
+            extras_map_by_month = {}  # (y, m) -> {(student_id, group_id): Decimal}
             extras_map_global = {}
             if payment_conditions != Q():
                 extra_conditions = Q(category='student_extra')
@@ -1242,10 +1270,18 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                     date_conds |= Q(date__year=int(parts[0]), date__month=int(parts[1]))
                 extra_conditions &= date_conds
                 for tx in FinanceTransaction.objects.filter(extra_conditions).values(
-                    'student_id', 'group_id', 'transaction_type', 'amount'
+                    'student_id', 'group_id', 'transaction_type', 'amount', 'date'
                 ):
                     key = (tx['student_id'], tx['group_id'])
                     amt = Decimal(str(tx['amount'] or 0))
+                    d = tx.get('date')
+                    if d:
+                        ym = (d.year, d.month)
+                        cur_month_map = extras_map_by_month.setdefault(ym, {})
+                        if tx['transaction_type'] == 'income':
+                            cur_month_map[key] = cur_month_map.get(key, Decimal('0')) + amt
+                        else:
+                            cur_month_map[key] = cur_month_map.get(key, Decimal('0')) - amt
                     if tx['transaction_type'] == 'income':
                         extras_map_global[key] = extras_map_global.get(key, Decimal('0')) + amt
                     else:
@@ -1328,6 +1364,8 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
 
             context['employee_prefetch'] = {
                 'employee_groups': employee_groups,
+                'payment_map_by_month': payment_map_by_month,
+                'extras_map_by_month': extras_map_by_month,
                 'payment_map': payment_map_global,
                 'extras_map': extras_map_global,
                 'lesson_dates_cache': lesson_dates_cache,
@@ -1727,6 +1765,22 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
             }
             month_display = f"{month_name_uz.get(payment.month.month, '')} {payment.month.year}" if payment.month else ""
 
+            # Xodimning boshqa to'lov oylari (foydalanuvchi oylar aro qulay o'tishi uchun)
+            other_payments = EmployeePayment.objects.filter(
+                employee_id=payment.employee_id
+            ).order_by('-month')
+
+            available_months = [
+                {
+                    'id': op.id,
+                    'month': str(op.month),
+                    'month_display': f"{month_name_uz.get(op.month.month, '')} {op.month.year}" if op.month else str(op.month),
+                    'is_paid': op.is_paid,
+                    'is_current': op.id == payment.id,
+                }
+                for op in other_payments
+            ]
+
             return Response({
                 'payment_id': payment.id,
                 'employee_id': payment.employee_id,
@@ -1734,6 +1788,7 @@ class EmployeePaymentViewSet(viewsets.ModelViewSet):
                 'employee_role': payment.employee.role,
                 'month': str(payment.month),
                 'month_display': month_display,
+                'available_months': available_months,
                 'salary_type': default_salary_type,
                 'salary_base': float(payment.salary_base or 0),
                 'total_students_count': len(all_paid_students),
@@ -2248,6 +2303,8 @@ class AdminExpenseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        if not user or not user.is_authenticated:
+            return Payment.objects.none()
         qs = super().get_queryset()
         
         # Branch filteri (query param orqali)
