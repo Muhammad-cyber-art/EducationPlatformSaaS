@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../../tokenUpdater/updater";
 import { get_user_info } from "../../Authorized/getRole";
+import { isScheduledLessonDate } from "../../../utils/scheduleUtils";
 import { db, cacheUserMe, getCachedUserMe } from "../../../db/db";
 
 const EMPTY_ARRAY = [];
@@ -155,9 +156,6 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
         try {
           const grp = (await db.groups.get(Number(group_id))) || (await db.groups.get(String(group_id)));
           if (grp) {
-            const days = grp.days;
-            const customDays = Array.isArray(grp.custom_days) ? grp.custom_days.map(Number) : [];
-            const darsKunlari = (grp.dars_kunlari || '').toLowerCase();
             const specialDates = new Set(grp.special_lesson_dates || []);
             const canceledDates = new Set(grp.canceled_lesson_dates || []);
             const startDate = grp.start_date || '';
@@ -172,19 +170,9 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
                 computedDates.push(dStr);
                 continue;
               }
-              const dow = new Date(selectedYear, selectedMonth - 1, day).getDay();
-              if (dow === 0) continue;
-              let isMatch = false;
-              if (days === 'odd' || darsKunlari.includes('dush') || darsKunlari.includes('toq')) {
-                isMatch = [1, 3, 5].includes(dow);
-              } else if (days === 'even' || darsKunlari.includes('sesh') || darsKunlari.includes('juft')) {
-                isMatch = [2, 4, 6].includes(dow);
-              } else if (days === 'everyday' || darsKunlari.includes('har kun')) {
-                isMatch = [1, 2, 3, 4, 5, 6].includes(dow);
-              } else if (days === 'custom' && customDays.length > 0) {
-                isMatch = customDays.includes(dow);
+              if (isScheduledLessonDate(dStr, grp.custom_days, grp.days, grp.dars_kunlari)) {
+                computedDates.push(dStr);
               }
-              if (isMatch) computedDates.push(dStr);
             }
             if (computedDates.length > 0) {
               return computedDates.sort((a, b) => b.localeCompare(a));
@@ -192,8 +180,7 @@ export const useGroupDetails = (group_id, selectedMonth, selectedYear) => {
           }
         } catch (_) {}
 
-        const todayStr = new Date().toLocaleDateString('sv-SE');
-        return [todayStr];
+        return [];
       }
     },
     staleTime: 1000 * 60 * 10,

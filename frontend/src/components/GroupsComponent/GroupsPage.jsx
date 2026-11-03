@@ -14,6 +14,7 @@ import { get_user_info } from"../Authorized/getRole";
 
 // Hooks
 import { useGroupsData } from"./Groups/useGroupsData";
+import { normalizeCustomDays } from "../../utils/scheduleUtils";
 
 // Components
 import GroupsHeader from"./Groups/GroupsHeader";
@@ -90,21 +91,18 @@ export default function GroupsListPage() {
     const search = debouncedSearch?.toLowerCase().trim();
     
     return groupsArr.filter((group) => {
-      // 1. Kunlar bo'yicha filter
+      // 1. Kunlar bo'yicha filter (Senior fix: custom_days ustuvor, qat'iy ajratilgan)
       if (activeTab !== "all") {
-        const customDays = Array.isArray(group.custom_days) && group.custom_days.length > 0
-          ? group.custom_days.map(Number)
-          : (group.days === "even" ? [1, 3, 5] : group.days === "everyday" ? [0, 1, 2, 3, 4, 5] : [0, 2, 4]);
+        const effectiveDays = normalizeCustomDays(group.custom_days, group.days, group.dars_kunlari);
+        const oddCount = effectiveDays.filter(d => [0, 2, 4, 6].includes(d)).length;
+        const evenCount = effectiveDays.filter(d => [1, 3, 5].includes(d)).length;
 
         if (activeTab === "odd") {
-          const isOdd = group.days === "odd" || (customDays.includes(0) && customDays.includes(2) && customDays.includes(4));
-          if (!isOdd) return false;
+          if (effectiveDays.length >= 5 || oddCount === 0 || oddCount < evenCount) return false;
         } else if (activeTab === "even") {
-          const isEven = group.days === "even" || (customDays.includes(1) && customDays.includes(3) && customDays.includes(5));
-          if (!isEven) return false;
+          if (effectiveDays.length >= 5 || evenCount === 0 || evenCount < oddCount) return false;
         } else if (activeTab === "everyday") {
-          const isEveryday = group.days === "everyday" || customDays.length >= 5;
-          if (!isEveryday) return false;
+          if (effectiveDays.length < 5) return false;
         }
       }
 
@@ -112,7 +110,12 @@ export default function GroupsListPage() {
       if (search) {
         const name = (group.name || "").toLowerCase();
         const subject = (group.subject || "").toLowerCase();
-        const mentor = (group.mentor?.full_name || group.mentor?.username || "").toLowerCase();
+        const mentor = (
+          group.mentor?.full_name ||
+          [group.mentor?.first_name, group.mentor?.last_name].filter(Boolean).join(" ") ||
+          group.mentor?.username ||
+          ""
+        ).toLowerCase();
         
         // Agar qidiruv so'zi birorta ham muhim maydonda topilmasa - o'chirib tashlaymiz
         const matches = name.includes(search) || 

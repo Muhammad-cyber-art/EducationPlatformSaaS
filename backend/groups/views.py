@@ -144,14 +144,22 @@ class GroupViewSet(viewsets.ModelViewSet):
                 group_id = att['group_id']
                 if group_id not in attendance_map:
                     attendance_map[group_id] = {
-                        'confirmed': att['marked_by'] is not None,
+                        'total': 0,
+                        'marked': 0,
                         'present': 0,
-                        'absent': 0
+                        'absent': 0,
+                        'confirmed': False
                     }
+                attendance_map[group_id]['total'] += 1
+                if att['marked_by'] is not None:
+                    attendance_map[group_id]['marked'] += 1
                 if att['is_present']:
                     attendance_map[group_id]['present'] += 1
                 else:
                     attendance_map[group_id]['absent'] += 1
+
+            for data in attendance_map.values():
+                data['confirmed'] = data['total'] > 0 and data['marked'] >= (data['total'] * 0.7)
             
             # O'quvchilar sonini dict ga saqlash
             students_count_map = {e['group_id']: e['count'] for e in enrollments}
@@ -163,12 +171,18 @@ class GroupViewSet(viewsets.ModelViewSet):
                 for item in page:
                     try:
                         # Guruh uchun davomatni va o'quvchilar sonini qo'shish
+                        is_today_lesson = item.is_lesson_day(today)
                         item_attendance = attendance_map.get(item.id, {
                             'confirmed': False,
                             'present': 0,
                             'absent': 0
-                        })
+                        }) if is_today_lesson else {
+                            'confirmed': False,
+                            'present': 0,
+                            'absent': 0
+                        }
                         item._attendance_metrics = item_attendance
+                        item._cached_attendance_metrics = item_attendance
                         item._students_count = students_count_map.get(item.id, 0)
                         
                         serializer = self.get_serializer(item)
@@ -184,12 +198,18 @@ class GroupViewSet(viewsets.ModelViewSet):
             for item in queryset:
                 try:
                     # Guruh uchun davomatni va o'quvchilar sonini qo'shish
+                    is_today_lesson = item.is_lesson_day(today)
                     item_attendance = attendance_map.get(item.id, {
                         'confirmed': False,
                         'present': 0,
                         'absent': 0
-                    })
+                    }) if is_today_lesson else {
+                        'confirmed': False,
+                        'present': 0,
+                        'absent': 0
+                    }
                     item._attendance_metrics = item_attendance
+                    item._cached_attendance_metrics = item_attendance
                     item._students_count = students_count_map.get(item.id, 0)
                     
                     serializer = self.get_serializer(item)
@@ -460,21 +480,21 @@ class GroupViewSet(viewsets.ModelViewSet):
         year = int(request.query_params.get('year', today.year))
         month = int(request.query_params.get('month', today.month))
         
-        # 1. Rejadagi dars kunlari + Maxsus dars kunlari
+        # 1. Rejadagi dars kunlari + Maxsus dars kunlari (bekor qilingan kunlar olib tashlangan)
         dates = group.get_lesson_dates(year, month)
         
-        # 2. Rejada bo'lmagan, lekin davomat olingan (tasdiqlangan) kunlarni ham qo'shish
+        # 2. Ushbu oyda tasdiqlangan davomati mavjud bo'lgan barcha sanalar
         from homework_attends.models import Attendance
-        attendance_dates = Attendance.objects.filter(
-            group=group, 
-            date__year=year, 
+        att_dates = list(Attendance.objects.filter(
+            group=group,
+            date__year=year,
             date__month=month,
-            marked_by__isnull=False # Faqat tasdiqlangan davomatlarni olamiz
-        ).values_list('date', flat=True).distinct()
+            marked_by__isnull=False
+        ).values_list('date', flat=True).distinct())
         
-        all_dates = set(dates) | set(attendance_dates)
+        all_dates = set(dates) | set(att_dates)
         
-        # Kelajakdagi dars kunlarini chiqarmaymiz
+        # Kelajakdagi dars kunlarini chiqarmaymiz (faqat bugun va o'tgan sanalar)
         final_dates = [d for d in all_dates if d <= today]
         
         # Eng yangi sanalar birinchi chiqishi uchun teskari tartibda qaytaramiz
@@ -718,9 +738,7 @@ class GroupViewSet(viewsets.ModelViewSet):
             except Exception:
                 dates = []
 
-            attendance_dates = att_dates_by_group.get(group.id, set())
-            all_dates = set(dates) | attendance_dates
-            final_dates = [d.strftime('%Y-%m-%d') for d in sorted(all_dates) if d <= today]
+            final_dates = [d.strftime('%Y-%m-%d') for d in sorted(dates) if d <= today]
             final_dates.reverse()
 
             # 2. Guruhning to'liq ma'lumotlari (GroupSerializer orqali, ortiqcha N+1 so'rovlarsiz)

@@ -63,13 +63,12 @@ export default function PrivilegedStudentsPage() {
   const isSuperAdmin = userInfo?.role === 'super_admin';
 
   const [selectedBranch, setSelectedBranch] = useState(urlBranchId);
+  const [prevUrlBranchId, setPrevUrlBranchId] = useState(urlBranchId);
+  if (urlBranchId && urlBranchId !== prevUrlBranchId) {
+    setPrevUrlBranchId(urlBranchId);
+    setSelectedBranch(urlBranchId);
+  }
   const activeBranchId = isSuperAdmin ? selectedBranch : (userInfo?.branch_id || '');
-
-  useEffect(() => {
-    if (urlBranchId) {
-      setSelectedBranch(urlBranchId);
-    }
-  }, [urlBranchId]);
 
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr());
   const [searchTerm, setSearchTerm] = useState('');
@@ -943,13 +942,13 @@ function EditAttendanceModal({ student, month, isSuperAdmin, onClose, onSuccess 
     },
   });
 
-  // TanStack Query v5 da onSuccess ishlamaydi, shuning uchun useEffect orqali sinxronlaymiz
-  useEffect(() => {
-    if (historyData?.sessions && historyData.sessions.length > 0) {
-      setSessionsOverride(historyData.sessions);
-      setInitialSessions(historyData.sessions);
-    }
-  }, [historyData?.sessions]);
+  // TanStack Query v5 da onSuccess ishlamaydi, shuning uchun render paytida sinxronlaymiz
+  const [prevHistorySessions, setPrevHistorySessions] = useState(null);
+  if (historyData?.sessions && historyData.sessions !== prevHistorySessions) {
+    setPrevHistorySessions(historyData.sessions);
+    setSessionsOverride(historyData.sessions);
+    setInitialSessions(historyData.sessions);
+  }
 
   // Faol dars sessiyalari: tahrirlangan bo'lsa sessionsOverride, aks holda historyData.sessions
   const activeSessions = useMemo(() => {

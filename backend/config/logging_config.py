@@ -1,3 +1,7 @@
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 # Logging Configuration
 LOGGING = {
     'version': 1,
@@ -63,7 +67,6 @@ LOGGING = {
 }
 
 # Logs papkasini yaratish
-import os
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
 if not os.path.exists(LOGS_DIR):
     os.makedirs(LOGS_DIR)

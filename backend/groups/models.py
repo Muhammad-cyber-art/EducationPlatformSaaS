@@ -213,6 +213,20 @@ class Group(models.Model):
             models.Index(fields=["subject"]),
         ]
 
+    def save(self, *args, **kwargs):
+        # custom_days va days (legacy) maydonini doimiy sinxron saqlash
+        try:
+            effective = self._get_effective_days()
+            if effective == [1, 3, 5]:
+                self.days = "even"
+            elif effective == [0, 2, 4]:
+                self.days = "odd"
+            elif len(effective) >= 5:
+                self.days = "everyday"
+        except Exception:
+            pass
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} | Mentor: {self.mentor} | Kun: {self.days_display}"
 

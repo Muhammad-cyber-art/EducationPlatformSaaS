@@ -102,6 +102,17 @@ class AttendanceOfflineService {
 
           // 1. Guruh ma'lumotlarini saqlash
           if (item.group_detail) {
+            // Mentor full_name kafolati (kartochkalarda Tayinlanmagan bo'lib qolmasligi uchun)
+            if (item.group_detail.mentor) {
+              const m = item.group_detail.mentor;
+              if (!m.full_name) {
+                m.full_name =
+                  [m.first_name, m.last_name].filter(Boolean).join(' ').trim() ||
+                  m.username ||
+                  '';
+              }
+            }
+
             const bId = item.group_detail.branch?.id || item.group_detail.branch_id;
             const numBId = bId ? Number(bId) : null;
             await db.groups.put({
@@ -355,9 +366,36 @@ class AttendanceOfflineService {
           const bId = branchKey === 0 ? undefined : branchKey;
           // useInfiniteQuery format: {pages: [...], pageParams: [...]}
           const infiniteData = { pages: [paginatedData], pageParams: [1] };
-          this.queryClient.setQueryData(['groups', bId, ''], infiniteData);
-          this.queryClient.setQueryData(['groups', bId, undefined], infiniteData);
-          this.queryClient.setQueryData(['groups', String(bId || ''), ''], infiniteData);
+
+          const updateGroupsCache = (oldData) => {
+            if (!oldData || !Array.isArray(oldData.pages) || oldData.pages.length === 0) {
+              return infiniteData;
+            }
+            const newMap = new Map(groupsList.map((g) => [Number(g.id), g]));
+            return {
+              ...oldData,
+              pages: oldData.pages.map((page) => ({
+                ...page,
+                results: (page.results || []).map((g) => {
+                  const fresh = newMap.get(Number(g.id));
+                  if (!fresh) return g;
+                  return {
+                    ...g,
+                    ...fresh,
+                    // mentor ma'lumotlarini xavfsiz birlashtirish (full_name yo'qolib ketmasligi uchun)
+                    mentor:
+                      fresh.mentor && (fresh.mentor.full_name || fresh.mentor.first_name)
+                        ? { ...(g.mentor || {}), ...fresh.mentor }
+                        : (g.mentor || fresh.mentor),
+                  };
+                }),
+              })),
+            };
+          };
+
+          this.queryClient.setQueryData(['groups', bId, ''], updateGroupsCache);
+          this.queryClient.setQueryData(['groups', bId, undefined], updateGroupsCache);
+          this.queryClient.setQueryData(['groups', String(bId || ''), ''], updateGroupsCache);
           // db.query_cache ga ham saqlaymiz (useGroupsData offline fallback uchun)
           try {
             await db.query_cache.put({

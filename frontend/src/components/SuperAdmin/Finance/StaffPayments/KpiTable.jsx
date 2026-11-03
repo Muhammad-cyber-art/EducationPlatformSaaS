@@ -54,7 +54,7 @@ const KpiTable = ({
 
 
   // Agar guruhlar bo'lsa, jadvalni ko'rsatamiz (salary_type dan qat'i nazar)
-  if (data.mentor_groups && data.mentor_groups.length > 0) {
+  if (data?.mentor_groups && data.mentor_groups.length > 0) {
     const isSCT = isStudentCountType;
 
     return (

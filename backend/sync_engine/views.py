@@ -75,7 +75,10 @@ class SyncEngineAPIView(APIView):
                                         if 'T' in str(date_str)
                                         else timezone.datetime.strptime(str(date_str), '%Y-%m-%d').date()
                                     )
-                                    bulk_confirm_attendance(group, req_date, attendances_payload, request.user)
+                                    if group.is_lesson_day(req_date):
+                                        bulk_confirm_attendance(group, req_date, attendances_payload, request.user)
+                                    else:
+                                        logger.warning(f"[SyncEngine] Sana guruh dars kuni emas: group={group_id}, date={req_date}")
                                     applied_queue_ids.append(queue_id)
                                 else:
                                     logger.warning(f"[SyncEngine] Guruh topilmadi: {group_id}")

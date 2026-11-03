@@ -146,6 +146,9 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
     student ID lari e'tiborga olinmaydi — bu ularning keyingi hisobotlarda
     yana paydo bo'lib qolishini oldini oladi.
     """
+    if not group.is_lesson_day(requested_date):
+        raise ValueError("Ushbu sana guruh dars jadvaliga to'g'ri kelmaydi. Dars bo'lmagan kunga davomat olib bo'lmaydi.")
+
     from groups.models import GroupEnrollment
 
     # Faqat shu guruhga aloqador yoki mavjud davomat yozuvi bor studentlar qabul qilinadi

@@ -1,14 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Users, Palette, Clock, CalendarDays, Check, X, Loader2, ChevronRight } from "lucide-react";
 import api from "../../../tokenUpdater/updater";
 import toast from "react-hot-toast";
+import { isScheduledLessonDate } from "../../../utils/scheduleUtils";
+
+const getMentorDisplayName = (mentor) => {
+  if (!mentor) return "Tayinlanmagan";
+  if (typeof mentor === "string") return mentor.trim() || "Tayinlanmagan";
+  if (mentor.full_name && mentor.full_name.trim()) return mentor.full_name.trim();
+  const nameParts = [mentor.first_name, mentor.last_name].filter(Boolean).join(" ").trim();
+  if (nameParts) return nameParts;
+  if (mentor.username && mentor.username.trim()) return mentor.username.trim();
+  return "Tayinlanmagan";
+};
 
 const GroupCard = React.memo(({ group, readOnly, currentBranchId }) => {
   const navigate = useNavigate();
   const [colorCh, setColorCh] = useState(false);
   const [selectedColor, setSelectedColor] = useState(group.color || '#b8860b');
   const [loading, setLoading] = useState(false);
+
+  const todayStr = useMemo(() => new Date().toLocaleDateString('sv-SE'), []);
+  const isTodayLessonDay = useMemo(() => {
+    if (Array.isArray(group.special_lesson_dates) && group.special_lesson_dates.includes(todayStr)) return true;
+    if (Array.isArray(group.canceled_lesson_dates) && group.canceled_lesson_dates.includes(todayStr)) return false;
+    return isScheduledLessonDate(todayStr, group.custom_days, group.days, group.dars_kunlari);
+  }, [group, todayStr]);
 
   const saveNewColor = async (e) => {
     e.stopPropagation();
@@ -49,7 +67,11 @@ const GroupCard = React.memo(({ group, readOnly, currentBranchId }) => {
         </span>
       </div>
 
-      {group.today_attendance_confirmed ? (
+      {!isTodayLessonDay ? (
+        <div className="absolute top-4 right-4 z-10 px-2 py-0.5 rounded-md bg-[var(--bg-void)]/40 border border-[var(--border-glass)] shadow-sm flex items-center gap-1" title="Bugun dars kuni emas">
+          <span className="text-[7.5px] font-bold text-[var(--text-muted)] tracking-wider">Dars yo'q</span>
+        </div>
+      ) : group.today_attendance_confirmed ? (
         <div className="absolute top-4 right-4 z-10 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 shadow-sm flex items-center gap-1" title="Bugungi davomat tasdiqlangan">
           <Check size={10} className="text-emerald-500" strokeWidth={3} />
           <span className="text-[8px] font-black text-emerald-500 capitalize tracking-widest">Qilindi</span>
@@ -96,7 +118,7 @@ const GroupCard = React.memo(({ group, readOnly, currentBranchId }) => {
           <div className="grid grid-cols-2 gap-3 sm:gap-4 py-4 sm:py-5 border-y border-[var(--border-glass)]">
             <div>
               <p className="text-[8px] sm:text-[9px] font-black text-[var(--text-muted)] capitalize tracking-widest mb-1 sm:mb-1.5">O'qituvchi</p>
-              <p className="text-[11px] sm:text-[12px] font-bold text-[var(--text-primary)] truncate">{group.mentor?.full_name || 'Tayinlanmagan'}</p>
+              <p className="text-[11px] sm:text-[12px] font-bold text-[var(--text-primary)] truncate">{getMentorDisplayName(group.mentor)}</p>
             </div>
             <div className="text-right">
               <p className="text-[8px] sm:text-[9px] font-black text-[var(--text-muted)] capitalize tracking-widest mb-1 sm:mb-1.5">O'quvchilar</p>

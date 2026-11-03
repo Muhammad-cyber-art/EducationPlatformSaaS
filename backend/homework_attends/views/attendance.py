@@ -63,6 +63,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
        has_full_attendance = self._user_has_full_attendance(self.request.user)
        within_1_month = has_full_attendance and (today - timedelta(days=30) <= requested_date <= today)
        view_only = is_past_month and (requested_date not in last_3_dates) and not within_1_month
+       if not group.is_lesson_day(requested_date) or not group.is_logic_enabled():
+           view_only = True
        return get_or_create_attendance_records(group, requested_date, view_only=view_only)
 
     @action(detail=False, methods=['get'])
@@ -82,6 +84,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         # 1. Update existing record
         if attendance_id is not None:
             instance = get_object_or_404(Attendance, id=attendance_id)
+            if not instance.group.is_lesson_day(instance.date):
+                return Response(
+                    {"detail": "Ushbu sana guruh dars jadvaliga to'g'ri kelmaydi. Dars bo'lmagan kunga davomat olib bo'lmaydi."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             if request.user.is_authenticated and not self._user_can_access_group(request.user, instance.group):
                 return Response({"detail": "Sizda ushbu guruh davomatini tahrirlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -122,6 +129,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Sana formati noto'g'ri (YYYY-MM-DD)"}, status=status.HTTP_400_BAD_REQUEST)
 
         group = get_object_or_404(Group, id=group_id)
+        if not group.is_lesson_day(requested_date):
+            return Response({"detail": "Ushbu sana guruh dars jadvaliga to'g'ri kelmaydi."}, status=status.HTTP_400_BAD_REQUEST)
         if request.user.is_authenticated and not self._user_can_access_group(request.user, group):
             return Response({"detail": "Sizda ushbu guruh davomatini tahrirlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
         
@@ -182,6 +191,13 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if request.user.is_authenticated and not self._user_can_access_group(request.user, group):
             return Response({"detail": "Sizda ushbu guruh davomatini tasdiqlash huquqi yo'q"}, status=status.HTTP_403_FORBIDDEN)
         
+        # Dars kuni tekshiruvi: faqat guruh dars jadvaliga to'g'ri keladigan sanalarga davomat olinadi
+        if not group.is_lesson_day(requested_date):
+            return Response(
+                {"detail": "Ushbu sana guruh dars jadvaliga to'g'ri kelmaydi. Dars bo'lmagan kunga davomat olib bo'lmaydi."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Ruxsat etilgan sanalar: Bugun, yoki oxirgi 3 ta dars, yoki to'liq davomat huquqi bo'lsa 1 oy
         today = timezone.localdate()
         if requested_date != today:
@@ -193,7 +209,6 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             within_1_month = has_full_attendance and (today - timedelta(days=30) <= requested_date <= today)
             if requested_date not in last_3_dates and not (is_early_morning and is_yesterday) and not within_1_month:
                 return Response({"detail": f"Faqat bugungi yoki oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin."}, status=status.HTTP_400_BAD_REQUEST)
-
 
         try:
             queryset = bulk_confirm_attendance(group, requested_date, attendances_payload, request.user)

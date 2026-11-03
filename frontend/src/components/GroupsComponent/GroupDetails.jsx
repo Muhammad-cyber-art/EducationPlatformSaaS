@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import { useCurrentBranch } from "../Authorized/useBranchId";
 import { useGroupDetails } from "./GroupDetails/useGroupDetails";
 import { useAttendance } from "./GroupDetails/useAttendance";
-import { normalizeCustomDays, formatDaysDisplay } from "../../utils/scheduleUtils";
+import { normalizeCustomDays, formatDaysDisplay, isScheduledLessonDate } from "../../utils/scheduleUtils";
 
 // Sub-components
 import GroupHeader from "./GroupDetails/GroupHeader";
@@ -262,25 +262,41 @@ export default function GroupDetailPage() {
     setSelectedYear(now.getFullYear());
   }, [setSelectedMonth, setSelectedYear]);
 
+  // Dars kuni ekanligini mukammal tekshirish
+  const checkIsLessonDay = useCallback((dateStr) => {
+    if (!dateStr) return false;
+    if (Array.isArray(groupinfo?.canceled_lesson_dates) && groupinfo.canceled_lesson_dates.includes(dateStr)) return false;
+    if (Array.isArray(groupinfo?.special_lesson_dates) && groupinfo.special_lesson_dates.includes(dateStr)) return true;
+    if (Array.isArray(lessonDates) && lessonDates.includes(dateStr)) return true;
+    if (Array.isArray(groupinfo?.last_3_lesson_dates) && groupinfo.last_3_lesson_dates.includes(dateStr)) return true;
+
+    return isScheduledLessonDate(dateStr, groupinfo?.custom_days, groupinfo?.days, groupinfo?.dars_kunlari);
+  }, [groupinfo, lessonDates]);
+
   const availableDates = useMemo(() => {
-    if (!lessonDates) return [todayStr];
-    let dates = [...lessonDates];
-    // Faqat joriy oy uchun bugungi kunni qo'shamiz
-    if (isCurrentMonth && !dates.includes(todayStr)) {
-      dates = [todayStr, ...dates].sort((a, b) => b.localeCompare(a));
-    } else if (!isCurrentMonth) {
-      // O'tgan oylar uchun: eskidan yangiga tartiblash
-      dates.sort((a, b) => a.localeCompare(b));
+    if (!lessonDates || lessonDates.length === 0) {
+      // Faqat bugun haqiqatdan ham dars kuni bo'lsa bugunni chiqaramiz
+      return isCurrentMonth && checkIsLessonDay(todayStr) ? [todayStr] : [];
     }
+    let dates = [...lessonDates];
+    // Faqat bugun haqiqiy dars kuni bo'lsa va ro'yxatda bo'lmasa qo'shamiz
+    if (isCurrentMonth && checkIsLessonDay(todayStr) && !dates.includes(todayStr)) {
+      dates = [todayStr, ...dates];
+    }
+    // Barcha oylarda sanalar bir xil mantiqda — eng yangi dars sanalari birinchi (kamayish tartibida) ko'rsatiladi
+    dates.sort((a, b) => b.localeCompare(a));
     return dates;
-  }, [lessonDates, todayStr, isCurrentMonth]);
+  }, [lessonDates, todayStr, isCurrentMonth, checkIsLessonDay]);
 
   // Oy o'zgarganda selectedDate'ni moslash
   useEffect(() => {
     if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
-      uiDispatch({ type: "SET_FIELD", field: "selectedDate", value: availableDates[0] });
+      const targetDate = (isCurrentMonth && availableDates.includes(todayStr))
+        ? todayStr
+        : availableDates[0];
+      uiDispatch({ type: "SET_FIELD", field: "selectedDate", value: targetDate });
     }
-  }, [availableDates, selectedDate]);
+  }, [availableDates, selectedDate, isCurrentMonth, todayStr]);
 
   const filteredStudents = useMemo(() => {
     const search = studentSearch.trim().toLowerCase();
@@ -312,37 +328,11 @@ export default function GroupDetailPage() {
     return pastDates.sort((a, b) => b.localeCompare(a)).slice(0, 3);
   }, [groupinfo?.last_3_lesson_dates, lessonDates, todayStr_actual]);
 
+  const isCanceledDay = Boolean(Array.isArray(groupinfo?.canceled_lesson_dates) && groupinfo.canceled_lesson_dates.includes(selectedDate));
+
   const isLessonDay = useMemo(() => {
-    if (!selectedDate) return false;
-    if (Array.isArray(groupinfo?.canceled_lesson_dates) && groupinfo.canceled_lesson_dates.includes(selectedDate)) return false;
-    if (Array.isArray(groupinfo?.special_lesson_dates) && groupinfo.special_lesson_dates.includes(selectedDate)) return true;
-    if (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) return true;
-    if (last3EditableDates.includes(selectedDate)) return true;
-
-    // Guruh jadvali bo'yicha oflayn tekshirish
-    const [y, m, d] = selectedDate.split('-').map(Number);
-    if (!y || !m || !d) return false;
-    const dayOfWeek = new Date(y, m - 1, d).getDay();
-    if (dayOfWeek === 0) return false;
-
-    const days = groupinfo?.days;
-    const customDays = Array.isArray(groupinfo?.custom_days) ? groupinfo.custom_days.map(Number) : [];
-    const darsKunlari = (groupinfo?.dars_kunlari || '').toLowerCase();
-
-    if (days === 'odd' || darsKunlari.includes('dush') || darsKunlari.includes('toq')) {
-      return [1, 3, 5].includes(dayOfWeek);
-    }
-    if (days === 'even' || darsKunlari.includes('sesh') || darsKunlari.includes('juft')) {
-      return [2, 4, 6].includes(dayOfWeek);
-    }
-    if (days === 'everyday' || darsKunlari.includes('har kun')) {
-      return [1, 2, 3, 4, 5, 6].includes(dayOfWeek);
-    }
-    if (days === 'custom' && customDays.length > 0) {
-      return customDays.includes(dayOfWeek);
-    }
-    return false;
-  }, [selectedDate, groupinfo, lessonDates, last3EditableDates]);
+    return checkIsLessonDay(selectedDate);
+  }, [checkIsLessonDay, selectedDate]);
 
   const oneMonthAgo = new Date();
   oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
@@ -350,7 +340,8 @@ export default function GroupDetailPage() {
 
   // Mentorlar va Adminlar uchun oxirgi 3 ta o'tilgan dars yoki bugungi dars davomatini tahrirlash huquqi
   // To'liq davomat huquqiga ega adminlar va super adminlar uchun oxirgi 1 oylik davomatni tahrirlash huquqi
-  const canEditAttendance = isLessonDay && permissions.canTakeAttendance && isGroupLogicActive && (
+  // Dars kuni bo'lmaganda yoki bekor qilinganda davomat olish butunlay cheklanadi
+  const canEditAttendance = isLessonDay && !isCanceledDay && permissions.canTakeAttendance && isGroupLogicActive && (
     selectedDate === todayStr_actual ||
     (currentHour < 4 && selectedDate === yesterdayStr) ||
     last3EditableDates.includes(selectedDate) ||

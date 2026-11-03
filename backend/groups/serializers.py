@@ -15,7 +15,7 @@ User = get_user_model()
 
 def _safe_attendance_metrics(group):
     """Attendance jadvali yoki query xato bersa ham serializer yiqilmasin."""
-    cached = getattr(group, '_cached_attendance_metrics', None)
+    cached = getattr(group, '_cached_attendance_metrics', None) or getattr(group, '_attendance_metrics', None)
     if cached is not None:
         return cached
     try:
@@ -23,9 +23,19 @@ def _safe_attendance_metrics(group):
         from homework_attends.models import Attendance
 
         today = timezone.localdate()
+        if not group.is_lesson_day(today):
+            metrics = {"confirmed": False, "present": 0, "absent": 0}
+            try:
+                group._cached_attendance_metrics = metrics
+            except Exception:
+                pass
+            return metrics
+
         qs = Attendance.objects.filter(group=group, date=today)
+        total = qs.count()
+        marked = qs.filter(marked_by__isnull=False).count()
         metrics = {
-            "confirmed": qs.filter(marked_by__isnull=False).exists(),
+            "confirmed": total > 0 and marked >= (total * 0.7),
             "present": qs.filter(is_present=True).count(),
             "absent": qs.filter(is_present=False).count(),
         }
@@ -513,6 +523,7 @@ class MentorNestedSerializer(serializers.ModelSerializer):
     )
 
     # Yangi maydonlar
+    full_name = serializers.SerializerMethodField()
     accessible_branches = serializers.SerializerMethodField()
     mentor_groups = serializers.SerializerMethodField()
 
@@ -523,6 +534,7 @@ class MentorNestedSerializer(serializers.ModelSerializer):
             "username",
             "first_name",
             "last_name",
+            "full_name",
             "subject",
             "phone_number",
             "is_active",
@@ -533,9 +545,20 @@ class MentorNestedSerializer(serializers.ModelSerializer):
             "mentor_groups",
         )
 
+    @extend_schema_field(serializers.CharField())
+    def get_full_name(self, obj) -> str:
+        """To'liq ism-familiyani qaytaradi"""
+        if obj.first_name and obj.last_name:
+            return f"{obj.first_name} {obj.last_name}".strip()
+        if obj.first_name:
+            return obj.first_name.strip()
+        return obj.username or ""
+
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_accessible_branches(self, obj) -> list:
         """Mentorga ruxsat berilgan qo'shimcha filiallar ro'yxati"""
+        if self.context.get("exclude_heavy_fields") is True:
+            return []
         try:
             # related_name='branch_accesses' ekanligiga ishonch hosil qiling
             accesses = obj.branch_accesses.all().select_related("branch")
@@ -549,6 +572,8 @@ class MentorNestedSerializer(serializers.ModelSerializer):
     @extend_schema_field(GroupSimpleSerializer(many=True))
     def get_mentor_groups(self, obj) -> list:
         """Guruhlarni birlashtirish va branch_id bo'yicha filterlash"""
+        if self.context.get("exclude_heavy_fields") is True:
+            return []
         request = self.context.get("request")
         # URL orqali kelgan branch_id (?branch_id=1)
         active_branch_id = request.query_params.get("branch_id") if request else None
@@ -744,6 +769,7 @@ class GroupSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "group_type",
+            "is_faol",
             "monthly_price",
             "branch",
             "branch_id",

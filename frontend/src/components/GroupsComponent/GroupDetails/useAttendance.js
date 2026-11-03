@@ -188,7 +188,12 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
 
   const isAttendanceConfirmed = useMemo(() => {
     const attendanceArray = Array.isArray(attendanceData) ? attendanceData : [];
-    return attendanceArray.some((a) => a.marked_by !== null && a.marked_by !== undefined);
+    if (attendanceArray.length === 0) return false;
+    const markedCount = attendanceArray.filter(
+      (a) => a.marked_by !== null && a.marked_by !== undefined
+    ).length;
+    // Barcha yoki ko'pchilik (>=70%) o'quvchilar tasdiqlangandagina TAYYOR deb hisoblanadi
+    return markedCount > 0 && markedCount >= Math.ceil(attendanceArray.length * 0.7);
   }, [attendanceData]);
 
   // 3. Tasdiqlash (Local-First Architecture):
@@ -196,6 +201,12 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
   // 2-qadam: Har doim Dexie va Outbox ga yozish (Ma'lumot yo'qolishiga mutlaqo yo'l qo'yilmaydi)
   // 3-qadam: Agar onlayn bo'lsa serverga yuborish, server xato bersa ham navbatda saqlab qolish
   const handleConfirmAttendance = async (isLessonDay = true) => {
+    // Dars bo'lmagan kunda davomat olishni qat'iy cheklash
+    if (!isLessonDay) {
+      toast.error("Bu kun guruh jadvalida dars kuni emas! Dars bo'lmagan kunga davomat olib bo'lmaydi.");
+      return;
+    }
+
     // 1. O'quvchilarni olish va dublikatlardan tozalash
     const uniqueStudentsMap = new Map();
     (groupStudents || []).forEach((s) => {
@@ -251,6 +262,28 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
     queryClient.setQueryData(['attendance', String(group_id), selectedDate], optimisticConfirmedList);
     queryClient.setQueryData(['attendance', Number(group_id), selectedDate], optimisticConfirmedList);
 
+    const todayStrActual = new Date().toLocaleDateString('sv-SE');
+    if (selectedDate === todayStrActual) {
+      // Guruhlar ro'yxatida (GroupCard) davomat holatini darhol optimistik 'Qilindi' ga o'tkazish (0ms)
+      queryClient.setQueriesData({ queryKey: ['groups'] }, (old) => {
+        if (!old) return old;
+        const updateGrp = (g) => Number(g.id) === Number(group_id) ? { ...g, today_attendance_confirmed: true } : g;
+        if (old.pages && Array.isArray(old.pages)) {
+          return {
+            ...old,
+            pages: old.pages.map((p) => ({
+              ...p,
+              results: Array.isArray(p.results) ? p.results.map(updateGrp) : p.results,
+            })),
+          };
+        }
+        if (Array.isArray(old)) return old.map(updateGrp);
+        if (old.results && Array.isArray(old.results)) return { ...old, results: old.results.map(updateGrp) };
+        return old;
+      });
+      db.groups.update(Number(group_id), { today_attendance_confirmed: true }).catch(() => {});
+    }
+
     // 2. Har doim birinchi bo'lib lokal Dexie va Outbox ga yozamiz (Local-First Guarantee)
     try {
       await queueAttendanceConfirm(group_id, selectedDate, attendances, userAudit);
@@ -302,6 +335,9 @@ export const useAttendance = (group_id, selectedDate, groupStudents, userData) =
 
       toast.success("Davomat muvaffaqiyatli saqlandi.", { id: tId });
       await refetchAttends();
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['group-detail', String(group_id)] });
+      queryClient.invalidateQueries({ queryKey: ['group-detail', Number(group_id)] });
     } catch (err) {
       // Serverda 500 yoki aloqa xatosi bo'lsa ham — lokal bazada va outbox navbatida allaqachon saqlangan!
       console.warn("[Attendance] Online confirm failed, kept in outbox queue:", err);

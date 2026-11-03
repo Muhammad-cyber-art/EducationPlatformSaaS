@@ -6,6 +6,7 @@ import api from "../../../tokenUpdater/updater";
 import toast from "react-hot-toast";
 import GroupsStudent from "../GrupsStudent";
 import AddSpecialLessonModal from "./AddSpecialLessonModal";
+import { isScheduledLessonDate } from "../../../utils/scheduleUtils";
 
 const MONTH_NAMES = [
   'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
@@ -76,29 +77,12 @@ const AttendanceSection = ({
     if (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) return true;
     if (Array.isArray(groupinfo?.last_3_lesson_dates) && groupinfo.last_3_lesson_dates.includes(selectedDate)) return true;
 
-    // Guruh jadvali bo'yicha oflayn tekshirish
-    const [y, m, d] = selectedDate.split('-').map(Number);
-    if (!y || !m || !d) return false;
-    const dayOfWeek = new Date(y, m - 1, d).getDay(); // 0 = Yakshanba, 1 = Dushanba, ..., 6 = Shanba
-    if (dayOfWeek === 0) return false;
-
-    const days = groupinfo?.days;
-    const customDays = Array.isArray(groupinfo?.custom_days) ? groupinfo.custom_days.map(Number) : [];
-    const darsKunlari = (groupinfo?.dars_kunlari || '').toLowerCase();
-
-    if (days === 'odd' || darsKunlari.includes('dush') || darsKunlari.includes('toq')) {
-      return [1, 3, 5].includes(dayOfWeek);
-    }
-    if (days === 'even' || darsKunlari.includes('sesh') || darsKunlari.includes('juft')) {
-      return [2, 4, 6].includes(dayOfWeek);
-    }
-    if (days === 'everyday' || darsKunlari.includes('har kun')) {
-      return [1, 2, 3, 4, 5, 6].includes(dayOfWeek);
-    }
-    if (days === 'custom' && customDays.length > 0) {
-      return customDays.includes(dayOfWeek);
-    }
-    return false;
+    return isScheduledLessonDate(
+      selectedDate,
+      groupinfo?.custom_days,
+      groupinfo?.days,
+      groupinfo?.dars_kunlari
+    );
   }, [selectedDate, canceledDates, specialDates, lessonDates, groupinfo]);
 
   // Close mobile menu when clicking outside
@@ -286,9 +270,21 @@ const AttendanceSection = ({
           <div className="min-w-0 flex-1">
             <h3 className="text-sm sm:text-xl font-bold text-[var(--text-primary)] capitalize tracking-tight flex items-center gap-1.5 sm:gap-2 truncate">
               <span>Davomat</span>
-              {isAttendanceConfirmed && (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.1)] shrink-0">
+              {!isLessonDay ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-zinc-500/10 border border-zinc-500/20 text-[var(--text-muted)] text-[8px] font-black tracking-widest flex items-center gap-1 shrink-0">
+                  DARS YO'Q
+                </span>
+              ) : isCanceledDay ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[8px] font-black tracking-widest flex items-center gap-1 shrink-0">
+                  BEKOR QILINGAN
+                </span>
+              ) : isAttendanceConfirmed ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.1)] shrink-0">
                   <Check size={10} strokeWidth={3} /> TAYYOR
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[8px] font-black tracking-widest flex items-center gap-1 shrink-0">
+                  OLINMAGAN
                 </span>
               )}
             </h3>
@@ -311,7 +307,7 @@ const AttendanceSection = ({
               </button>
             )}
 
-            {canTakeAttendance && !isCanceledDay && (
+            {canTakeAttendance && isLessonDay && !isCanceledDay && (
               <button
                 onClick={handleCancelLesson}
                 disabled={loadingAction}
@@ -350,13 +346,13 @@ const AttendanceSection = ({
           
           {/* Mobile buttons - show confirm and 3 dots */}
           <div className="flex sm:hidden items-center gap-1.5 shrink-0">
-            {canEditAttendance && (
+            {canEditAttendance && isLessonDay && !isCanceledDay && (
               <button
                 onClick={() => handleConfirmAttendance(isLessonDay)}
                 className="flex items-center justify-center px-3 h-9 bg-[var(--gold)] text-white rounded-xl font-black text-[9px] uppercase tracking-wider transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)] shrink-0"
-                title="Tayyor"
+                title={isAttendanceConfirmed ? "Davomatni saqlash" : "Davomatni tasdiqlash"}
               >
-                <Check size={14} strokeWidth={3} /> <span className="ml-1.5">Tayyor</span>
+                <Check size={14} strokeWidth={3} /> <span className="ml-1.5">{isAttendanceConfirmed ? "Saqlash" : "Tasdiqlash"}</span>
               </button>
             )}
             
@@ -372,13 +368,13 @@ const AttendanceSection = ({
           </div>
           
           {/* Desktop confirm button (separate so it's always visible on desktop) */}
-          {canEditAttendance && (
+          {canEditAttendance && isLessonDay && !isCanceledDay && (
             <button
               onClick={() => handleConfirmAttendance(isLessonDay)}
               className="hidden sm:flex items-center justify-center px-6 h-11 bg-[var(--gold)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
-              title="Tayyor"
+              title={isAttendanceConfirmed ? "Davomatni saqlash" : "Davomatni tasdiqlash"}
             >
-              <Check size={20} strokeWidth={3} /> <span className="ml-2">Tayyor</span>
+              <Check size={20} strokeWidth={3} /> <span className="ml-2">{isAttendanceConfirmed ? "Saqlash" : "Tasdiqlash"}</span>
             </button>
           )}
         </div>
@@ -406,7 +402,7 @@ const AttendanceSection = ({
             </button>
           )}
           
-          {canTakeAttendance && !isCanceledDay && (
+          {canTakeAttendance && isLessonDay && !isCanceledDay && (
             <button
               onClick={() => {
                 handleCancelLesson();
@@ -567,6 +563,7 @@ const AttendanceSection = ({
           groupId={group_id}
           selectedDate={selectedDate}
           isLessonDay={isLessonDay}
+          isCanceledDay={isCanceledDay}
           mode="card"
           currentBranchId={branchID}
           markedStudents={markedStudents}
@@ -613,6 +610,7 @@ const AttendanceSection = ({
               groupId={group_id}
               selectedDate={selectedDate}
               isLessonDay={isLessonDay}
+              isCanceledDay={isCanceledDay}
               mode="table"
               currentBranchId={branchID}
               markedStudents={markedStudents}

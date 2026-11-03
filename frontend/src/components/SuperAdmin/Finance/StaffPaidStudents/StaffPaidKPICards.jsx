@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { formatCurrency, roundNumber } from "./shared";
 
-const StaffPaidKPICards = React.memo(({ pageData, filteredStudentsLength, filteredTotals }) => {
-  const attendanceRate = filteredTotals.planned > 0
-    ? roundNumber((filteredTotals.attended / filteredTotals.planned) * 100, 1)
+const StaffPaidKPICards = React.memo(({ pageData, filteredStudentsLength = 0, filteredTotals = {} }) => {
+  const attendanceRate = (filteredTotals?.planned || 0) > 0
+    ? roundNumber(((filteredTotals.attended || 0) / filteredTotals.planned) * 100, 1)
     : 0;
 
   const showDavlatPuliBanner = (pageData?.total_estimated_state_receivable > 0 || filteredTotals.estimatedStateReceivable > 0);

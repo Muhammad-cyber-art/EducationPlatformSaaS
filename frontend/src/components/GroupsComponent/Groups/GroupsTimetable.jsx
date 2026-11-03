@@ -41,7 +41,11 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
     const map = new Map();
     groups.forEach((g) => {
       if (g.mentor && g.mentor.id) {
-        map.set(g.mentor.id, g.mentor.full_name || g.mentor.username);
+        const mName =
+          g.mentor.full_name ||
+          [g.mentor.first_name, g.mentor.last_name].filter(Boolean).join(" ").trim() ||
+          g.mentor.username;
+        map.set(g.mentor.id, mName);
       }
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
@@ -336,21 +340,23 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
                             </span>
                           </div>
 
-                          {group.today_attendance_confirmed ? (
-                            <span
-                              className="text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-0.5"
-                              title="Davomat olingan"
-                            >
-                              <Check size={8} strokeWidth={3} /> Qilindi
-                            </span>
-                          ) : (
-                            <span
-                              className="text-[8px] font-black px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-0.5"
-                              title="Davomat olinmagan"
-                            >
-                              <X size={8} strokeWidth={3} /> Olinmagan
-                            </span>
-                          )}
+                          {isToday ? (
+                            group.today_attendance_confirmed ? (
+                              <span
+                                className="text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-0.5"
+                                title="Bugungi davomat olingan"
+                              >
+                                <Check size={8} strokeWidth={3} /> Qilindi
+                              </span>
+                            ) : (
+                              <span
+                                className="text-[8px] font-black px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-0.5"
+                                title="Bugungi davomat olinmagan"
+                              >
+                                <X size={8} strokeWidth={3} /> Olinmagan
+                              </span>
+                            )
+                          ) : null}
                         </div>
 
                         {/* Guruh nomi */}
@@ -367,7 +373,12 @@ export default function GroupsTimetable({ groups = [], currentBranchId, readOnly
                         <div className="pl-1.5 pt-2 border-t border-[var(--border-glass)] flex items-center justify-between text-[10px]">
                           <span className="text-[var(--text-secondary)] truncate flex items-center gap-1 font-medium max-w-[120px]">
                             <GraduationCap size={11} className="text-[var(--text-muted)] shrink-0" />
-                            <span className="truncate">{group.mentor?.full_name || "O'qituvchi yo'q"}</span>
+                            <span className="truncate">
+                              {group.mentor?.full_name ||
+                                [group.mentor?.first_name, group.mentor?.last_name].filter(Boolean).join(" ").trim() ||
+                                group.mentor?.username ||
+                                "O'qituvchi yo'q"}
+                            </span>
                           </span>
 
                           <span className="text-[var(--text-primary)] font-bold flex items-center gap-1 shrink-0">

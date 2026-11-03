@@ -21,8 +21,9 @@ export const LEGACY_DAYS_MAP = {
 
 /**
  * Normalizes any day representation into a sorted list of integer weekday indices (0-6).
+ * Python standard: 0 = Dushanba (Monday) ... 6 = Yakshanba (Sunday)
  */
-export function normalizeCustomDays(customDays, legacyDays) {
+export function normalizeCustomDays(customDays, legacyDays, darsKunlari = "") {
   if (Array.isArray(customDays) && customDays.length > 0) {
     const valid = customDays
       .map(Number)
@@ -34,6 +35,17 @@ export function normalizeCustomDays(customDays, legacyDays) {
 
   if (typeof legacyDays === "string" && LEGACY_DAYS_MAP[legacyDays]) {
     return LEGACY_DAYS_MAP[legacyDays];
+  }
+
+  const text = `${darsKunlari || ""} ${typeof legacyDays === "string" ? legacyDays : ""}`.toLowerCase();
+  if (text.includes("juft") || text.includes("sesh")) {
+    return [1, 3, 5]; // Seshanba, Payshanba, Shanba
+  }
+  if (text.includes("har kun") || text.includes("everyday")) {
+    return [0, 1, 2, 3, 4, 5]; // Du-Shan
+  }
+  if (text.includes("toq") || text.includes("dush")) {
+    return [0, 2, 4]; // Dushanba, Chorshanba, Juma
   }
 
   return [0, 2, 4]; // Default: Du, Chor, Ju
@@ -100,11 +112,11 @@ export function formatDaysDisplay(customDays, full = false) {
 /**
  * Checks if a specific date (YYYY-MM-DD or Date object) is a scheduled lesson day.
  */
-export function isScheduledLessonDate(dateVal, customDays) {
+export function isScheduledLessonDate(dateVal, customDays, legacyDays = null, darsKunlari = "") {
   if (!dateVal) return false;
   const d = typeof dateVal === "string" ? new Date(dateVal + "T00:00:00") : dateVal;
   if (isNaN(d.getTime())) return false;
   const pyDay = jsToPythonWeekday(d.getDay());
-  const normalized = normalizeCustomDays(customDays);
+  const normalized = normalizeCustomDays(customDays, legacyDays, darsKunlari);
   return normalized.includes(pyDay);
 }
