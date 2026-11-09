@@ -5,11 +5,12 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status, permissions, filters
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import APIException
 
 from .models import (
     Group, Student, MentorGroupAssignment, 
@@ -1042,6 +1043,48 @@ class StudentViewSet(viewsets.ModelViewSet):
             })
 
         return Response(data)
+
+    @action(detail=False, methods=['post'], url_path='import-file',
+            parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def import_file(self, request):
+        """
+        Excel (.xlsx, .csv) yoki Rasm (skrinshot / kamera) orqali o'quvchilarni import qilish.
+        """
+        from .importer import (
+            MAX_FILE_BYTES, extract_students, import_student_rows, resolve_import_target,
+        )
+        try:
+            # Resolve and authorize the actual group BEFORE expensive file decoding.
+            branch, group = resolve_import_target(
+                request.user, request.data.get('branch_id', request.data.get('branch')),
+                request.data.get('group_id', request.data.get('group')),
+            )
+            mode = request.data.get('mode', 'import')
+            if not isinstance(mode, str) or mode not in {'preview', 'import', 'confirm'}:
+                raise ValueError('Noto‘g‘ri import amali.')
+            if mode == 'confirm':
+                rows = request.data.get('students')
+            else:
+                uploaded_file = request.FILES.get('file')
+                if not uploaded_file:
+                    raise ValueError('Excel yoki rasm faylini yuboring.')
+                if uploaded_file.size > MAX_FILE_BYTES:
+                    raise ValueError('Fayl hajmi 10 MB dan oshmasligi kerak.')
+                rows = extract_students(uploaded_file.read(MAX_FILE_BYTES + 1), uploaded_file.name)
+            if mode == 'preview':
+                return Response({'students': rows, 'total_found': len(rows),
+                                 'branch_id': branch.pk, 'group_id': group.pk if group else None})
+            # A completed batch always returns its row-level results, even if all
+            # rows failed. Transport/parser errors use 4xx instead.
+            return Response(import_student_rows(rows, branch, group, request))
+        except APIException:
+            raise
+        except ValueError as exc:
+            return Response({'error': str(exc), 'success': False}, status=400)
+        except Exception:
+            logger.exception('Student file import failed')
+            return Response({'error': 'Faylni qayta ishlashda xatolik. Qayta urinib ko‘ring.',
+                             'success': False}, status=500)
 
     def destroy(self, request, *args, **kwargs):
         student = self.get_object()

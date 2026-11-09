@@ -185,7 +185,7 @@ export async function cleanupOldDrafts(maxAgeDays = 7) {
 
 /**
  * sync_queue dagi "failed" (5 martadan ko'p urinilgan) yozuvlarni tozalash.
- * Default: 7 kundan eski failed yozuvlar o'chiriladi.
+ * Only explicitly resolved failures may be removed; unacknowledged work is retained.
  */
 export async function cleanupDeadLetterQueue(maxAgeDays = 7) {
   try {
@@ -196,7 +196,7 @@ export async function cleanupDeadLetterQueue(maxAgeDays = 7) {
     const deadLetters = await db.sync_queue
       .where('status')
       .equals('failed')
-      .filter((item) => item.created_at < cutoffIso)
+      .filter((item) => item.resolved_at && item.resolved_at < cutoffIso)
       .toArray();
 
     if (deadLetters.length > 0) {

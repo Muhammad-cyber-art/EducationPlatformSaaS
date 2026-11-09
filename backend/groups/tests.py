@@ -136,3 +136,43 @@ class GroupAPITests(APITestCase):
         url = reverse('student-detail', kwargs={'pk': student.pk})
         response = self.client.delete(url, {'reason': 'Test delete'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+
+    def test_import_file_csv_success(self):
+        """CSV fayl orqali o'quvchilarni muvaffaqiyatli import qilish testi"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_authenticate(user=self.super_admin)
+        url = reverse('student-import-file')
+
+        csv_data = "Ism,Familiya,Telefon\nAlisher,Navoiy,+998 (90) 111-22-33\nBobur,Zahiriddin,998912345678\n"
+        uploaded_file = SimpleUploadedFile("students.csv", csv_data.encode('utf-8'), content_type="text/csv")
+
+        response = self.client.post(url, {'file': uploaded_file, 'branch_id': self.branch1.id}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['created_count'], 2)
+        # Student.save() telefonni 9 xonali qilib saqlaydi (masalan: 901112233)
+        self.assertTrue(Student.objects.filter(phone__in=["+998901112233", "901112233"]).exists())
+        self.assertTrue(Student.objects.filter(phone__in=["+998912345678", "912345678"]).exists())
+
+    def test_import_file_duplicate_and_invalid(self):
+        """Dublikat va noto'g'ri telefonli qatorlar failed_students ga tushishi kerak"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        # Oldindan 1 ta o'quvchi yaratamiz
+        Student.objects.create(full_name="Mavjud Talaba", phone="+998901234567", branch=self.branch1)
+
+        self.client.force_authenticate(user=self.super_admin)
+        url = reverse('student-import-file')
+
+        csv_data = "Ism,Familiya,Telefon\nEski,Talaba,+998901234567\nNoma'lum,Xato,12345\nYangi,O'quvchi,935556677\n"
+        uploaded_file = SimpleUploadedFile("mixed.csv", csv_data.encode('utf-8'), content_type="text/csv")
+
+        response = self.client.post(url, {'file': uploaded_file, 'branch_id': self.branch1.id}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(data['created_count'], 1)
+        self.assertEqual(data['failed_count'], 2)
+        self.assertEqual(len(data['failed_students']), 2)

@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
     'drf_spectacular',
@@ -151,6 +152,7 @@ APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
 APSCHEDULER_RUN_NOW_TIMEOUT = 25  # seconds
 
 REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'config.exceptions.api_exception_handler',
     'DEFAULT_PERMISSION_CLASSES' : [
         'rest_framework.permissions.IsAuthenticated',
     ],
@@ -350,6 +352,13 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'same-origin'
 
 # Cache Configuration (Redis bilan, agar Redis mavjud bo'lmasa LocMemCache ga xavfsiz fallback)
+# Apply database deadlines only in the HTTP runtime. Management migrations and
+# Celery reports retain their own, independently configured execution budgets.
+if DB_ENGINE == 'postgresql' and os.getenv('WEB_DATABASE_TIMEOUTS') == '1':
+    statement_ms = max(1, int(os.getenv('WEB_DB_STATEMENT_TIMEOUT_MS', '60000')))
+    lock_ms = max(1, int(os.getenv('WEB_DB_LOCK_TIMEOUT_MS', '5000')))
+    DATABASES['default']['OPTIONS']['options'] = f'-c statement_timeout={statement_ms} -c lock_timeout={lock_ms}'
+
 REDIS_CACHE_URL = os.getenv('REDIS_URL', os.getenv('CELERY_BROKER_URL', ''))
 def _is_redis_available(url):
     if not url:
@@ -373,6 +382,11 @@ if REDIS_CACHE_URL and _is_redis_available(REDIS_CACHE_URL):
             'LOCATION': REDIS_CACHE_URL,
             'KEY_PREFIX': 'education_saas',
             'TIMEOUT': 300,
+            'OPTIONS': {
+                'socket_connect_timeout': 1,
+                'socket_timeout': 1,
+                'retry_on_timeout': False,
+            },
         }
     }
 else:
@@ -394,13 +408,19 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_TASK_DEFAULT_QUEUE = 'default'
 CELERY_BROKER_CONNECTION_TIMEOUT = 1.0
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = False
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 100
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = 262144  # KiB; recycle after the task finishes.
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv('CELERY_TASK_SOFT_TIME_LIMIT', '900'))
+CELERY_TASK_TIME_LIMIT = int(os.getenv('CELERY_TASK_TIME_LIMIT', '960'))
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     'socket_timeout': 1.0,
     'socket_connect_timeout': 1.0,
 }
 
 CELERY_TASK_ROUTES = {
+    'telegram_bot.tasks.send_*': {'queue': 'notifications'},
     'telegram_bot.reports_bot_logic.*': {'queue': 'heavy_reports'},
     'reports.tasks.*': {'queue': 'heavy_reports'},
     'reports.admin_tasks.*': {'queue': 'heavy_reports'},
@@ -410,6 +430,10 @@ CELERY_TASK_ROUTES = {
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
+    'cleanup-expired-jwt-tokens': {
+        'task': 'tenants.tasks.cleanup_expired_tokens',
+        'schedule': crontab(hour=4, minute=15),
+    },
     'create-attendance-every-day': {
         'task': 'homework_attends.tasks.create_attendance_task',
         'schedule': crontab(hour=0, minute=0),  # Har kuni yarim tunda (Toshkent vaqti)
@@ -455,10 +479,6 @@ CELERY_BEAT_SCHEDULE = {
 # Production Logging
 if not DEBUG:
 
-    # Log katalogi mavjudligini ta'minlash (FileHandler ochilishidan oldin)
-    LOG_DIR = os.path.join(BASE_DIR, 'logs')
-    os.makedirs(LOG_DIR, exist_ok=True)
-
     LOGGING = {
         'version': 1,
         'disable_existing_loggers': False,
@@ -469,22 +489,26 @@ if not DEBUG:
             },
         },
         'handlers': {
-            'file': {
-                'level': 'ERROR',
-                'class': 'logging.FileHandler',
-                'filename': os.path.join(LOG_DIR, 'django_error.log'),
+            'console': {
+                'class': 'logging.StreamHandler',
                 'formatter': 'verbose',
             },
         },
         'loggers': {
             'django': {
-                'handlers': ['file'],
+                'handlers': ['console'],
                 'level': 'ERROR',
-                'propagate': True,
+                'propagate': False,
             },
         },
+        'root': {'handlers': ['console'], 'level': 'INFO'},
     }
 
 # Max upload sizes (10MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760
-FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760
+FILE_UPLOAD_MAX_MEMORY_SIZE = 1048576  # Larger uploads spool to temporary disk.
+
+# Student list OCR. Docker includes these Tesseract language packages.
+# Executable discovery happens per request in groups.ocr, not at startup.
+STUDENT_OCR_COMMAND = os.getenv('STUDENT_OCR_COMMAND', 'tesseract')
+STUDENT_OCR_LANGUAGES = os.getenv('STUDENT_OCR_LANGUAGES', 'eng+uzb+rus')

@@ -1,8 +1,20 @@
 import api from '../tokenUpdater/updater';
-import { db, requestPersistentStorage, incrementSyncQueueRetry, runFullCleanup } from '../db/db';
+import { db, generateUUID, requestPersistentStorage, incrementSyncQueueRetry, runFullCleanup } from '../db/db';
 
 const SYNC_ENDPOINT = 'v1/sync/';
 const CHUNK_BATCH_SIZE = 500;
+const PUSH_BATCH_SIZE = 100;
+
+async function getSyncClientId() {
+  // Keep the identity with the outbox: logout clears localStorage, not IndexedDB.
+  return db.transaction('rw', db.sync_meta, async () => {
+    const stored = await db.sync_meta.get('sync_client_id');
+    if (stored) return stored.value;
+    const clientId = generateUUID();
+    await db.sync_meta.put({ key: 'sync_client_id', value: clientId });
+    return clientId;
+  });
+}
 
 /**
  * BUG FIX #1: setInterval leak — faqat bitta global interval yaratish.
@@ -98,11 +110,13 @@ class SyncManager {
    * Internet yo'q bo'lganda api.post() xatolik tashlaydi — bu endi gracefully ushlaydi.
    */
   async pushChanges() {
-    const queueItems = await db.sync_queue
+    const pendingItems = await db.sync_queue
       .where('status')
       .equals('pending')
+      .limit(PUSH_BATCH_SIZE)
       .sortBy('created_at');
 
+    const queueItems = pendingItems.slice(0, PUSH_BATCH_SIZE);
     if (queueItems.length === 0) return { pushedCount: 0 };
 
     this.notify('push_start', { totalToPush: queueItems.length });
@@ -110,6 +124,7 @@ class SyncManager {
     let response;
     try {
       response = await api.post(SYNC_ENDPOINT, {
+        client_id: await getSyncClientId(),
         mutations: queueItems.map((item) => ({
           queue_id: String(item.queue_id),
           action: item.action,
@@ -140,7 +155,17 @@ class SyncManager {
       throw error;
     }
 
-    const { applied_queue_ids = [], conflicts = [] } = response.data || {};
+    const { applied_queue_ids = [], conflicts = [], errors = [] } = response.data || {};
+
+    for (const failure of errors) {
+      const queueId = Number(failure.queue_id);
+      if (failure.retryable) {
+        await incrementSyncQueueRetry(queueId, 5);
+      } else {
+        await db.sync_queue.update(queueId, { status: 'failed', last_error: failure.detail });
+      }
+    }
+    if (errors.length) this.notify('push_error', { errors });
 
     // BUG FIX: Agar serverda yangiroq ma'lumot bo'lsa (server_wins), lokal bazaga serverning
     // eng so'nggi to'g'ri holatini yozib qo'yamiz (stale data qolib ketishini oldini oladi)
@@ -170,8 +195,12 @@ class SyncManager {
       }
     }
 
-    this.notify('push_success', { pushedCount: applied_queue_ids.length });
-    return { pushedCount: applied_queue_ids.length };
+    if (!errors.length) this.notify('push_success', { pushedCount: applied_queue_ids.length });
+    return {
+      pushedCount: applied_queue_ids.length,
+      failedCount: errors.length,
+      hasMore: queueItems.length === PUSH_BATCH_SIZE,
+    };
   }
 
   /**
@@ -279,17 +308,22 @@ class SyncManager {
 
     try {
       // 1. Avval lokal o'zgarishlar serverga yuboriladi (Push)
-      await this.pushChanges();
+      let failedCount = 0;
+      for (let batch = 0; batch < 20; batch += 1) {
+        const result = await this.pushChanges();
+        failedCount += result.failedCount || 0;
+        if (!result.hasMore || result.pushedCount === 0) break;
+      }
 
       // 2. So'ngra serverdagi yangilanishlar tortib olinadi (Pull)
       await this.pullChanges(onProgress);
 
-      this.notify('sync_complete', { success: true });
+      this.notify('sync_complete', { success: failedCount === 0, failedCount });
 
       // BUG FIX: Muvaffaqiyatli sinxronizatsiyadan keyin eskirgan yozuvlarni tozalash
       runFullCleanup().catch(() => {});
 
-      return { success: true };
+      return { success: failedCount === 0, failedCount };
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('[SyncManager] Sync failed:', error);

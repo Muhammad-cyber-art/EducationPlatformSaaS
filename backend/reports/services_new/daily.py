@@ -25,42 +25,23 @@ class DailyAttendanceReport(BaseReportService):
                 student__isnull=False,
             )
             .select_related('student', 'group', 'group__branch')
-            .prefetch_related('group__homeworks')
             .order_by('group__branch__name', 'group__name', 'student__full_name')
         )
         
         # Apply security scope
         qs = self.apply_security_scope(qs, branch_field='group__branch')
 
-        homework_by_group = {}
+        from reports.queries import with_homework_status
+        qs = with_homework_status(qs)
+        status_labels = dict(HomeworkSubmission.STATUS_CHOICES)
 
         for index, att in enumerate(qs.iterator(chunk_size=1000), start=1):
             student = att.student
             group = att.group
             branch = group.branch
 
-            if group.id not in homework_by_group:
-                hw = Homework.objects.filter(
-                    group=group,
-                    created_at__date=self.target_date
-                ).first()
-                homework_by_group[group.id] = hw
-
-            homework = homework_by_group[group.id]
-            hw_title = "Vazifa berilmagan"
-            hw_status = "-"
-
-            if homework:
-                hw_title = homework.title
-                submission = HomeworkSubmission.objects.filter(
-                    homework=homework,
-                    student=student
-                ).first()
-
-                if submission:
-                    hw_status = submission.get_status_display()
-                else:
-                    hw_status = "Topshirmagan ❌"
+            hw_title = att.report_homework_title or "Vazifa berilmagan"
+            hw_status = status_labels.get(att.report_submission_status, "Topshirmagan") if att.report_homework_id else "-"
 
             row_data = [
                 index,
@@ -74,7 +55,7 @@ class DailyAttendanceReport(BaseReportService):
             ws.append(row_data)
 
             # Styling for the new row
-            for cell in ws[ws.max_row]:
+            for cell in ws[index + 1]:
                 cell.border = self.border
                 cell.alignment = Alignment(vertical="center", horizontal="left")
                 if cell.column in [1, 5, 7]:

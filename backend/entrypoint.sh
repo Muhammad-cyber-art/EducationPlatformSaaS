@@ -4,7 +4,13 @@ set -e
 # Database tayyor bo'lishini kutish
 if [ "$DB_ENGINE" = "postgresql" ]; then
     echo ">>> PostgreSQL ni kutmoqdamiz ($DB_HOST:$DB_PORT)..."
-    while ! nc -z "$DB_HOST" "$DB_PORT"; do
+    attempts=0
+    while ! nc -z -w 1 "$DB_HOST" "$DB_PORT"; do
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 120 ]; then
+            echo ">>> PostgreSQL readiness failed after 120 attempts" >&2
+            exit 1
+        fi
         sleep 0.5
     done
     echo ">>> PostgreSQL tayyor!"
@@ -16,12 +22,15 @@ if [ "$1" = "gunicorn" ]; then
     python manage.py migrate --noinput
 
     echo ">>> Barcha tenant schemalari migrate qilinmoqda..."
-    python manage.py migrate_all_tenants --skip-public || true
+    python manage.py migrate_all_tenants --skip-public
 
     echo ">>> Static fayllar yig'ilmoqda..."
     mkdir -p /app/static /app/media
     python manage.py collectstatic --no-input --clear
     chmod -R 775 /app/static /app/media
+    # Export after deployment migrations so long schema changes are not subject
+    # to the web request query/lock limits.
+    export WEB_DATABASE_TIMEOUTS=1
 fi
 
 # Telegram bot uchun: pickle fayllar /app/bot_persistence/ papkasida saqlanadi

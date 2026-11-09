@@ -9,7 +9,7 @@ tenant schemalariga birdaniga qo'llash uchun ishlatiladi:
 
 import logging
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from tenants.models import Tenant
 
 logger = logging.getLogger(__name__)
@@ -71,3 +71,4 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"Xatolik yuz bergan tenantlar soni: {len(error_tenants)}"))
             for name, schema, err in error_tenants:
                 self.stderr.write(self.style.ERROR(f" - {name} ({schema}): {err}"))
+            raise CommandError('Tenant migrations failed; deployment must not continue.')

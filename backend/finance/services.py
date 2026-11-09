@@ -502,6 +502,7 @@ def handle_custom_payment(request_user, data):
     return ft, mentor_salary_updated
 
 
+@transaction.atomic
 def confirm_student_payment(request_user, payment, data):
     """O'quvchi to'lovini tasdiqlash va tegishli amallarni bajarish"""
     import logging
@@ -509,6 +510,10 @@ def confirm_student_payment(request_user, payment, data):
     from finance.utils import floor_amount
 
     logger = logging.getLogger(__name__)
+
+    if payment.pk:
+        payment = Payment.objects.select_for_update(of=('self',)).select_related('student', 'group').get(pk=payment.pk)
+    is_paying_full = False
 
     # REFUND LOGIC: To'lov miqdori qoldirilgan darslar bo'yicha hisoblanadi (Chegirma/Jarima)
     pay_full_month = str(data.get("pay_full_month", False)).lower() in [

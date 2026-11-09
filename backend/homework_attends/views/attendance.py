@@ -25,6 +25,7 @@ from homework_attends.services import (
     edit_past_attendance,
     get_last_3_lesson_dates
 )
+from homework_attends.services import attendance_members
 from permissions.permissions import HasModulePermission
 from reports.models import ReportDownloadTrack
 from datetime import date as date_type
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     serializer_class = AttendanceSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasModulePermission]
     pagination_class = None
     module_name = 'homework'
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
@@ -57,6 +58,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
            requested_date = timezone.localdate()
 
        group = get_object_or_404(Group, id=group_id)
+       if not self._user_can_access_group(self.request.user, group):
+           from rest_framework.exceptions import PermissionDenied
+           raise PermissionDenied("Ushbu guruhga ruxsat yo'q.")
        today = timezone.localdate()
        last_3_dates = get_last_3_lesson_dates(group)
        is_past_month = requested_date.year < today.year or (requested_date.year == today.year and requested_date.month < today.month)
@@ -71,6 +75,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     def weekly_report(self, request):
          group_id = request.query_params.get('group_id')
          group = get_object_or_404(Group, id=group_id)
+         if not self._user_can_access_group(request.user, group):
+             return Response({'detail': "Ushbu guruhga ruxsat yo'q."}, status=403)
          
          report = generate_weekly_attendance_report(group)
          return Response(report)
@@ -84,6 +90,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         # 1. Update existing record
         if attendance_id is not None:
             instance = get_object_or_404(Attendance, id=attendance_id)
+            if not instance.group_id or not attendance_members(instance.group, instance.date).filter(pk=instance.student_id).exists():
+                return Response({'detail': "O'quvchi ushbu sanada guruhda faol emas."}, status=400)
             if not instance.group.is_lesson_day(instance.date):
                 return Response(
                     {"detail": "Ushbu sana guruh dars jadvaliga to'g'ri kelmaydi. Dars bo'lmagan kunga davomat olib bo'lmaydi."},
@@ -146,7 +154,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             if requested_date not in last_3_dates and not (is_early_morning and is_yesterday) and not within_1_month:
                 return Response({"detail": f"Faqat bugungi yoki oxirgi 3 ta o'tilgan dars davomatini tahrirlashingiz mumkin."}, status=status.HTTP_400_BAD_REQUEST)
 
-        student = get_object_or_404(group.students, id=student_id)
+        student = get_object_or_404(attendance_members(group, requested_date), id=student_id)
 
         # Duplicate check
         attendance, created = Attendance.objects.get_or_create(
@@ -234,6 +242,15 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 return False
         return False
 
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        attendance = serializer.instance
+        if not attendance.group_id or not attendance_members(attendance.group, attendance.date).filter(pk=attendance.student_id).exists():
+            raise ValidationError("O'quvchi ushbu sanada guruhda faol emas.")
+        edit_past_attendance(attendance.pk, self.request.user,
+                             serializer.validated_data.get('is_present', attendance.is_present))
+        attendance.refresh_from_db()
+
     def _user_can_access_group(self, user, group):
         """Foydalanuvchi guruhga kirish huquqini tekshirish"""
         if not user or not getattr(user, 'is_authenticated', False):
@@ -241,8 +258,6 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if user.role == 'super_admin':
             return True
         if user.role == 'admin':
-            if self._user_has_full_attendance(user):
-                return True
             allowed = [user.branch_id] if user.branch_id else []
             if hasattr(user, 'branch_accesses'):
                 allowed.extend(user.branch_accesses.values_list('branch_id', flat=True))

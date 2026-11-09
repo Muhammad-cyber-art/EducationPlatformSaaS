@@ -42,7 +42,7 @@ class ArchiveServiceTests(TestCase):
         # 4. Check metadata contains payments
         self.assertIn('payments', archived.metadata)
         self.assertEqual(len(archived.metadata['payments']), 1)
-        self.assertEqual(archived.metadata['payments'][0]['amount'], 100000.0)
+        self.assertEqual(Decimal(str(archived.metadata['payments'][0]['amount'])), Decimal('100000.00'))
 
     def test_restore_student(self):
         archived = move_student_to_archive(self.student, self.super_admin, "Reason")

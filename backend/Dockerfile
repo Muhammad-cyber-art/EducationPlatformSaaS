@@ -13,6 +13,10 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     netcat-traditional \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-uzb \
+    tesseract-ocr-rus \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

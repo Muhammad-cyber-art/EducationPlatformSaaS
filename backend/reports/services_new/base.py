@@ -20,18 +20,10 @@ class BaseReportService:
 
     def apply_security_scope(self, queryset, branch_field='group__branch'):
         """Enforces branch-level data isolation."""
+        from permissions.scopes import scope_report
         if not self.user:
-            return queryset
-            
-        if self.user.role == 'super_admin':
-            return queryset
-        elif self.user.role == 'admin':
-            if not self.user.branch:
-                return queryset.none()
-            filter_kwargs = {branch_field: self.user.branch}
-            return queryset.filter(**filter_kwargs)
-        else:
             return queryset.none()
+        return scope_report(queryset, self.user, branch_field)
 
     def apply_headers(self, ws, headers):
         ws.append(headers)

@@ -42,26 +42,17 @@ class MonthlyAttendanceReport(BaseReportService):
         # Since it's for a whole month, we won't prefetch all homeworks for memory efficiency,
         # but we can cache homeworks lightly or just use a simple lookup since it's a generated report.
         # For simplicity and performance, we use a basic dictionary cache for homeworks.
-        homework_cache = {}
+        from reports.queries import with_homework_status
+        qs = with_homework_status(qs)
+        status_labels = dict(HomeworkSubmission.STATUS_CHOICES)
 
         for index, att in enumerate(qs.iterator(chunk_size=1000), start=1):
             student = att.student
             group = att.group
             branch = group.branch
 
-            cache_key = f"{group.id}_{att.date}"
-            if cache_key not in homework_cache:
-                hw = Homework.objects.filter(group=group, created_at__date=att.date).first()
-                homework_cache[cache_key] = hw
-                
-            homework = homework_cache[cache_key]
-            hw_title = "Vazifa berilmagan"
-            hw_status = "-"
-
-            if homework:
-                hw_title = homework.title
-                submission = HomeworkSubmission.objects.filter(homework=homework, student=student).first()
-                hw_status = submission.get_status_display() if submission else "Topshirmagan ❌"
+            hw_title = att.report_homework_title or "Vazifa berilmagan"
+            hw_status = status_labels.get(att.report_submission_status, "Topshirmagan") if att.report_homework_id else "-"
 
             row_data = [
                 index,
@@ -75,7 +66,7 @@ class MonthlyAttendanceReport(BaseReportService):
             ]
             ws.append(row_data)
 
-            for cell in ws[ws.max_row]:
+            for cell in ws[index + 1]:
                 cell.border = self.border
                 cell.alignment = Alignment(vertical="center", horizontal="left")
                 if cell.column in [1, 2, 6, 8]:
@@ -117,7 +108,7 @@ class MonthlyFinanceReport(BaseReportService):
         self.apply_headers(ws1, headers1)
 
         qs1 = Payment.objects.filter(
-            month__year=self.target_year, month__month=self.target_month, is_paid=True,
+            month__year=self.target_year, month__month=self.target_month, paid_amount__gt=0,
             group__isnull=False, group__branch__isnull=False, student__isnull=False
         )
         if self.is_manual:
@@ -129,11 +120,11 @@ class MonthlyFinanceReport(BaseReportService):
         for i, sp in enumerate(qs1.iterator(chunk_size=1000), 1):
             ws1.append([
                 i, sp.group.branch.name if sp.group.branch else "-", sp.student.full_name, sp.group.name,
-                sp.amount, sp.month.strftime("%Y-%m") if sp.month else "-",
+                sp.paid_amount, sp.month.strftime("%Y-%m") if sp.month else "-",
                 sp.marked_by.get_full_name() or sp.marked_by.username if sp.marked_by else "Onlayn",
                 sp.paid_at.strftime("%Y-%m-%d %H:%M") if sp.paid_at else "-", sp.transaction_id or "-"
             ])
-            for cell in ws1[ws1.max_row]:
+            for cell in ws1[i + 1]:
                 cell.border = self.border
                 cell.alignment = align_center
 
@@ -159,7 +150,7 @@ class MonthlyFinanceReport(BaseReportService):
                 ep.marked_by.get_full_name() or ep.marked_by.username if ep.marked_by else "Tizim",
                 ep.paid_at.strftime("%Y-%m-%d") if ep.paid_at else "-"
             ])
-            for cell in ws2[ws2.max_row]:
+            for cell in ws2[i + 1]:
                 cell.border = self.border
                 cell.alignment = align_center
 
@@ -183,7 +174,7 @@ class MonthlyFinanceReport(BaseReportService):
                 tr.title, tr.amount, tr.marked_by.get_full_name() or tr.marked_by.username if tr.marked_by else "Tizim",
                 tr.date.strftime("%Y-%m-%d"), tr.description or "-"
             ])
-            for cell in ws_extra[ws_extra.max_row]:
+            for cell in ws_extra[i + 1]:
                 cell.border = self.border
                 cell.alignment = align_center
 
@@ -196,22 +187,23 @@ class MonthlyFinanceReport(BaseReportService):
 
         branches = Branch.objects.all()
         if self.user and self.user.role == 'admin':
-            branches = branches.filter(id=self.user.branch_id) if self.user.branch_id else branches.none()
+            from permissions.scopes import allowed_branch_ids
+            branches = branches.filter(id__in=allowed_branch_ids(self.user))
 
         grand = {k: 0 for k in ['inc_fees', 'inc_extra', 'exp_salary', 'exp_refund', 'exp_util', 'exp_other', 'debt']}
 
-        for branch in branches:
-            # Queries inside loop since branches are few. For optimization, aggregation could be grouped, but this matches original logic.
-            inc_fees = Payment.objects.filter(group__branch=branch, month__year=self.target_year, month__month=self.target_month, is_paid=True).aggregate(t=Sum('amount'))['t'] or 0
-            inc_extra = FinanceTransaction.objects.filter(branch=branch, date__year=self.target_year, date__month=self.target_month, transaction_type='income', category='student_extra').aggregate(t=Sum('amount'))['t'] or 0
-            
-            exp_salary = EmployeePayment.objects.filter(employee__branch=branch, month__year=self.target_year, month__month=self.target_month, is_paid=True).aggregate(t=Sum(F('salary_base') + F('bonus') - F('deductions')))['t'] or 0
-            exp_refund = FinanceTransaction.objects.filter(branch=branch, date__year=self.target_year, date__month=self.target_month, transaction_type='expense', category='refund').aggregate(t=Sum('amount'))['t'] or 0
-            exp_util = FinanceTransaction.objects.filter(branch=branch, date__year=self.target_year, date__month=self.target_month, transaction_type='expense', category='utility').aggregate(t=Sum('amount'))['t'] or 0
-            exp_other = FinanceTransaction.objects.filter(branch=branch, date__year=self.target_year, date__month=self.target_month, transaction_type='expense').exclude(category__in=['salary', 'refund', 'utility']).aggregate(t=Sum('amount'))['t'] or 0
-            
-            debt = Payment.objects.filter(group__branch=branch, month__year=self.target_year, month__month=self.target_month, is_paid=False).aggregate(t=Sum('amount'))['t'] or 0
-            
+        from reports.queries import monthly_branch_totals
+        totals_by_branch = monthly_branch_totals(self.target_year, self.target_month)
+        for branch_index, branch in enumerate(branches, 2):
+            totals = totals_by_branch.get(branch.pk, {})
+            inc_fees = totals.get('inc_fees', 0)
+            inc_extra = totals.get('inc_extra', 0)
+            exp_salary = totals.get('exp_salary', 0)
+            exp_refund = totals.get('exp_refund', 0)
+            exp_util = totals.get('exp_util', 0)
+            exp_other = totals.get('exp_other', 0)
+            debt = totals.get('debt', 0)
+
             net_profit = (inc_fees + inc_extra) - (exp_salary + exp_refund + exp_util + exp_other)
             
             ws3.append([branch.name, inc_fees, inc_extra, exp_salary, exp_refund, exp_util, exp_other, net_profit, debt])
@@ -224,7 +216,7 @@ class MonthlyFinanceReport(BaseReportService):
             grand['exp_other'] += exp_other
             grand['debt'] += debt
             
-            for cell in ws3[ws3.max_row]:
+            for cell in ws3[branch_index]:
                 cell.border = self.border
                 cell.alignment = align_center
 

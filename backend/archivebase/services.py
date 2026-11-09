@@ -5,6 +5,8 @@ from django.db import transaction, models
 from .models import ArchivedStudent, ArchivedStaff, ArchivedGroup, ArchivedLid
 from finance.models import Payment
 import json
+from .snapshots import (snapshot, snapshot_rows, student_history, restore_row,
+                        restore_student_history, restore_payments, require_archive_access)
 def json_serializable_convert(obj):
     """
     Sana, vaqt, Decimal va Django model ob'ektlarini 
@@ -39,13 +41,14 @@ def serialize_related(queryset):
 
 @transaction.atomic
 def move_student_to_archive(student, archived_by, reason: str = "") -> ArchivedStudent:
-    from groups.models import Student 
+    from groups.models import Student
+    student = Student.objects.select_for_update().get(pk=student.pk)
     
     # 1. Bog'liq ma'lumotlarni yig'ish
     payments = Payment.objects.filter(student=student)
     
     # 2. Student ma'lumotlarini dict qilish va sanalarni tozalash
-    student_data = model_to_dict(student)
+    student_data = snapshot(student)
     cleaned_student_data = json_serializable_convert(student_data)
     
     # Qo'shimcha ID larni qo'shish
@@ -53,7 +56,9 @@ def move_student_to_archive(student, archived_by, reason: str = "") -> ArchivedS
     cleaned_student_data["group_id"] = student.group_id
     
     # 3. Bog'langan ma'lumotlarni tozalab qo'shish
-    cleaned_student_data["payments"] = serialize_related(payments)
+    cleaned_student_data["payments"] = snapshot_rows(payments)
+    cleaned_student_data["history_ids"] = student_history(student)
+    cleaned_student_data["enrollments"] = snapshot_rows(student.enrollments.all())
 
     # 4. Arxiv yaratish
     archived = ArchivedStudent.objects.create(
@@ -158,6 +163,23 @@ def move_group_to_archive(group, archived_by, reason: str = "") -> ArchivedGroup
     import logging
     logger = logging.getLogger(__name__)
 
+    group = Group.objects.select_for_update().get(pk=group.pk)
+    group_data = snapshot(group)
+    group_data["payments"] = snapshot_rows(Payment.objects.filter(group=group))
+    group_data["enrollments"] = snapshot_rows(group.enrollments.all())
+    group_data["special_lesson_days"] = snapshot_rows(group.special_lesson_days.all())
+    group_data["canceled_lesson_days"] = snapshot_rows(group.canceled_lesson_days.all())
+    group_data["additional_mentors"] = snapshot_rows(group.additional_mentors.all())
+    from homework_attends.models import Attendance, MockTest, Homework, HomeworkSubmission
+    from finance.models import FinanceTransaction
+    group_data['homeworks'] = snapshot_rows(Homework.objects.filter(group=group))
+    group_data['homework_submissions'] = snapshot_rows(HomeworkSubmission.objects.filter(homework__group=group))
+    group_data["history_ids"] = {
+        "attendance": list(Attendance.objects.filter(group=group).values_list('pk', flat=True)),
+        "mock_tests": list(MockTest.objects.filter(group=group).values_list('pk', flat=True)),
+        "transactions": list(FinanceTransaction.objects.filter(group=group).values_list('pk', flat=True)),
+    }
+
     # 1. Faqat shu guruhda ayni paytda faol bo'lgan o'quvchilarni olamiz
     active_enrollment_student_ids = GroupEnrollment.objects.filter(
         group=group,
@@ -246,8 +268,6 @@ def move_group_to_archive(group, archived_by, reason: str = "") -> ArchivedGroup
     payments_data = serialize_related(remaining_payments)
 
     # 4. Guruh ma'lumotlarini snapshot qilish (student ID listini ham saqlaymiz)
-    group_data = model_to_dict(group)
-    group_data = json_serializable_convert(group_data)
     # original Student.id lari (arxivlashdan oldin saqlangan)
     group_data["archived_student_ids"] = student_ids_to_archive
     # ArchivedStudent.id lari — tiklashda to'g'ri qidirish uchun
@@ -279,168 +299,49 @@ def move_group_to_archive(group, archived_by, reason: str = "") -> ArchivedGroup
 
 @transaction.atomic
 def restore_student_from_archive(archived_student_id, restored_by):
-    """
-    Arxivlangan studentni qayta tiklash.
-    Metadata dan barcha ma'lumotlarni olib, yangi Student obyekti yaratadi.
-    """
-    from groups.models import Student, Group
-    from branches.models import Branch
-    
-    archived = ArchivedStudent.objects.get(id=archived_student_id)
+    """Restore one identity and its exact history; never claim orphans by name."""
+    from groups.models import Student, Group, GroupEnrollment
+    archived = ArchivedStudent.objects.select_for_update().get(pk=archived_student_id)
+    require_archive_access(archived, restored_by)
     metadata = archived.metadata
-    
-    # Branch va Group ni topish (agar mavjud bo'lsa)
-    branch = None
-    branch_id = metadata.get('branch_id') or metadata.get('branch')
-    if branch_id:
-        branch = Branch.objects.filter(id=branch_id).first()
-    
-    group = None
-    group_id = metadata.get('group_id') or metadata.get('group')
-    if group_id:
-        group = Group.objects.filter(id=group_id).first()
-        
-    # Agar ID orqali topilmasa yoki saqlanmagan bo'lsa, nomi orqali qidiramiz (Yangi logika)
-    if not group and archived.last_group_name and archived.last_group_name != "Guruhsiz":
-        # Avval joriy filial (branch) dagi shunday nomli faol guruhni izlaymiz
-        if branch:
-            group = Group.objects.filter(name__iexact=archived.last_group_name, branch=branch, is_archived=False).first()
-        # Topilmasa umuman hamma filiallardan izlab ko'ramiz
-        if not group:
-            group = Group.objects.filter(name__iexact=archived.last_group_name, is_archived=False).first()
-    
-    # 1. Soft-archived student bazada mavjudmi? (Tarix va ID saqlanishi uchun)
-    student = Student.objects.filter(id=archived.original_id).first()
-    if student:
-        student.is_archived = False
-        student.is_active = True
-        student.archived_at = None
-        if branch:
-            student.branch = branch
-        if group:
-            student.group = group
-            if not student.branch:
-                student.branch = group.branch
-        student.save()
-        
-        if group:
-            from groups.models import GroupEnrollment
-            enrollment, created = GroupEnrollment.objects.get_or_create(
-                student=student, group=group, defaults={"is_active": True, "left_at": None}
-            )
-            if not created and (not enrollment.is_active or enrollment.left_at is not None):
-                enrollment.is_active = True
-                enrollment.left_at = None
-                enrollment.save(update_fields=['is_active', 'left_at'])
-                
-        archived.delete()
-        return student
+    student = Student.objects.select_for_update().filter(pk=archived.original_id).first()
+    if student is not None and not student.is_archived:
+        raise ValueError("Ushbu IDda faol o'quvchi mavjud; tiklash bekor qilindi.")
+    data = dict(metadata)
+    data['id'] = archived.original_id
+    data['full_name'] = archived.full_name
+    data['branch'] = metadata.get('branch_id') or metadata.get('branch')
+    data['group'] = metadata.get('group_id') or metadata.get('group')
+    data.update(is_active=True, is_archived=False, archived_at=None)
+    if student is None:
+        student = restore_row(Student, data)
+    else:
+        # Existing soft archives already retain their history and financial rows.
+        Student.objects.filter(pk=student.pk).update(is_active=True, is_archived=False, archived_at=None)
+        student.refresh_from_db()
 
-    # 2. Hard-deleted student (orqaga moslik uchun):
-    student = Student.objects.create(
-        full_name=archived.full_name,
-        branch=branch,
-        group=group,
-        phone=metadata.get('phone', ''),
-        birth_date=metadata.get('birth_date'),
-        parent_name=metadata.get('parent_name', ''),
-        parent_phone=metadata.get('parent_phone', ''),
-        address=metadata.get('address', ''),
-        notes=metadata.get('notes', ''),
-        color=metadata.get('color', '#ffffff'),
-        status=metadata.get('status', 'regular'),
-        telegram_id=metadata.get('telegram_id'),
-        parent_telegram_id=metadata.get('parent_telegram_id'),
-        custom_fee=metadata.get('custom_fee'),
-    )
-
-    # Many-to-Many bog'liqlikni ham tiklaymiz
-    if group:
-        from groups.models import GroupEnrollment
-        enrollment, created = GroupEnrollment.objects.get_or_create(
-            student=student, group=group, defaults={"is_active": True, "left_at": None}
-        )
-        if not created and (not enrollment.is_active or enrollment.left_at is not None):
-            enrollment.is_active = True
-            enrollment.left_at = None
-            enrollment.save(update_fields=['is_active', 'left_at'])
-
-    # Metadata dagi to'lovlarni tiklash
-    saved_payments = metadata.get('payments', [])
-    for p_data in saved_payments:
-        try:
-            m_date = p_data.get('month')
-            if isinstance(m_date, str):
-                try:
-                    m_date = datetime.strptime(m_date[:10], '%Y-%m-%d').date()
-                except Exception:
-                    pass
-            Payment.objects.create(
-                student=student,
-                group_id=p_data.get('group'),
-                month=m_date,
-                amount=p_data.get('amount'),
-                paid_amount=p_data.get('paid_amount', 0),
-                is_paid=p_data.get('is_paid', False),
-                is_partial=p_data.get('is_partial', False),
-                payment_method=p_data.get('payment_method', 'cash'),
-                notes=p_data.get('notes', ''),
-                is_auto_discount=p_data.get('is_auto_discount', False),
-            )
-        except Exception:
-            pass
-
-    # Yetim qolgan Attendance, Homework, MockTest, FinanceTransaction larni qayta ulash
-    from homework_attends.models import Attendance, HomeworkSubmission, MockTestResult
-    from finance.models import FinanceTransaction
-    from django.db.models import Q
-    att_qs = Attendance.objects.filter(
-        Q(student__isnull=True) | Q(student_id=archived.original_id),
-        student_full_name=student.full_name
-    )
-    if student.branch:
-        att_qs = att_qs.filter(Q(group__branch=student.branch) | Q(group__isnull=True))
-    att_qs.update(student=student)
-
-    hw_qs = HomeworkSubmission.objects.filter(
-        Q(student__isnull=True) | Q(student_id=archived.original_id),
-        student_full_name=student.full_name
-    )
-    if student.branch:
-        hw_qs = hw_qs.filter(Q(homework__group__branch=student.branch) | Q(homework__group__isnull=True))
-    hw_qs.update(student=student)
-
-    mock_qs = MockTestResult.objects.filter(
-        Q(student__isnull=True) | Q(student_id=archived.original_id),
-        student_full_name=student.full_name
-    )
-    if student.branch:
-        mock_qs = mock_qs.filter(Q(test__group__branch=student.branch) | Q(test__group__isnull=True))
-    mock_qs.update(student=student)
-
-    tx_qs = FinanceTransaction.objects.filter(
-        Q(student__isnull=True) | Q(student_id=archived.original_id),
-        student_name=student.full_name
-    )
-    if student.branch:
-        tx_qs = tx_qs.filter(Q(branch=student.branch) | Q(branch__isnull=True))
-    tx_qs.update(student=student)
-
+    for enrollment_data in metadata.get('enrollments', []):
+        group_id = enrollment_data.get('group')
+        if not Group.objects.filter(pk=group_id).exists():
+            continue
+        values = {key: value for key, value in enrollment_data.items() if key not in ('id', 'student', 'group')}
+        # Updating a DateTimeField accepts the original ISO timestamp, preserving membership history.
+        enrollment, _ = GroupEnrollment.objects.get_or_create(student=student, group_id=group_id)
+        GroupEnrollment.objects.filter(pk=enrollment.pk).update(**values)
+    if student.group_id and not metadata.get('enrollments'):
+        GroupEnrollment.objects.update_or_create(student=student, group=student.group,
+                                                defaults={'is_active': True, 'left_at': None})
+    restore_payments(metadata.get('payments', []), student=student)
+    student.archive_restore_warnings = restore_student_history(archived, student)
+    # Legacy or deleted primary groups must not select an unrelated same-name group.
+    student.sync_active_group_and_branch()
     if student.telegram_id:
-        try:
-            from telegram_bot.models import BotProfile
-            BotProfile.objects.update_or_create(
-                telegram_id=student.telegram_id,
-                defaults={
-                    'student': student,
-                    'phone_number': student.phone or '',
-                    'role': 'student',
-                    'is_active': True,
-                }
-            )
-        except Exception:
-            pass
-
+        from telegram_bot.models import BotProfile
+        BotProfile.objects.update_or_create(
+            telegram_id=student.telegram_id,
+            defaults={'student': student, 'phone_number': student.phone or '',
+                      'role': 'student', 'is_active': True},
+        )
     archived.delete()
     return student
 
@@ -502,201 +403,71 @@ def restore_staff_from_archive(archived_staff_id, restored_by):
 
 @transaction.atomic
 def restore_group_from_archive(archived_group_id, restored_by):
-    """
-    Arxivlangan guruhni va uning o'quvchilarini qayta tiklash.
-
-    ⚠️ BUG FIX #2: Avvalgi versiya faqat guruh strukturasini tiklardi,
-    o'quvchilar va ularning GroupEnrollment yozuvlari tiklanmasdi.
-    Endi arxivdagi studentlar ham qayta tiklanadi va guruhga biriktiriladi.
-
-    Qaytaradi:
-        dict: {
-            'group': Group instance,
-            'restored_students': int,
-            'skipped_students': int,
-            'errors': list[str]
-        }
-    """
-    from groups.models import Group, GroupEnrollment, Student
-    from branches.models import Branch
-    from django.contrib.auth import get_user_model
-    import logging
-    logger = logging.getLogger(__name__)
-    User = get_user_model()
-
-    archived = ArchivedGroup.objects.get(id=archived_group_id)
+    """Restore the group atomically, including invoices, schedule and exact history."""
+    from groups.models import (Group, GroupEnrollment, Student, SpecialLessonDay,
+                               CanceledLessonDay, MentorGroupAssignment)
+    from homework_attends.models import Attendance, MockTest, Homework, HomeworkSubmission
+    from finance.models import FinanceTransaction
+    archived = ArchivedGroup.objects.select_for_update().get(pk=archived_group_id)
+    require_archive_access(archived, restored_by)
     metadata = archived.metadata
+    if Group.objects.filter(pk=archived.original_id).exists():
+        raise ValueError("Ushbu IDda guruh mavjud; tiklash bekor qilindi.")
+    group = restore_row(Group, dict(metadata, id=archived.original_id, name=archived.full_name,
+                                    is_archived=False, archived_at=None))
+    restored_count = skipped_count = 0
+    warnings = []
+    if 'history_ids' not in metadata:
+        warnings.append("Eski guruh arxivida tarix IDlari yo'q; bog'lanmagan davomatni alohida tekshirish kerak.")
+    record_ids = metadata.get('archived_student_record_ids', [])
+    for index, original_id in enumerate(metadata.get('archived_student_ids', [])):
+        if record_ids and index < len(record_ids):
+            student_archive = ArchivedStudent.objects.filter(pk=record_ids[index]).first()
+        else:
+            student_archive = ArchivedStudent.objects.filter(original_id=original_id).order_by('-archived_at').first()
+        if student_archive:
+            restored_student = restore_student_from_archive(student_archive.pk, restored_by)
+            warnings.extend(restored_student.archive_restore_warnings)
+            restored_count += 1
+        elif Student.objects.filter(pk=original_id, is_active=True, is_archived=False).exists():
+            # The student may already have been restored separately.
+            restored_count += 1
+        else:
+            # Silently dropping an invoice/student would make this a lossy restore.
+            raise ValueError(f"O'quvchi {original_id} arxivi topilmadi; guruh tiklanmadi.")
 
-    # --- Branch va Mentorni bazadan topish ---
-    branch = None
-    if metadata.get('branch'):
-        branch = Branch.objects.filter(id=metadata['branch']).first()
-
-    mentor = None
-    if metadata.get('mentor'):
-        mentor = User.objects.filter(id=metadata['mentor'], role='mentor').first()
-
-    admin = None
-    if metadata.get('admin'):
-        admin = User.objects.filter(id=metadata['admin']).first()
-
-    # --- Guruhni qayta yaratish ---
-    group = Group.objects.create(
-        name=archived.full_name,
-        branch=branch,
-        mentor=mentor,
-        admin=admin,
-        monthly_price=metadata.get('monthly_price', 0),
-        subject=archived.subject,
-        course_time=metadata.get('course_time', ''),
-        dars_kunlari=metadata.get('dars_kunlari', ''),
-        days=metadata.get('days', 'odd'),
-        dars_vaqti=metadata.get('dars_vaqti', ''),
-        description=metadata.get('description', ''),
-        is_faol=metadata.get('is_faol', True),
-        color=metadata.get('color', '#ffffff'),
-    )
-    logger.info(f"[GroupRestore] Guruh qayta yaratildi: '{group.name}' (yangi ID={group.id})")
-
-    # -------------------------------------------------------------------
-    # BUG FIX #2 — Arxivlangan o'quvchilarni ham tiklash
-    #
-    # Arxivlashda metadata['archived_student_ids'] saqlangan bo'lsa,
-    # shu ID lar bo'yicha ArchivedStudent jadvalidan topib tiklaymiz.
-    # -------------------------------------------------------------------
-    restored_count = 0
-    skipped_count = 0
-    errors = []
-
-    archived_student_ids = metadata.get('archived_student_ids', [])
-
-    if archived_student_ids:
-        logger.info(
-            f"[GroupRestore] {len(archived_student_ids)} ta arxivlangan student tiklanmoqda..."
-        )
-        # Yangi format: arxivlash paytida ArchivedStudent.id lari saqlangan
-        archived_record_ids = metadata.get('archived_student_record_ids', [])
-        
-        for i, orig_student_id in enumerate(archived_student_ids):
-            try:
-                # 1-usul: to'g'ridan-to'g'ri ArchivedStudent.id bo'yicha (yangi format)
-                archived_student = None
-                if archived_record_ids and i < len(archived_record_ids):
-                    archived_student = ArchivedStudent.objects.filter(
-                        id=archived_record_ids[i]
-                    ).first()
-                
-                # 2-usul: original_id bo'yicha (eski format, backward compatibility)
-                if not archived_student and orig_student_id:
-                    archived_student = ArchivedStudent.objects.filter(
-                        original_id=orig_student_id
-                    ).order_by('-archived_at').first()
-
-                if not archived_student:
-                    logger.warning(
-                        f"[GroupRestore] Student (orig_id={orig_student_id}) arxivda topilmadi — o'tkazib yuborildi."
-                    )
-                    skipped_count += 1
-                    continue
-
-                # restore_student_from_archive ichidagi logikadan foydalanib
-                # student tiklaymiz, lekin guruhni o'zimiz belgilaymiz
-                student_meta = archived_student.metadata
-
-                # Branch: avval student o'z branchini saqlaydi,
-                # aks holda tiklangan guruh branchini ishlatamiz
-                student_branch = branch
-                if student_meta.get('branch_id'):
-                    from branches.models import Branch as Br
-                    student_branch = Br.objects.filter(
-                        id=student_meta['branch_id']
-                    ).first() or branch
-
-                student = Student.objects.create(
-                    full_name=archived_student.full_name,
-                    branch=student_branch,
-                    group=group,   # legacy FK — tiklangan guruhga
-                    phone=student_meta.get('phone', ''),
-                    birth_date=student_meta.get('birth_date'),
-                    parent_name=student_meta.get('parent_name', ''),
-                    parent_phone=student_meta.get('parent_phone', ''),
-                    address=student_meta.get('address', ''),
-                    notes=student_meta.get('notes', ''),
-                    color=student_meta.get('color', '#ffffff'),
-                    status=student_meta.get('status', 'regular'),
-                    telegram_id=student_meta.get('telegram_id'),
-                    parent_telegram_id=student_meta.get('parent_telegram_id'),
-                    custom_fee=student_meta.get('custom_fee'),
-                )
-
-                # GroupEnrollment yaratish (M2M)
-                # BUG #6 FIX: Agar eski is_active=False enrollment mavjud bo'lsa, uni yoqamiz.
-                enr, enr_created = GroupEnrollment.objects.get_or_create(
-                    student=student,
-                    group=group,
-                    defaults={"is_active": True}
-                )
-                if not enr_created and not enr.is_active:
-                    enr.is_active = True
-                    enr.save(update_fields=['is_active'])
-
-                # Arxiv yozuvini o'chiramiz (aralashib ketmasligi uchun)
-                archived_student.delete()
-
-                restored_count += 1
-                logger.info(
-                    f"[GroupRestore] Student '{student.full_name}' (yangi ID={student.id}) tiklandi."
-                )
-
-            except Exception as exc:
-                error_msg = (
-                    f"Student orig_id={orig_student_id} tiklashda xato: {exc}"
-                )
-                logger.error(f"[GroupRestore] {error_msg}")
-                errors.append(error_msg)
-    else:
-        logger.info(
-            "[GroupRestore] metadata['archived_student_ids'] topilmadi — "
-            "eski format arxiv, studentlar alohida tiklanishi kerak."
-        )
-
-    # -------------------------------------------------------------------
-    # YANI QO'SHILGAN QISM: O'chirilmagan, lekin arxivlanganda guruhdan 
-    # chiqarilgan o'quvchilarni yana guruhga bog'lab qo'yamiz.
-    # -------------------------------------------------------------------
-    multi_group_student_ids = metadata.get('multi_group_student_ids', [])
-    if multi_group_student_ids:
-        from groups.models import Student, GroupEnrollment
-        logger.info(
-            f"[GroupRestore] {len(multi_group_student_ids)} ta o'chirilmagan (boshqa guruhlarda qolgan) student tiklanmoqda..."
-        )
-        for s_id in multi_group_student_ids:
-            try:
-                student = Student.objects.filter(id=s_id).first()
-                if student:
-                    GroupEnrollment.objects.get_or_create(student=student, group=group)
-                    restored_count += 1
-                    logger.info(f"[GroupRestore] Multi-group Student '{student.full_name}' guruhga yana qo'shildi.")
-                else:
-                    skipped_count += 1
-                    logger.warning(f"[GroupRestore] Multi-group Student (ID={s_id}) bazadan topilmadi (balki to'liq o'chirib yuborilgandir).")
-            except Exception as exc:
-                error_msg = f"Multi-group Student ID={s_id} tiklashda xato: {exc}"
-                logger.error(f"[GroupRestore] {error_msg}")
-                errors.append(error_msg)
-
-    logger.info(
-        f"[GroupRestore] Natija: guruh='{group.name}', "
-        f"tiklandi={restored_count}, o'tkazildi={skipped_count}, xato={len(errors)}"
-    )
-
-    return {
-        'group': group,
-        'restored_students': restored_count,
-        'skipped_students': skipped_count,
-        'errors': errors,
-    }
-
+    for enrollment_data in metadata.get('enrollments', []):
+        student_id = enrollment_data.get('student')
+        if not Student.objects.filter(pk=student_id).exists():
+            skipped_count += 1
+            continue
+        values = {key: value for key, value in enrollment_data.items() if key not in ('id', 'student', 'group')}
+        enrollment, _ = GroupEnrollment.objects.get_or_create(student_id=student_id, group=group)
+        GroupEnrollment.objects.filter(pk=enrollment.pk).update(**values)
+    for student_id in metadata.get('multi_group_student_ids', []):
+        if Student.objects.filter(pk=student_id).exists():
+            GroupEnrollment.objects.get_or_create(student_id=student_id, group=group)
+            restored_count += 1
+        else:
+            skipped_count += 1
+    # Older group snapshots only stored leftover invoices; student snapshots contain the rest.
+    restore_payments(metadata.get('payments', metadata.get('orphan_payments', [])))
+    for data in metadata.get('homeworks', []):
+        restore_row(Homework, data, group_id=group.pk)
+    for data in metadata.get('homework_submissions', []):
+        restore_row(HomeworkSubmission, data)
+    for key, model in (('special_lesson_days', SpecialLessonDay),
+                       ('canceled_lesson_days', CanceledLessonDay),
+                       ('additional_mentors', MentorGroupAssignment)):
+        for data in metadata.get(key, []):
+            restore_row(model, data, group_id=group.pk)
+    for model, key in ((Attendance, 'attendance'), (MockTest, 'mock_tests'),
+                       (FinanceTransaction, 'transactions')):
+        model.objects.filter(pk__in=metadata.get('history_ids', {}).get(key, []),
+                             group__isnull=True).update(group=group)
+    archived.delete()
+    return {'group': group, 'restored_students': restored_count,
+            'skipped_students': skipped_count, 'errors': list(dict.fromkeys(warnings))}
 
 @transaction.atomic
 def move_lid_to_archive(waiting_student, archived_by, reason: str = "") -> ArchivedLid:
@@ -756,12 +527,14 @@ def move_student_to_waiting_hall(student, archived_by, reason, branch):
     from groups.models import WaitingStudent
     from .models import ArchivedStudent
     
+    from groups.models import Student
+    student = Student.objects.select_for_update().get(pk=student.pk)
     # 1. Bog'liq ma'lumotlarni yig'ish
     from finance.models import Payment
     payments = Payment.objects.filter(student=student)
     
     # 2. Student ma'lumotlarini dict qilish va sanalarni tozalash
-    student_data = model_to_dict(student)
+    student_data = snapshot(student)
     cleaned_student_data = json_serializable_convert(student_data)
     
     # Qo'shimcha ID larni qo'shish
@@ -769,7 +542,9 @@ def move_student_to_waiting_hall(student, archived_by, reason, branch):
     cleaned_student_data["group_id"] = student.group_id
     
     # 3. Bog'langan ma'lumotlarni tozalab qo'shish
-    cleaned_student_data["payments"] = serialize_related(payments)
+    cleaned_student_data["payments"] = snapshot_rows(payments)
+    cleaned_student_data["history_ids"] = student_history(student)
+    cleaned_student_data["enrollments"] = snapshot_rows(student.enrollments.all())
 
     # 4. Arxiv yaratish (Waiting Hall uchun reason ni [WAITING_HALL] bilan boshlaymiz)
     archived = ArchivedStudent.objects.create(

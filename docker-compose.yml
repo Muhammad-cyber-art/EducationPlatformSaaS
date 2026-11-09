@@ -1,3 +1,9 @@
+x-service-logging: &service-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ─────────────────────────────────────────────────────────────────
   # 1. PostgreSQL
@@ -5,6 +11,7 @@ services:
   db:
     image: postgres:15-alpine
     restart: always
+    logging: *service-logging
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     env_file:
@@ -25,6 +32,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    logging: *service-logging
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,6 +47,7 @@ services:
   web:
     build: ./backend
     restart: always
+    logging: *service-logging
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --threads ${GUNICORN_THREADS:-3} --worker-class gthread --max-requests 1000 --max-requests-jitter 50 --timeout 120 --access-logfile - --error-logfile -
     ports:
       - "127.0.0.1:8000:8000"
@@ -60,6 +69,7 @@ services:
   celery_worker:
     build: ./backend
     restart: always
+    logging: *service-logging
     command: celery -A config worker -Q default,heavy_reports -l info --concurrency=2
     env_file:
       - .env
@@ -77,9 +87,25 @@ services:
   # ─────────────────────────────────────────────────────────────────
   # 5. Celery Beat (Scheduled tasks)
   # ─────────────────────────────────────────────────────────────────
+  notification_worker:
+    build: ./backend
+    restart: always
+    logging: *service-logging
+    command: celery -A config worker -Q notifications -l info --concurrency=1 --prefetch-multiplier=1
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_volume:/app/media
+
   celery_beat:
     build: ./backend
     restart: always
+    logging: *service-logging
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file:
       - .env
@@ -102,6 +128,7 @@ services:
   telegram_bot:
     build: ./backend
     restart: always
+    logging: *service-logging
     command: python manage.py runbot
     env_file:
       - .env
@@ -127,6 +154,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-/}
     restart: always
+    logging: *service-logging
 
   # ─────────────────────────────────────────────────────────────────
   # 8. Nginx (Reverse Proxy)
@@ -134,6 +162,7 @@ services:
   nginx:
     image: nginx:stable-alpine
     restart: always
+    logging: *service-logging
     ports:
       - "80:80"
       - "443:443"

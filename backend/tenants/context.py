@@ -1,9 +1,10 @@
 """
-Thread-safe tenant context management.
+Thread-safe and async-safe tenant context management.
 
-Django har bir HTTP requestni alohida thread (yoki coroutine)da ishlaydi.
-threading.local() ishlatib, har bir thread uchun alohida tenant ob'ekti
-saqlanadi — boshqa requestlar bir-birining tenant ma'lumotlarini ko'rmaydi.
+contextvars.ContextVar (PEP 567) ishlatilib, har bir thread va asinxron korutina
+(asyncio / async views / tasks) uchun alohida tenant ob'ekti xavfsiz saqlanadi.
+Shu bilan birga, orqaga muvofiqlik (backward compatibility) uchun threading.local()
+ham sinxron tarzda yangilanib boriladi.
 
 Ishlatish:
     # Middleware da:
@@ -18,25 +19,28 @@ Ishlatish:
     clear_current_tenant()
 """
 
+import contextvars
 import threading
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Har bir thread uchun alohida namespace — thread-safe
-_thread_locals = threading.local()
+# Zamonaviy ContextVar (Python 3.7+) — async & thread-safe
+_current_tenant_var: contextvars.ContextVar = contextvars.ContextVar("current_tenant", default=None)
 
-# Thread-local kalit nomi
+# Orqaga muvofiqlik uchun threading.local()
+_thread_locals = threading.local()
 _TENANT_KEY = "current_tenant"
 
 
 def set_current_tenant(tenant) -> None:
     """
-    Joriy thread uchun tenant o'rnatadi.
+    Joriy kontekst (thread va coroutine) uchun tenant o'rnatadi.
 
     Args:
         tenant: Tenant model instance yoki None
     """
+    _current_tenant_var.set(tenant)
     setattr(_thread_locals, _TENANT_KEY, tenant)
     if tenant:
         logger.debug(
@@ -48,28 +52,35 @@ def set_current_tenant(tenant) -> None:
 
 def get_current_tenant():
     """
-    Joriy thread uchun saqlangan tenant ob'ektini qaytaradi.
+    Joriy kontekst uchun saqlangan tenant ob'ektini qaytaradi.
 
     Returns:
         Tenant instance yoki None (agar CEO panel yoki tenant
         o'rnatilmagan bo'lsa)
     """
+    tenant = _current_tenant_var.get()
+    if tenant is not None:
+        return tenant
     return getattr(_thread_locals, _TENANT_KEY, None)
 
 
 def clear_current_tenant() -> None:
     """
-    Joriy thread uchun tenant kontekstini tozalaydi.
+    Joriy kontekst uchun tenant kontekstini tozalaydi.
 
     Har doim request tugagach finally blokida chaqirilishi shart —
     aks holda connection pool'dan olingan thread boshqa requestda
     noto'g'ri tenant ma'lumotlarini saqlab qolishi mumkin.
     """
+    tenant = get_current_tenant()
+    if tenant:
+        logger.debug("Tenant context tozalandi: schema=%s", tenant.schema_name)
+    _current_tenant_var.set(None)
     if hasattr(_thread_locals, _TENANT_KEY):
-        tenant = getattr(_thread_locals, _TENANT_KEY, None)
-        if tenant:
-            logger.debug("Tenant context tozalandi: schema=%s", tenant.schema_name)
-        delattr(_thread_locals, _TENANT_KEY)
+        try:
+            delattr(_thread_locals, _TENANT_KEY)
+        except AttributeError:
+            pass
 
 
 def get_current_schema_name() -> str:

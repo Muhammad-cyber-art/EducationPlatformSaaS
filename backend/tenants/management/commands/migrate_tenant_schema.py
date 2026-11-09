@@ -141,7 +141,7 @@ class Command(BaseCommand):
         Faqat migratsiyasi bor bo'lgan va public/celery/admin ga kirmaydigan
         tenant applari migratsiya qilinadi.
         """
-        from django.conf import settings
+        from django.apps import apps
         from django.db.migrations.loader import MigrationLoader
 
         loader = MigrationLoader(connection)
@@ -155,8 +155,8 @@ class Command(BaseCommand):
         }
 
         tenant_apps = [
-            app for app in settings.INSTALLED_APPS
-            if app in migrated_apps and app not in excluded_apps
+            config.label for config in apps.get_app_configs()
+            if config.label in migrated_apps and config.label not in excluded_apps
         ]
 
         for app_label in tenant_apps:

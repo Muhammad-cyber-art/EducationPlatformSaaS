@@ -131,6 +131,8 @@ def reset_search_path() -> None:
     ulanuvchi connection butunlay yopiladi (connection.close()),
     bu boshqa so'rovlarga eski schema qolib ketishini 100% oldini oladi.
     """
+    if connection.vendor != 'postgresql':
+        return
     try:
         with connection.cursor() as cursor:
             cursor.execute("SET search_path TO public")

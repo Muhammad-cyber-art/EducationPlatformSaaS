@@ -151,6 +151,8 @@ def send_attendance_notification(attendance, async_send=True, bot_token=None):
 @receiver(post_save, sender=Student)
 def notify_new_student(sender, instance, created, **kwargs):
     """Yangi o'quvchi ro'yxatdan o'tganda"""
+    if getattr(instance, '_restoring_from_archive', False):
+        return
     if created:
         # Arxivlangan o'quvchi bo'lsa xabar yubormaslik
         if not is_valid_for_notification(instance):

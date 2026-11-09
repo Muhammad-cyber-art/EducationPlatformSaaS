@@ -5,6 +5,18 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
+def cleanup_expired_tokens():
+    """Bound blacklist growth in public and each active tenant schema."""
+    from django.core.management import call_command
+    from tenants.models import Tenant
+    from tenants.utils import tenant_schema_context
+    call_command('flushexpiredtokens', verbosity=0)
+    for tenant in Tenant.objects.filter(is_active=True).iterator():
+        with tenant_schema_context(tenant):
+            call_command('flushexpiredtokens', verbosity=0)
+
+
+@shared_task
 def migrate_tenant_schema_async_task(schema_name: str):
     """
     Belgilangan tenant schema migratsiyasini Celery orqali asinxron bajarish.

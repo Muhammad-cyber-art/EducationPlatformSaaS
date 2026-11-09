@@ -82,6 +82,18 @@ class RegisterSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         current_user = request.user
 
+        if current_user.role != 'super_admin':
+            if 'role' in validated_data and validated_data['role'] != instance.role:
+                raise serializers.ValidationError({'role': "Rolni faqat Super Admin o'zgartira oladi."})
+            if current_user.role == 'mentor' and instance.pk != current_user.pk:
+                raise serializers.ValidationError("Faqat o'z profilingizni tahrirlashingiz mumkin.")
+            if current_user.role == 'admin' and instance.role != 'mentor' and instance.pk != current_user.pk:
+                raise serializers.ValidationError("Admin faqat mentor yoki o'z profilini tahrirlay oladi.")
+            if current_user.role == 'mentor' and 'branch' in validated_data:
+                branch = validated_data['branch']
+                if getattr(branch, 'pk', None) != instance.branch_id:
+                    raise serializers.ValidationError({'branch_id': "Filialni o'zgartirish huquqi yo'q."})
+
         # Ma'lumotlarni ajratib olamiz
         password = validated_data.pop('password', None)
         requested_branch = validated_data.pop('branch', None)
@@ -360,10 +372,15 @@ class BranchAccessSerializer(serializers.ModelSerializer):
                 "Faqat super_admin yoki admin ruxsat bera oladi."
             )
 
-        user_id = data['user_id']
-        branch = data['branch_id']  # Bu yerda Branch object keladi
+        user_id = data.get('user_id', getattr(self.instance, 'user_id', None))
+        branch = data.get('branch_id', getattr(self.instance, 'branch', None))
+        if not UserModel.objects.filter(pk=user_id, role__in=['mentor', 'admin']).exists():
+            raise serializers.ValidationError({'user_id': "Mentor yoki admin topilmadi."})
 
-        if BranchAccess.objects.filter(user_id=user_id, branch=branch).exists():
+        duplicates = BranchAccess.objects.filter(user_id=user_id, branch=branch)
+        if self.instance:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
             raise serializers.ValidationError("Bu foydalanuvchiga ushbu branch uchun allaqachon ruxsat berilgan.")
 
         return data
@@ -382,3 +399,8 @@ class BranchAccessSerializer(serializers.ModelSerializer):
             granted_by=request.user
         )
         return branch_access
+
+    def update(self, instance, validated_data):
+        if 'branch_id' in validated_data:
+            instance.branch = validated_data.pop('branch_id')
+        return super().update(instance, validated_data)

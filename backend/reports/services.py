@@ -4,131 +4,51 @@ from django.utils import timezone
 from homework_attends.models import Attendance, Homework, HomeworkSubmission
 from groups.models import Group
 
-def generate_daily_full_report(target_date=None):
-    if target_date is None:
-        target_date = timezone.now().date()
+def generate_daily_full_report(target_date=None, *, user, streaming=False):
+    from openpyxl.cell import WriteOnlyCell
+    from permissions.scopes import scope_report
+    from reports.queries import with_homework_status
 
-    # Yangi Excel kitobi yaratish
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Hisobot {target_date.strftime('%Y.%m.%d')}"
+    target_date = target_date or timezone.localdate()
+    wb = openpyxl.Workbook(write_only=streaming)
+    ws = wb.create_sheet() if streaming else wb.active
+    ws.title = f"Hisobot {target_date:%Y.%m.%d}"
+    for column, width in {'A': 5, 'B': 20, 'C': 20, 'D': 35, 'E': 15, 'F': 30, 'G': 20}.items():
+        ws.column_dimensions[column].width = width
+    border = Border(**{side: Side(style='thin') for side in ('left', 'right', 'top', 'bottom')})
+    header_font = Font(bold=True, color='FFFFFF', size=12)
+    header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
 
-    # --- Stillar ---
-    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", size=12)
-    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    border = Border(
-        left=Side(style='thin'), right=Side(style='thin'), 
-        top=Side(style='thin'), bottom=Side(style='thin')
-    )
-
-    # --- Sarlavhalar ---
-    headers = [
-        "№", "Filial", "Guruh", "O'quvchi F.I.SH", 
-        "Davomat", "Uy vazifasi (Mavzu)", "Vazifa holati"
-    ]
-    ws.append(headers)
-
-    # Sarlavha stilini qo'llash
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = center_align
-        cell.border = border
-
-    # --- Ma'lumotlarni yig'ish ---
-    # Bugungi barcha davomatlarni olamiz.
-    # BUG FIX #3: faqat BAZADA MAVJUD guruh bilan bog'liq davomatlarni olamiz.
-    # group__isnull=False — o'chirilgan guruhga tegishli Attendance'lar chiqmasligini ta'minlaydi.
-    # prefetch_related('group__homeworks') — N+1 muammosini bartaraf etadi.
-    attendances = (
-        Attendance.objects
-        .filter(
-            date=target_date,
-            group__isnull=False,          # o'chirilgan guruhlar chiqmasin
-            student__isnull=False,        # o'chirilgan studentlar chiqmasin
-        )
-        .select_related(
-            'student',
-            'group',
-            'group__branch',
-        )
-        .prefetch_related(
-            # Har bir guruh uchun barcha uy vazifalarini bir so'rovda oladi
-            'group__homeworks',
-        )
-        .order_by('group__branch__name', 'group__name', 'student__full_name')
-    )
-
-    # Guruh bo'yicha Homework cache (N+1 ni to'liq yo'qotadi)
-    from django.db.models import Prefetch
-    homework_by_group: dict = {}  # {group_id: Homework | None}
-
-    for index, att in enumerate(attendances, start=1):
-        student = att.student
-        group = att.group
-        branch = group.branch
-
-        # 1. Cache'da yo'q bo'lsa — shu guruh uchun bugungi uy vazifasini topamiz
-        if group.id not in homework_by_group:
-            hw = Homework.objects.filter(
-                group=group,
-                created_at__date=target_date
-            ).first()
-            homework_by_group[group.id] = hw
-
-        homework = homework_by_group[group.id]
-
-        hw_title = "Vazifa berilmagan"
-        hw_status = "-"
-
-        if homework:
-            hw_title = homework.title
-            # 2. Shu o'quvchining vazifa topshirganlik holatini tekshiramiz
-            submission = HomeworkSubmission.objects.filter(
-                homework=homework,
-                student=student
-            ).first()
-
-            if submission:
-                hw_status = submission.get_status_display()
-            else:
-                hw_status = "Topshirmagan ❌"
-
-        # Qatorga ma'lumotlarni qo'shish
-        row_data = [
-            index,
-            branch.name if branch else "Filialsiz",
-            group.name,
-            student.full_name,
-            "✅ Keldi" if att.is_present else "❌ Kelmadi",
-            hw_title,
-            hw_status
-        ]
-        ws.append(row_data)
-
-        # Qator kataklari uchun stil
-        for cell in ws[ws.max_row]:
+    def append(values, header=False):
+        cells = []
+        for index, value in enumerate(values, 1):
+            cell = WriteOnlyCell(ws, value=value)
+            # Treat user-entered text as text, never as an Excel formula.
+            if isinstance(value, str):
+                cell.data_type = 's'
             cell.border = border
-            cell.alignment = Alignment(vertical="center", horizontal="left")
-            # "№", "Davomat" va "Holat" ustunlarini markazga tekislaymiz
-            if cell.column in [1, 5, 7]:
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.alignment = Alignment(vertical='center', horizontal='center' if header or index in (1, 5, 7) else 'left', wrap_text=header)
+            if header:
+                cell.font = header_font
+                cell.fill = header_fill
+            cells.append(cell)
+        ws.append(cells)
 
-    # --- Ustun kengliklarini avtomatik sozlash ---
-    dims = {
-        'A': 5,  # №
-        'B': 20, # Filial
-        'C': 20, # Guruh
-        'D': 35, # F.I.SH
-        'E': 15, # Davomat
-        'F': 30, # Mavzu
-        'G': 20  # Holat
-    }
-    for col, value in dims.items():
-        ws.column_dimensions[col].width = value
-
+    append(['№', 'Filial', 'Guruh', "O'quvchi F.I.SH", 'Davomat', 'Uy vazifasi (Mavzu)', 'Vazifa holati'], header=True)
+    queryset = Attendance.objects.filter(
+        date=target_date, group__isnull=False, student__isnull=False,
+    ).select_related('student', 'group__branch').order_by('group__branch__name', 'group__name', 'student__full_name')
+    queryset = with_homework_status(scope_report(queryset, user))
+    labels = dict(HomeworkSubmission.STATUS_CHOICES)
+    for index, attendance in enumerate(queryset.iterator(chunk_size=1000), 1):
+        append([
+            index, attendance.group.branch.name, attendance.group.name, attendance.student.full_name,
+            'Keldi' if attendance.is_present else 'Kelmadi',
+            attendance.report_homework_title or 'Vazifa berilmagan',
+            labels.get(attendance.report_submission_status, 'Topshirmagan') if attendance.report_homework_id else '-',
+        ])
     return wb
+
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -172,7 +92,7 @@ def get_full_monthly_report(year, month):
         .filter(
             month__year=year,
             month__month=month,
-            is_paid=True,
+            paid_amount__gt=0,
             group__isnull=False,          # o'chirilgan guruhlar chiqmasin
             group__branch__isnull=False,  # filialsiz guruhlar chiqmasin
             student__isnull=False,        # o'chirilgan studentlar chiqmasin
@@ -183,13 +103,13 @@ def get_full_monthly_report(year, month):
         .order_by('group__branch', 'student__full_name')
     )
 
-    for i, sp in enumerate(student_payments, 1):
+    for i, sp in enumerate(student_payments.iterator(chunk_size=1000), 1):
         ws1.append([
             i,
             sp.group.branch.name if sp.group.branch else "-",
             sp.student.full_name,
             sp.group.name,
-            sp.amount,
+            sp.paid_amount,
             sp.month.strftime("%Y-%m") if sp.month else "-",
             sp.marked_by.get_full_name() or sp.marked_by.username if sp.marked_by else "Onlayn",
             sp.paid_at.strftime("%Y-%m-%d %H:%M") if sp.paid_at else "-",
@@ -215,7 +135,7 @@ def get_full_monthly_report(year, month):
         month__year=year, month__month=month, is_paid=True
     ).select_related('employee', 'employee__branch', 'marked_by').order_by('employee__branch')
 
-    for i, ep in enumerate(employee_payments, 1):
+    for i, ep in enumerate(employee_payments.iterator(chunk_size=1000), 1):
         total_paid = float(ep.salary_base + ep.bonus - ep.deductions)
         ws2.append([
             i,
@@ -248,7 +168,7 @@ def get_full_monthly_report(year, month):
         date__year=year, date__month=month
     ).exclude(category__in=['student_fee', 'salary']).select_related('branch', 'marked_by').order_by('date')
 
-    for i, tr in enumerate(other_transactions, 1):
+    for i, tr in enumerate(other_transactions.iterator(chunk_size=1000), 1):
         ws_extra.append([
             i,
             tr.branch.name if tr.branch else "-",
@@ -286,20 +206,18 @@ def get_full_monthly_report(year, month):
     grand_expense_other = 0
     grand_debt = 0
 
+    from reports.queries import monthly_branch_totals
+    branch_totals = monthly_branch_totals(year, month)
     for branch in branches:
-        # 1. Kirimlar
-        income_fees = Payment.objects.filter(group__branch=branch, month__year=year, month__month=month, is_paid=True).aggregate(total=Sum('amount'))['total'] or 0
-        income_extra = FinanceTransaction.objects.filter(branch=branch, date__year=year, date__month=month, transaction_type='income', category='student_extra').aggregate(total=Sum('amount'))['total'] or 0
-        
-        # 2. Chiqimlar
-        expense_salary = EmployeePayment.objects.filter(employee__branch=branch, month__year=year, month__month=month, is_paid=True).aggregate(total=Sum(F('salary_base') + F('bonus') - F('deductions')))['total'] or 0
-        expense_refund = FinanceTransaction.objects.filter(branch=branch, date__year=year, date__month=month, transaction_type='expense', category='refund').aggregate(total=Sum('amount'))['total'] or 0
-        expense_utility = FinanceTransaction.objects.filter(branch=branch, date__year=year, date__month=month, transaction_type='expense', category='utility').aggregate(total=Sum('amount'))['total'] or 0
-        expense_other = FinanceTransaction.objects.filter(branch=branch, date__year=year, date__month=month, transaction_type='expense').exclude(category__in=['salary', 'refund', 'utility']).aggregate(total=Sum('amount'))['total'] or 0
-        
-        # 3. Qarzdorlik
-        debt = Payment.objects.filter(group__branch=branch, month__year=year, month__month=month, is_paid=False).aggregate(total=Sum('amount'))['total'] or 0
-        
+        totals = branch_totals.get(branch.pk, {})
+        income_fees = totals.get('inc_fees', 0)
+        income_extra = totals.get('inc_extra', 0)
+        expense_salary = totals.get('exp_salary', 0)
+        expense_refund = totals.get('exp_refund', 0)
+        expense_utility = totals.get('exp_util', 0)
+        expense_other = totals.get('exp_other', 0)
+        debt = totals.get('debt', 0)
+
         net_profit = (income_fees + income_extra) - (expense_salary + expense_refund + expense_utility + expense_other)
         
         ws3.append([

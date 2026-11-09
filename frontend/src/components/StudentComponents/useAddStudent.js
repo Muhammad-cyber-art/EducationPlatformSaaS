@@ -64,12 +64,28 @@ export const useAddStudent = (branchId) => {
   }, [currentBranchId, branchId]);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (!hasGroupId && (currentBranchId || branchId)) {
-      api
-        .get(`/groups/nested_groups/`)
-        .then((res) => setGroups(safeArray(res.data)))
-        .catch((err) => console.error("Error loading groups", err));
+      const loadGroups = async () => {
+        const items = [];
+        let page = 1;
+        let hasNext = true;
+        while (hasNext) {
+          const res = await api.get('/groups/nested_groups/', {
+            params: { branch_id: currentBranchId || branchId, page, page_size: 200 },
+            signal: controller.signal,
+          });
+          items.push(...safeArray(res.data));
+          hasNext = Boolean(res.data.next);
+          page += 1;
+        }
+        if (!controller.signal.aborted) setGroups(items);
+      };
+      loadGroups().catch((err) => {
+        if (!controller.signal.aborted) console.error('Error loading groups', err);
+      });
     }
+    return () => controller.abort();
   }, [hasGroupId, currentBranchId, branchId]);
 
   // Debounced search logic

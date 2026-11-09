@@ -1,4 +1,3 @@
-import threading
 import requests
 import time
 from django.conf import settings
@@ -123,25 +122,19 @@ def get_student_telegram_ids(student):
     return chat_ids
 
 def send_telegram_message_async(chat_id, text, bot_token=None):
-    """Xabarni fon oqimida (daemon thread) jo'natish — asosiy HTTP so'rovni 0ms ham to'xtatmaydi."""
+    """Queue network I/O after the database transaction commits."""
     if not chat_id:
         return
-    
     token = get_tenant_bot_token(bot_token)
     if not token:
-        logger.warning(f"Telegram token yo'q! Xabar jo'natilmadi (chat_id: {chat_id}).")
         return
-    
-    try:
-        thread = threading.Thread(
-            target=_send_message_sync,
-            args=(chat_id, text),
-            kwargs={'bot_token': token},
-            daemon=True
-        )
-        thread.start()
-    except Exception as exc:
-        logger.error(f"Telegram thread yaratishda xato: {exc}")
+    from django.db import transaction
+    from .tasks import send_telegram_message_task
+    transaction.on_commit(
+        lambda: send_telegram_message_task.apply_async(
+            args=[chat_id, text], kwargs={'bot_token': token}, retry=False,
+        ), robust=True,
+    )
 
 
 def _send_message_sync(chat_id, text, max_retries=3, bot_token=None):
@@ -165,7 +158,16 @@ def _send_message_sync(chat_id, text, max_retries=3, bot_token=None):
                 logger.error(f"Telegram error (Attempt {attempt+1}): {response.text}")
                 # Too Many Requests xatosi bo'lsa, Telegram so'ragan vaqtcha kutamiz
                 if response.status_code == 429:
-                    retry_after = response.json().get('parameters', {}).get('retry_after', 3)
+                    if attempt >= max_retries - 1:
+                        return response
+                    try:
+                        retry_after = max(0, float(response.json().get('parameters', {}).get('retry_after', 3)))
+                    except (ValueError, TypeError, AttributeError):
+                        retry_after = 3
+                    if retry_after > 5:
+                        # Let Celery schedule a later retry instead of sleeping
+                        # in a worker or retrying before Telegram permits it.
+                        return response
                     time.sleep(retry_after)
                     continue
                 # Agar HTML parse xatosi bo'lsa (&, < kabi belgilar sabab), formatlashsiz (plain text) qayta yuboramiz
@@ -219,33 +221,16 @@ def send_document_sync(chat_id, filepath, caption='', bot_token=None):
 
 
 def send_homework_notification_async(homework_id, bot_token=None):
-    """
-    Yangi uyga vazifa xabarnomasini fon oqimida (daemon thread) jo'natish.
-    Bu funksiya darhol qaytadi va HTTP so'rovni 0ms ham to'xtatmaydi.
-    Thread ichida tegishli tenant sxema konteksti saqlanadi.
-    """
-    from django.db import connection
-    schema_name = getattr(connection, 'schema_name', None)
+    """Pass the tenant explicitly; Celery workers have separate DB connections."""
+    from django.db import transaction
+    from tenants.context import get_current_schema_name
+    from .tasks import send_homework_notification_task
+    schema_name = get_current_schema_name()
     token = get_tenant_bot_token(bot_token)
-
-    def _worker():
-        try:
-            from .tasks import send_homework_notification_task
-            if schema_name:
-                from tenants.utils import tenant_schema_context
-                with tenant_schema_context(schema_name):
-                    send_homework_notification_task(homework_id, bot_token=token)
-            else:
-                send_homework_notification_task(homework_id, bot_token=token)
-        except Exception as err:
-            logger.error(f"send_homework_notification_async xatolik (hw_id: {homework_id}): {err}")
-        finally:
-            try:
-                from django.db import connection as conn
-                conn.close()
-            except Exception:
-                pass
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
+    transaction.on_commit(
+        lambda: send_homework_notification_task.apply_async(
+            args=[homework_id], kwargs={'bot_token': token, 'schema_name': schema_name},
+            retry=False,
+        ), robust=True,
+    )
 

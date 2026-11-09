@@ -39,9 +39,11 @@ class SyncPushRequestSerializer(serializers.Serializer):
     """
     Klientdan serverga yuboriladigan paketli mutatsiyalar
     """
+    client_id = serializers.UUIDField()
     mutations = serializers.ListField(
         child=SyncMutationItemSerializer(),
-        allow_empty=True
+        allow_empty=True,
+        max_length=100,
     )
 
 

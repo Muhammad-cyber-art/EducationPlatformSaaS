@@ -1,4 +1,5 @@
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
+from tempfile import SpooledTemporaryFile
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import serializers
@@ -14,8 +15,8 @@ class DailyReportQuerySerializer(serializers.Serializer):
     date = serializers.DateField(required=False, help_text="Sana (YYYY.MM.DD). Default: bugun")
 
 class MonthlyFinanceQuerySerializer(serializers.Serializer):
-    year = serializers.IntegerField(required=False)
-    month = serializers.IntegerField(required=False)
+    year = serializers.IntegerField(required=False, min_value=2000, max_value=2100)
+    month = serializers.IntegerField(required=False, min_value=1, max_value=12)
 
 class PendingNotificationResponseSerializer(serializers.Serializer):
     pending_daily = serializers.BooleanField()
@@ -50,8 +51,16 @@ class DailyReportExportView(APIView):
             target_date = timezone.now().astimezone(tashkent_tz).date()
 
         # Excelni yaratish
-        wb = generate_daily_full_report(target_date)
+        wb = generate_daily_full_report(target_date, user=request.user, streaming=True)
         
+        report_file = SpooledTemporaryFile(max_size=2 * 1024 * 1024, mode='w+b')
+        try:
+            wb.save(report_file)
+            report_file.seek(0)
+        except Exception:
+            report_file.close()
+            raise
+
         # Yuklanganligini belgilab qo'yish
         ReportDownloadTrack.objects.get_or_create(
             user=request.user,
@@ -60,12 +69,11 @@ class DailyReportExportView(APIView):
         )
         
         filename = f"{target_date.strftime('%Y.%m.%d')}.xlsx"
-        response = HttpResponse(
+        response = FileResponse(report_file,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
-        wb.save(response)
         return response
 
 class MonthlyFinanceExportView(APIView):
@@ -82,10 +90,20 @@ class MonthlyFinanceExportView(APIView):
         tashkent_tz = ZoneInfo('Asia/Tashkent')
         now_tashkent = timezone.now().astimezone(tashkent_tz)
 
-        year = int(request.query_params.get('year', now_tashkent.year))
-        month = int(request.query_params.get('month', now_tashkent.month))
+        query = MonthlyFinanceQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        year = query.validated_data.get('year', now_tashkent.year)
+        month = query.validated_data.get('month', now_tashkent.month)
         
         wb = get_full_monthly_report(year, month)
+
+        report_file = SpooledTemporaryFile(max_size=2 * 1024 * 1024, mode='w+b')
+        try:
+            wb.save(report_file)
+            report_file.seek(0)
+        except Exception:
+            report_file.close()
+            raise
         
         # Yuklanganligini belgilab qo'yish
         report_date = date(year, month, 1)
@@ -96,11 +114,10 @@ class MonthlyFinanceExportView(APIView):
         )
         
         filename = f"Moliya_Hisoboti_{year}_{month:02d}.xlsx"
-        response = HttpResponse(
+        response = FileResponse(report_file,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        wb.save(response)
         return response
 
 class CheckPendingNotificationsView(APIView):

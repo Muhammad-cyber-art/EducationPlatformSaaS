@@ -33,6 +33,32 @@ def get_last_3_lesson_dates(group):
     # Eng yangi 3 tasini qaytaramiz
     return sorted(list(all_past_dates), reverse=True)[:3]
 
+def attendance_members(group, requested_date):
+    """Students enrolled on this date; current state must not erase past membership."""
+    from groups.models import GroupEnrollment
+    enrollments = GroupEnrollment.objects.filter(
+        group=group, joined_at__date__lte=requested_date,
+        student__is_active=True, student__is_archived=False,
+    ).filter(
+        models.Q(left_at__date__gte=requested_date)
+        | models.Q(is_active=True, left_at__isnull=True)
+    ).filter(
+        models.Q(is_frozen=False)
+        | models.Q(is_frozen=True, frozen_at__date__gt=requested_date)
+    )
+    # Only true legacy rows without an enrollment can use the old primary-group FK.
+    legacy = Student.objects.filter(
+        group=group, is_active=True, is_archived=False,
+        joined_at__date__lte=requested_date,
+    ).exclude(enrollments__group=group).filter(
+        models.Q(is_frozen=False) | models.Q(frozen_at__date__gt=requested_date)
+    )
+    return Student.objects.filter(
+        models.Q(pk__in=enrollments.values('student_id')) | models.Q(pk__in=legacy.values('pk'))
+    )
+
+
+@transaction.atomic
 def get_or_create_attendance_records(group, requested_date, view_only=False):
     """Davomat yozuvlarini olish yoki yaratish (istalgan kun uchun)
     
@@ -41,24 +67,15 @@ def get_or_create_attendance_records(group, requested_date, view_only=False):
         requested_date: So'ralgan sana
         view_only: Agar True bo'lsa, yangi yozuvlar yaratilmaydi (o'tgan oylar yoki dars bo'lmagan kunlar uchun)
     """
+    group = Group.objects.select_for_update().get(pk=group.pk)
     # Dars kuni bo'lmasa, yangi davomat yozuvlari avtomatik yaratilmaydi (faqat mavjud yozuvlar ko'rsatiladi)
     if not group.is_lesson_day(requested_date):
         view_only = True
 
     # 1. Shu kunda guruhda bo'lgan studentlarni aniqlash:
     # A) requested_date kunida faol bo'lgan yoki shu kundan KEYIN guruhdan chiqqan/ko'chgan enrollmentlar
-    from groups.models import GroupEnrollment
-    active_enrollments = GroupEnrollment.objects.filter(
-        group=group,
-        joined_at__date__lte=requested_date,
-        student__is_archived=False,
-        student__is_active=True,
-        is_frozen=False
-    ).filter(
-        models.Q(is_active=True) | models.Q(left_at__date__gte=requested_date)
-    ).select_related('student')
-    
-    active_student_ids = set(active_enrollments.values_list('student_id', flat=True))
+    members = dict(attendance_members(group, requested_date).select_for_update().order_by('pk').values_list('pk', 'full_name'))
+    active_student_ids = set(members)
     
     # 2. Mavjud davomat yozuvlarini olish
     queryset = Attendance.objects.filter(group=group, date=requested_date)
@@ -69,10 +86,11 @@ def get_or_create_attendance_records(group, requested_date, view_only=False):
         missing_ids = active_student_ids - existing_student_ids
         if missing_ids:
             new_records = [
-                Attendance(student_id=sid, group=group, date=requested_date, is_present=True)
+                Attendance(student_id=sid, student_full_name=members[sid], group=group,
+                           group_name=group.name, date=requested_date, is_present=True)
                 for sid in missing_ids
             ]
-            Attendance.objects.bulk_create(new_records)
+            Attendance.objects.bulk_create(new_records, ignore_conflicts=True)
             queryset = Attendance.objects.filter(group=group, date=requested_date)
     
     # O'sha kunda guruhda bo'lgan yoki o'sha kunga allaqachon davomat yozuvi mavjud bo'lgan studentlar ko'rsatiladi
@@ -138,40 +156,26 @@ def generate_weekly_attendance_report(group, today=None):
         "data": report
     }
 
+@transaction.atomic
 def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
-    """Davomatlarni bulk tasdiqlash va xabarnomalarni yuborish.
-    
-    BUG #3 FIX: Guruhda hozir FAOL bo'lgan studentlar ID larini oldindan
-    aniqlab olamiz. Payload'da kelgan lekin guruhdan allaqachon chiqarilgan
-    student ID lari e'tiborga olinmaydi — bu ularning keyingi hisobotlarda
-    yana paydo bo'lib qolishini oldini oladi.
-    """
+    """Validate dated membership before writing any attendance or scheduling side effects."""
+    group = Group.objects.select_for_update().get(pk=group.pk)
     if not group.is_lesson_day(requested_date):
         raise ValueError("Ushbu sana guruh dars jadvaliga to'g'ri kelmaydi. Dars bo'lmagan kunga davomat olib bo'lmaydi.")
 
-    from groups.models import GroupEnrollment
-
-    # Faqat shu guruhga aloqador yoki mavjud davomat yozuvi bor studentlar qabul qilinadi
-    group_enrollment_student_ids = set(
-        GroupEnrollment.objects.filter(
-            group=group
-        ).filter(
-            models.Q(is_active=True) | models.Q(left_at__date__gte=requested_date)
-        ).values_list('student_id', flat=True)
-    )
-    direct_student_ids = set(
-        Student.objects.filter(
-            models.Q(group=group) | models.Q(enrollments__group=group),
-            is_active=True
-        ).values_list('id', flat=True)
-    )
-    active_student_ids = group_enrollment_student_ids | direct_student_ids
+    # Existing drafts never override dated membership validation.
+    members = dict(attendance_members(group, requested_date).select_for_update().order_by('pk').values_list('pk', 'full_name'))
+    active_student_ids = set(members)
     existing_attendances = Attendance.objects.filter(group=group, date=requested_date)
     attendance_map = {att.student_id: att for att in existing_attendances}
-    valid_student_ids = active_student_ids | set(attendance_map.keys())
-
-    frozen_enrollments = GroupEnrollment.objects.filter(group=group, is_frozen=True)
-    frozen_map = {e.student_id: (e.frozen_at.date() if e.frozen_at else None) for e in frozen_enrollments}
+    valid_student_ids = active_student_ids
+    from .serializers import AttendanceBulkMarkSerializer
+    payload_serializer = AttendanceBulkMarkSerializer(data=attendances_payload, many=True)
+    payload_serializer.is_valid(raise_exception=True)
+    attendances_payload = payload_serializer.validated_data
+    if any(item['student_id'] not in valid_student_ids for item in attendances_payload):
+        from rest_framework.exceptions import ValidationError
+        raise ValidationError("Davomatda ushbu sanada guruhda faol bo'lmagan o'quvchi bor.")
 
     to_create = []
     to_update = []
@@ -180,42 +184,28 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
 
     with transaction.atomic():
         for item in attendances_payload:
-            try:
-                raw_student_id = item.get('student_id')
-                if raw_student_id is None:
-                    continue
-                student_id = int(raw_student_id)  # Type safety
-            except (ValueError, TypeError):
-                continue
-
-            # Dublikat student_id kelganda qayta ishlamaymiz (500 xatosini oldini olish)
+            student_id = item['student_id']
             if student_id in processed_student_ids:
                 continue
-
-            # Muzlatilgan student uchun muzlatilgan kundan boshlab davomat yozilmaydi
-            if student_id in frozen_map:
-                frozen_date = frozen_map[student_id]
-                if frozen_date is None or requested_date >= frozen_date:
-                    continue
-
-            # Faqat shu kunga aloqador studentlar qayta ishlanadi
-            if student_id not in valid_student_ids:
-                continue
-
-            is_present = item.get('is_present', True)
+            is_present = item['is_present']
 
             if student_id in attendance_map:
                 attendance = attendance_map[student_id]
-                if attendance.is_present != is_present or attendance.marked_by != user:
+                if (attendance.is_present != is_present or attendance.marked_by != user
+                        or not attendance.student_full_name or not attendance.group_name):
                     attendance.is_present = is_present
                     attendance.marked_by = user
+                    attendance.student_full_name = attendance.student_full_name or members[student_id]
+                    attendance.group_name = attendance.group_name or group.name
                     to_update.append(attendance)
                 updated_ids.append(attendance.id)
                 processed_student_ids.add(student_id)
             else:
                 to_create.append(Attendance(
                     student_id=student_id,
+                    student_full_name=members[student_id],
                     group=group,
+                    group_name=group.name,
                     date=requested_date,
                     is_present=is_present,
                     marked_by=user
@@ -223,7 +213,7 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
                 processed_student_ids.add(student_id)
 
         if to_update:
-            Attendance.objects.bulk_update(to_update, ['is_present', 'marked_by'])
+            Attendance.objects.bulk_update(to_update, ['is_present', 'marked_by', 'student_full_name', 'group_name'])
         if to_create:
             Attendance.objects.bulk_create(to_create, ignore_conflicts=True)
             # ignore_conflicts=True bo'lganda Django PK larni to'ldirmaydi, shuning uchun ID larni bazadan so'raymiz
@@ -249,58 +239,19 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             
             transaction.on_commit(trigger_finance_recalc)
 
-    # Xabarnomalarni butunlay asinxron fonda yuborish (HTTP javobni 0ms ham kutdirmaydi)
-    from django.db import connection
-    schema_name = getattr(connection, 'schema_name', None)
-
-    if updated_ids:
-        from django.utils import timezone
-        today = timezone.localdate()
-        if requested_date == today:
-            import threading
-            import time
-
-            def _dispatch_notifications(att_ids, current_schema):
-                sent_via_celery = False
-                try:
-                    from telegram_bot.tasks import send_attendance_notifications_task
-                    send_attendance_notifications_task.apply_async(
-                        args=[att_ids],
-                        kwargs={'schema_name': current_schema},
-                        retry=False,
-                        connect_timeout=0.5
-                    )
-                    sent_via_celery = True
-                except Exception:
-                    sent_via_celery = False
-
-                if not sent_via_celery:
-                    try:
-                        from telegram_bot.signals import send_attendance_notification
-                        from tenants.utils import tenant_schema_context
-
-                        def _send():
-                            atts = Attendance.objects.filter(id__in=att_ids).select_related('student', 'group')
-                            for a in atts:
-                                try:
-                                    send_attendance_notification(a, async_send=False)
-                                    time.sleep(0.04)
-                                except Exception:
-                                    pass
-
-                        if current_schema:
-                            with tenant_schema_context(current_schema):
-                                _send()
-                        else:
-                            _send()
-                    except Exception:
-                        pass
-
-            threading.Thread(
-                target=_dispatch_notifications,
-                args=(list(updated_ids), schema_name),
-                daemon=True
-            ).start()
+    from tenants.context import get_current_schema_name
+    from telegram_bot.tasks import send_attendance_notifications_task
+    from telegram_bot.utils import get_tenant_bot_token
+    from django.utils import timezone
+    if updated_ids and requested_date == timezone.localdate():
+        schema = get_current_schema_name()
+        token = get_tenant_bot_token()
+        ids = list(updated_ids)
+        transaction.on_commit(
+            lambda: send_attendance_notifications_task.apply_async(
+                args=[ids], kwargs={'schema_name': schema, 'bot_token': token}, retry=False,
+            ), robust=True,
+        )
 
     # Guruhda faol yoki shu kuni davomati bo'lgan studentlarning davomatini qaytaramiz
     visible_ids = valid_student_ids | processed_student_ids | set(existing_attendances.values_list('student_id', flat=True))
@@ -559,6 +510,8 @@ def edit_past_attendance(attendance_id, user, new_status, reason=''):
             return attendance  # O'zgarish yo'q
              
         group = attendance.group
+        if not group or not attendance_members(group, attendance.date).filter(pk=attendance.student_id).exists():
+            raise ValidationError("O'quvchi ushbu sanada guruhda faol emas.")
         
         # 2. "Oxirgi 3 ta dars" yoki to'liq davomat (1 oylik) validatsiyasi — dars jadvaliga asoslanadi
         last_3_dates = get_last_3_lesson_dates(group)
@@ -601,26 +554,16 @@ def edit_past_attendance(attendance_id, user, new_status, reason=''):
             )
         )
         
-    # 6. Asinxron xabarnomalar — FAQAT bugungi sana uchun (BUG Notification FIX)
-    from django.db import connection
-    schema_name = getattr(connection, 'schema_name', None)
-    today = timezone.localdate()
-    if attendance.date == today:
-        try:
-            from telegram_bot.tasks import send_attendance_notifications_task
-            send_attendance_notifications_task.delay([attendance.id], schema_name=schema_name)
-        except Exception:
-            import threading
-
-            def _fallback_single_send():
-                try:
-                    from telegram_bot.signals import send_attendance_notification
-                    att = Attendance.objects.get(id=attendance.id)
-                    send_attendance_notification(att, async_send=False)
-                except Exception:
-                    pass
-
-            threading.Thread(target=_fallback_single_send, daemon=True).start()
+    from tenants.context import get_current_schema_name
+    from telegram_bot.tasks import send_attendance_notifications_task
+    from telegram_bot.utils import get_tenant_bot_token
+    if attendance.date == timezone.localdate():
+        schema, token, attendance_id = get_current_schema_name(), get_tenant_bot_token(), attendance.pk
+        transaction.on_commit(
+            lambda: send_attendance_notifications_task.apply_async(
+                args=[[attendance_id]], kwargs={'schema_name': schema, 'bot_token': token}, retry=False,
+            ), robust=True,
+        )
 
     return attendance
 

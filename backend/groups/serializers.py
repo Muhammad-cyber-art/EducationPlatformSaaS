@@ -9,6 +9,7 @@ from finance.models import Payment
 from rest_framework import serializers
 
 from .models import Group, MentorGroupAssignment, Student, WaitingStudent
+from .read_models import StudentListSerializer, StudentSnapshotMixin, CachedGroupMixin
 
 User = get_user_model()
 
@@ -79,7 +80,7 @@ class MentorListSerializer(serializers.ModelSerializer):
             return []
 
 
-class GroupSimpleSerializer(serializers.ModelSerializer):
+class GroupSimpleSerializer(CachedGroupMixin, serializers.ModelSerializer):
     students_count = serializers.SerializerMethodField()
     branch = BranchSerializer(read_only=True)
     branch_id = serializers.IntegerField(source='branch.id', read_only=True)  # Frontend filter uchun
@@ -205,7 +206,7 @@ class AssignAdditionalMentorSerializer(serializers.Serializer):
             self.fields["mentor"].choices = choices
 
 
-class StudentSerializer(serializers.ModelSerializer):
+class StudentSerializer(StudentSnapshotMixin, serializers.ModelSerializer):
     group = serializers.PrimaryKeyRelatedField(
         queryset=Group.objects.all(), allow_null=True
     )
@@ -219,6 +220,7 @@ class StudentSerializer(serializers.ModelSerializer):
     create_payment = serializers.BooleanField(write_only=True, default=True)
 
     class Meta:
+        list_serializer_class = StudentListSerializer
         model = Student
         fields = (
             "id",
@@ -247,45 +249,20 @@ class StudentSerializer(serializers.ModelSerializer):
         read_only_fields = ("joined_at",)
 
     def get_groups(self, obj) -> list:
-        """Faqat is_active=True bo'lgan enrollmentlardagi guruhlarni qaytaradi.
-        Bu o'quvchi ko'chirilgandan keyin eski guruhini ko'rsatib qolmasligini ta'minlaydi."""
-        from .models import GroupEnrollment
-        active_group_ids = GroupEnrollment.objects.filter(
-            student=obj, is_active=True
-        ).values_list('group_id', flat=True)
-        active_groups = Group.objects.filter(id__in=active_group_ids)
-        return GroupSimpleSerializer(active_groups, many=True, context=self.context).data
+        groups = [e.group for e in obj._read_snapshot['enrollments']]
+        return GroupSimpleSerializer(groups, many=True, context=self.context).data
 
     def get_current_payment_status(self, obj) -> bool:
-        """O'quvchining shu oydagi to'lov holati (True/False)"""
-        # 1. Global balansni tekshirish
-        try:
-            finance_profile = getattr(obj, 'finance_profile', None)
-            if finance_profile and finance_profile.balance >= 0:
-                return True
-        except Exception:
-            pass
-
-        today = timezone.now().date()
-        first_day_of_month = today.replace(day=1)
-
-        # Payment modelidan shu o'quvchi va shu oyga tegishlisini qidiramiz
-        payment = Payment.objects.filter(student=obj, month=first_day_of_month).first()
-
-        if payment and payment.amount == Decimal('0'):
+        snapshot = obj._read_snapshot
+        if snapshot['finance']['balance'] >= 0:
             return True
-
-        return payment.is_paid if payment else False
+        payment = snapshot['payment']
+        return bool(payment and (payment.amount == 0 or payment.is_paid))
 
     @extend_schema_field(serializers.IntegerField(allow_null=True))
     def get_current_payment_id(self, obj) -> int:
-        """Frontend uchun to'lovni tasdiqlashda kerak bo'ladigan Payment ID"""
-        today = timezone.now().date()
-        first_day_of_month = today.replace(day=1)
-
-        payment = Payment.objects.filter(student=obj, month=first_day_of_month).first()
-
-        return payment.id if payment else None
+        payment = obj._read_snapshot['payment']
+        return payment.pk if payment else None
 
     def validate(self, attrs):
         """
@@ -608,7 +585,7 @@ class AdminNestedSerializer(serializers.ModelSerializer):
         fields = ("id", "username", "first_name", "last_name")
 
 
-class GroupNestedSerializer(serializers.ModelSerializer):
+class GroupNestedSerializer(CachedGroupMixin, serializers.ModelSerializer):
     mentor = MentorNestedSerializer(read_only=True)
     admin = AdminNestedSerializer(read_only=True)
     days_display = serializers.CharField(read_only=True)
@@ -632,7 +609,7 @@ class GroupNestedSerializer(serializers.ModelSerializer):
         )
 
 
-class StudentNestedSerializer(serializers.ModelSerializer):
+class StudentNestedSerializer(StudentSnapshotMixin, serializers.ModelSerializer):
     group = GroupNestedSerializer(read_only=True)
     # BUG FIX: groups = GroupNestedSerializer(many=True, read_only=True) barcha
     # GroupEnrollment yozuvlarini (is_active=False larni ham) ko'rsatardi.
@@ -645,6 +622,7 @@ class StudentNestedSerializer(serializers.ModelSerializer):
     frozen_reason = serializers.SerializerMethodField()
 
     class Meta:
+        list_serializer_class = StudentListSerializer
         model = Student
         fields = (
             "id",
@@ -674,62 +652,35 @@ class StudentNestedSerializer(serializers.ModelSerializer):
         read_only_fields = ("joined_at",)
 
     def get_is_frozen(self, obj) -> bool:
-        from .models import GroupEnrollment
-        enr_frozen = GroupEnrollment.objects.filter(student=obj, is_active=True, is_frozen=True).exists()
-        return bool(enr_frozen or getattr(obj, 'is_frozen', False))
+        return any(e.is_frozen for e in obj._read_snapshot['enrollments']) or obj.is_frozen
 
     def get_frozen_at(self, obj):
-        from .models import GroupEnrollment
-        enr = GroupEnrollment.objects.filter(student=obj, is_active=True, is_frozen=True).first()
-        dt = (enr.frozen_at if enr and enr.frozen_at else None) or getattr(obj, 'frozen_at', None)
+        enrollment = next((e for e in obj._read_snapshot['enrollments'] if e.is_frozen), None)
+        dt = (enrollment.frozen_at if enrollment else None) or obj.frozen_at
         return dt.isoformat() if dt else None
 
     def get_frozen_reason(self, obj):
-        from .models import GroupEnrollment
-        enr = GroupEnrollment.objects.filter(student=obj, is_active=True, is_frozen=True).first()
-        return (enr.frozen_reason if enr and enr.frozen_reason else "") or getattr(obj, 'frozen_reason', "") or ""
+        enrollment = next((e for e in obj._read_snapshot['enrollments'] if e.is_frozen), None)
+        return (enrollment.frozen_reason if enrollment else '') or obj.frozen_reason or ''
 
     def get_groups(self, obj) -> list:
-        """Faqat is_active=True bo'lgan enrollmentlardagi guruhlarni qaytaradi.
-        Bu o'quvchi ko'chirilgandan keyin eski guruhini ko'rsatib qolmasligini ta'minlaydi."""
-        from .models import GroupEnrollment
-        active_enrs = GroupEnrollment.objects.filter(
-            student=obj, is_active=True
-        ).select_related('group', 'group__mentor', 'group__branch')
-
         result = []
-        for enr in active_enrs:
-            g_data = GroupNestedSerializer(enr.group, context=self.context).data
-            g_data['is_frozen'] = bool(enr.is_frozen)
-            g_data['frozen_at'] = enr.frozen_at.isoformat() if enr.frozen_at else None
-            g_data['frozen_reason'] = enr.frozen_reason or ""
-            result.append(g_data)
-
-        if not result and obj.group and not getattr(obj, 'is_archived', False):
-            g_data = GroupNestedSerializer(obj.group, context=self.context).data
-            g_data['is_frozen'] = bool(getattr(obj, 'is_frozen', False))
-            g_data['frozen_at'] = obj.frozen_at.isoformat() if getattr(obj, 'frozen_at', None) else None
-            g_data['frozen_reason'] = getattr(obj, 'frozen_reason', '') or ''
-            result.append(g_data)
+        for enrollment in obj._read_snapshot['enrollments']:
+            row = dict(GroupNestedSerializer(enrollment.group, context=self.context).data)
+            row.update(is_frozen=enrollment.is_frozen,
+                       frozen_at=enrollment.frozen_at.isoformat() if enrollment.frozen_at else None,
+                       frozen_reason=enrollment.frozen_reason or '')
+            result.append(row)
+        if not result and obj.group and not obj.is_archived:
+            row = dict(GroupNestedSerializer(obj.group, context=self.context).data)
+            row.update(is_frozen=obj.is_frozen, frozen_at=obj.frozen_at.isoformat() if obj.frozen_at else None,
+                       frozen_reason=obj.frozen_reason or '')
+            result.append(row)
         return result
 
     @extend_schema_field(serializers.DictField())
     def get_finance_profile(self, obj) -> dict:
-        try:
-            profile = obj.finance_profile
-            return {
-                "total_paid_all_time": profile.total_paid_all_time,
-                "total_refunded": profile.total_refunded,
-                "last_payment_date": profile.last_payment_date,
-                "balance": profile.balance
-            }
-        except Exception:
-            return {
-                "total_paid_all_time": 0,
-                "total_refunded": 0,
-                "last_payment_date": None,
-                "balance": 0
-            }
+        return obj._read_snapshot['finance']
 
 
 from django.db.models import Q

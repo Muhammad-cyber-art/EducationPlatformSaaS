@@ -143,10 +143,10 @@ class Group(models.Model):
         from .utils import is_lesson_day as is_scheduled_lesson_day
 
         # Agar bekor qilingan bo'lsa
-        if self.canceled_lesson_days.filter(date=date_obj).exists():
+        if any(day.date == date_obj for day in self.canceled_lesson_days.all()):
             return False
         # Agar maxsus dars kuni sifatida qo'shilgan bo'lsa
-        if self.special_lesson_days.filter(date=date_obj).exists():
+        if any(day.date == date_obj for day in self.special_lesson_days.all()):
             return True
         return is_scheduled_lesson_day(self._get_effective_days(), date_obj)
 

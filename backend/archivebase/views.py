@@ -19,6 +19,12 @@ from .services import (
 from rest_framework import filters # Qidiruv uchun
 from django_filters.rest_framework import DjangoFilterBackend # Filtr uchun
 from rest_framework.pagination import PageNumberPagination
+from .snapshots import scope_archives
+
+
+class BranchArchiveScopeMixin:
+    def get_queryset(self):
+        return scope_archives(super().get_queryset(), self.request.user)
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 15
@@ -36,7 +42,8 @@ class ArchivedStudentViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelVie
 
     def get_queryset(self):
         # Kutish zaliga o'tkazilganlarni asosiy arxiv ro'yxatidan yashiramiz
-        return ArchivedStudent.objects.exclude(reason__startswith="[WAITING_HALL]").order_by('-archived_at')
+        qs = ArchivedStudent.objects.exclude(reason__startswith="[WAITING_HALL]").order_by('-archived_at')
+        return scope_archives(qs, self.request.user)
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -74,7 +81,8 @@ class ArchivedStudentViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelVie
             return Response({
                 "success": True,
                 "message": f"{student.full_name} muvaffaqiyatli tiklandi",
-                "student_id": student.id
+                "student_id": student.id,
+                "warnings": getattr(student, 'archive_restore_warnings', []),
             }, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response(
@@ -95,7 +103,7 @@ class ArchivedStudentViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelVie
         
         for sid in ids:
             try:
-                archived = ArchivedStudent.objects.filter(id=sid).first()
+                archived = self.get_queryset().filter(id=sid).first()
                 if archived:
                     student = restore_student_from_archive(archived.id, user)
                     archived.delete()
@@ -113,7 +121,7 @@ class ArchivedStudentViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelVie
             return Response({"error": "Faqat adminlar o'chira oladi"}, status=403)
             
         ids = request.data.get('ids', [])
-        ArchivedStudent.objects.filter(id__in=ids).delete()
+        self.get_queryset().filter(id__in=ids).delete()
         return Response({"status": "O'quvchilar arxivdan butunlay o'chirildi"})
 
 class ArchivedStaffViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
@@ -209,7 +217,7 @@ class ArchivedStaffViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
         ArchivedStaff.objects.filter(id__in=ids).delete()
         return Response({"status": "Xodimlar arxivdan butunlay o'chirildi"})
 
-class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
+class ArchivedGroupViewSet(BranchArchiveScopeMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
     """Arxivlangan guruhlar"""
     queryset = ArchivedGroup.objects.all().order_by('-archived_at')
     serializer_class = ArchivedGroupSerializer
@@ -305,7 +313,7 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
         
         for sid in ids:
             try:
-                archived = ArchivedGroup.objects.filter(id=sid).first()
+                archived = self.get_queryset().filter(id=sid).first()
                 if archived:
                     group = restore_group_from_archive(archived.id, user)
                     archived.delete()
@@ -323,7 +331,7 @@ class ArchivedGroupViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewS
             return Response({"error": "Faqat super_admin va admin o'chira oladi"}, status=403)
             
         ids = request.data.get('ids', [])
-        ArchivedGroup.objects.filter(id__in=ids).delete()
+        self.get_queryset().filter(id__in=ids).delete()
         return Response({"status": "Guruhlar arxivdan butunlay o'chirildi"})
 
 

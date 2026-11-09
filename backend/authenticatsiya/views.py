@@ -299,14 +299,14 @@ class BranchAccessViewSet(ModelViewSet):
         allowed.extend(user.branch_accesses.values_list('branch_id', flat=True))
         return list(set(allowed))
 
-    def _check_admin_transfer_allowed(self, user, validated_data):
+    def _check_admin_transfer_allowed(self, user, validated_data, instance=None):
         """
         Admin uchun transfer cheklovlarini tekshiradi:
         - Faqat mentorlarni transfer qilishi mumkin (adminlarni emas)
         - Faqat o'zi ruxsatga ega bo'lgan filiallar orasida transfer qilishi mumkin
         """
-        target_user_id = validated_data.get('user_id')
-        target_branch = validated_data.get('branch_id')  # Branch object
+        target_user_id = validated_data.get('user_id', getattr(instance, 'user_id', None))
+        target_branch = validated_data.get('branch_id', getattr(instance, 'branch', None))
 
         # Admin faqat mentorlarni transfer qilishi mumkin
         try:
@@ -359,7 +359,7 @@ class BranchAccessViewSet(ModelViewSet):
         
         # Admin uchun qo'shimcha cheklovlar
         if self.request.user.role == 'admin':
-            self._check_admin_transfer_allowed(self.request.user, serializer.validated_data)
+            self._check_admin_transfer_allowed(self.request.user, serializer.validated_data, serializer.instance)
 
         target_user = serializer.validated_data.get('user')
         if target_user and target_user.role not in ['mentor', 'admin']:

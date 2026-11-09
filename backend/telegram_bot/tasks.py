@@ -5,12 +5,13 @@ from .utils import _send_message_sync, get_student_telegram_ids
 
 logger = logging.getLogger(__name__)
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+@shared_task(bind=True, max_retries=3, default_retry_delay=5, rate_limit="15/s")
 def send_telegram_message_task(self, chat_id, text, bot_token=None):
     """
     Yagona Telegram xabarini Celery orqali xavfsiz va ishonchli yuborish.
     Retry va exponential backoff qo'llab-quvvatlanadi.
     """
+    response = None
     try:
         response = _send_message_sync(chat_id, text, bot_token=bot_token)
         if response is None or response.status_code != 200:
@@ -19,7 +20,13 @@ def send_telegram_message_task(self, chat_id, text, bot_token=None):
     except Exception as exc:
         logger.warning(f"Telegram xabar yuborishda xatolik (urinish {self.request.retries + 1}): {exc}")
         if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc, countdown=5 * (2 ** self.request.retries))
+            delay = 5 * (2 ** self.request.retries)
+            if response is not None and response.status_code == 429:
+                try:
+                    delay = max(delay, min(float(response.json().get('parameters', {}).get('retry_after', delay)), 86400))
+                except (ValueError, TypeError, AttributeError):
+                    pass
+            raise self.retry(exc=exc, countdown=delay)
         logger.error(f"Telegram xabari {chat_id} ga {self.max_retries} marta urinishdan so'ng ham bormadi: {exc}")
         return False
 
@@ -41,11 +48,10 @@ def send_attendance_notifications_task(attendance_ids, bot_token=None, schema_na
             except Exception as e:
                 logger.error(f"Error in send_attendance_notifications_task for att {att.id}: {e}")
 
-    if schema_name:
-        from tenants.utils import tenant_schema_context
-        with tenant_schema_context(schema_name):
-            _execute()
-    else:
+    if not schema_name:
+        raise ValueError('Attendance notifications require a tenant schema')
+    from tenants.utils import tenant_schema_context
+    with tenant_schema_context(schema_name):
         _execute()
 
 @shared_task
@@ -67,7 +73,15 @@ def send_broadcast_message_task(chat_ids, message, bot_token=None):
             logger.error(f"Error in send_broadcast_message_task for chat {chat_id}: {e}")
 
 @shared_task
-def send_homework_notification_task(homework_id, bot_token=None):
+def send_homework_notification_task(homework_id, bot_token=None, schema_name=None):
+    from tenants.utils import tenant_schema_context
+    if not schema_name:
+        raise ValueError('Homework notification requires a tenant schema')
+    with tenant_schema_context(schema_name):
+        return _send_homework_notification(homework_id, bot_token)
+
+
+def _send_homework_notification(homework_id, bot_token=None):
     """Guruh o'quvchilariga yangi uyga vazifa haqida xabar va yuklangan faylni yuborish."""
     from homework_attends.models import Homework
     from groups.models import GroupEnrollment

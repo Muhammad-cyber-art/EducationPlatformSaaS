@@ -4,6 +4,21 @@ from django.utils import timezone
 from django.conf import settings
 
 
+class SyncOperation(models.Model):
+    """Committed mutation receipt. Keep receipts for as long as retries are supported."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    client_id = models.UUIDField()
+    queue_id = models.CharField(max_length=128)
+    request_hash = models.CharField(max_length=64)
+    result = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['client_id', 'queue_id'], name='sync_operation_identity'
+        )]
+
+
 class SyncedModel(models.Model):
     """
     Offline-First sinxronizatsiya uchun tayanch abstrakt model.
