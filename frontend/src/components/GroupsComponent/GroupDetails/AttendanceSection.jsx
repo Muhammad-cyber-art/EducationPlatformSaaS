@@ -6,7 +6,7 @@ import api from "../../../tokenUpdater/updater";
 import toast from "react-hot-toast";
 import GroupsStudent from "../GrupsStudent";
 import AddSpecialLessonModal from "./AddSpecialLessonModal";
-import { isScheduledLessonDate } from "../../../utils/scheduleUtils";
+import { isGroupLessonDate } from "../../../utils/scheduleUtils";
 
 const MONTH_NAMES = [
   'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
@@ -21,7 +21,6 @@ const AttendanceSection = ({
   filteredStudents,
   selectedDate,
   availableDates,
-  lessonDates = [],
   attendanceData,
   isAttendanceConfirmed,
   canEditAttendance,
@@ -69,21 +68,10 @@ const AttendanceSection = ({
   const isSpecialDay = specialDates.includes(selectedDate);
   const isCanceledDay = canceledDates.includes(selectedDate);
 
-  // Dars kuni ekanligini mukammal aniqlash (lessonDates, maxsus kunlar, oxirgi 3 ta dars va haftalik jadval)
+  // Scheduling and permission/edit-window dates are separate concerns.
   const isLessonDay = useMemo(() => {
-    if (!selectedDate) return false;
-    if (canceledDates.includes(selectedDate)) return false;
-    if (specialDates.includes(selectedDate)) return true;
-    if (Array.isArray(lessonDates) && lessonDates.includes(selectedDate)) return true;
-    if (Array.isArray(groupinfo?.last_3_lesson_dates) && groupinfo.last_3_lesson_dates.includes(selectedDate)) return true;
-
-    return isScheduledLessonDate(
-      selectedDate,
-      groupinfo?.custom_days,
-      groupinfo?.days,
-      groupinfo?.dars_kunlari
-    );
-  }, [selectedDate, canceledDates, specialDates, lessonDates, groupinfo]);
+    return isGroupLessonDate(selectedDate, groupinfo);
+  }, [selectedDate, groupinfo]);
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -99,7 +87,9 @@ const AttendanceSection = ({
     };
   }, [mobileMenuRef, menuButtonRef]);
 
-  const markedCount = Object.keys(markedStudents || {}).length;
+  const manageableStudents = filteredStudents.filter(student => student.is_current_member !== false);
+  const manageableIds = new Set(manageableStudents.map(student => Number(student.id)));
+  const markedCount = Object.keys(markedStudents || {}).filter(id => manageableIds.has(Number(id))).length;
 
   const handleCancelLesson = async () => {
     if (!confirm(`${selectedDate} sanasini dars kuni sifatida bekor qilmoqchimisiz?`)) return;
@@ -143,7 +133,7 @@ const AttendanceSection = ({
     
     const toastId = toast.loading("Amal bajarilmoqda...");
     try {
-      const studentIds = Object.keys(markedStudents).map(id => Number(id));
+      const studentIds = Object.keys(markedStudents).map(id => Number(id)).filter(id => manageableIds.has(id));
       const endpoint = isArchive ? 'bulk-archive' : 'bulk-unenroll';
       
       await api.post(`/groups/groups/${group_id}/${endpoint}/`, { student_ids: studentIds });
@@ -346,11 +336,12 @@ const AttendanceSection = ({
           
           {/* Mobile buttons - show confirm and 3 dots */}
           <div className="flex sm:hidden items-center gap-1.5 shrink-0">
-            {canEditAttendance && isLessonDay && !isCanceledDay && (
+            {canTakeAttendance && (
               <button
                 onClick={() => handleConfirmAttendance(isLessonDay)}
-                className="flex items-center justify-center px-3 h-9 bg-[var(--gold)] text-white rounded-xl font-black text-[9px] uppercase tracking-wider transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)] shrink-0"
-                title={isAttendanceConfirmed ? "Davomatni saqlash" : "Davomatni tasdiqlash"}
+                disabled={!canEditAttendance || !isLessonDay || isCanceledDay || loadingAction}
+                className="flex items-center justify-center px-3 h-9 bg-[var(--gold)] text-white rounded-xl font-black text-[9px] uppercase tracking-wider transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)] shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                title={!isLessonDay || isCanceledDay ? 'Bu sanada dars yo‘q — davomat olinmaydi' : isAttendanceConfirmed ? "Davomatni saqlash" : "Davomatni tasdiqlash"}
               >
                 <Check size={14} strokeWidth={3} /> <span className="ml-1.5">{isAttendanceConfirmed ? "Saqlash" : "Tasdiqlash"}</span>
               </button>
@@ -368,11 +359,12 @@ const AttendanceSection = ({
           </div>
           
           {/* Desktop confirm button (separate so it's always visible on desktop) */}
-          {canEditAttendance && isLessonDay && !isCanceledDay && (
+          {canTakeAttendance && (
             <button
               onClick={() => handleConfirmAttendance(isLessonDay)}
-              className="hidden sm:flex items-center justify-center px-6 h-11 bg-[var(--gold)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)]"
-              title={isAttendanceConfirmed ? "Davomatni saqlash" : "Davomatni tasdiqlash"}
+              disabled={!canEditAttendance || !isLessonDay || isCanceledDay || loadingAction}
+              className="hidden sm:flex items-center justify-center px-6 h-11 bg-[var(--gold)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95 shadow-[var(--gold-glow)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              title={!isLessonDay || isCanceledDay ? 'Bu sanada dars yo‘q — davomat olinmaydi' : isAttendanceConfirmed ? "Davomatni saqlash" : "Davomatni tasdiqlash"}
             >
               <Check size={20} strokeWidth={3} /> <span className="ml-2">{isAttendanceConfirmed ? "Saqlash" : "Tasdiqlash"}</span>
             </button>
@@ -555,7 +547,7 @@ const AttendanceSection = ({
       <div className="md:hidden p-4 space-y-4">
         <GroupsStudent
           students={filteredStudents}
-          canEdit={canEditAttendance}
+          canEdit={canEditAttendance && isLessonDay && !isCanceledDay}
           attendanceData={attendanceData}
           onAttendanceChange={refetchAttends}
           onLocalAttendanceChange={canEditAttendance ? handleLocalAttendanceChange : undefined}
@@ -567,7 +559,7 @@ const AttendanceSection = ({
           mode="card"
           currentBranchId={branchID}
           markedStudents={markedStudents}
-          onToggleMark={(id) => uiDispatch({ type: "TOGGLE_MARK", payload: id })}
+          onToggleMark={(id) => manageableIds.has(Number(id)) && uiDispatch({ type: "TOGGLE_MARK", payload: id })}
         />
       </div>
 
@@ -578,16 +570,16 @@ const AttendanceSection = ({
               <th className="px-8 py-6 w-16 text-center">
                 <div 
                   onClick={() => {
-                    if (markedCount === filteredStudents.length && filteredStudents.length > 0) {
+                    if (markedCount === manageableStudents.length && manageableStudents.length > 0) {
                       uiDispatch({ type: "CLEAR_MARKS" });
                     } else {
-                      uiDispatch({ type: "SELECT_ALL_MARKS", payload: filteredStudents });
+                      uiDispatch({ type: "SELECT_ALL_MARKS", payload: manageableStudents });
                     }
                   }}
                   className="cursor-pointer flex items-center justify-center w-full h-full"
                 >
-                  <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedCount === filteredStudents.length && filteredStudents.length > 0 ? 'bg-[var(--gold)] border-[var(--gold)] text-white shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--border-glass)] border bg-transparent text-transparent hover:border-[var(--gold)]/50'}`}>
-                    {markedCount === filteredStudents.length && filteredStudents.length > 0 && <Check size={12} strokeWidth={3} />}
+                  <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${markedCount === manageableStudents.length && manageableStudents.length > 0 ? 'bg-[var(--gold)] border-[var(--gold)] text-white shadow-[0_0_8px_rgba(184,134,11,0.5)]' : 'border-[var(--border-glass)] border bg-transparent text-transparent hover:border-[var(--gold)]/50'}`}>
+                    {markedCount === manageableStudents.length && manageableStudents.length > 0 && <Check size={12} strokeWidth={3} />}
                   </div>
                 </div>
               </th>
@@ -602,7 +594,7 @@ const AttendanceSection = ({
           <tbody className="divide-y divide-[var(--border-glass)]">
             <GroupsStudent
               students={filteredStudents}
-              canEdit={canEditAttendance}
+              canEdit={canEditAttendance && isLessonDay && !isCanceledDay}
               attendanceData={attendanceData}
               onAttendanceChange={refetchAttends}
               onLocalAttendanceChange={canEditAttendance ? handleLocalAttendanceChange : undefined}
@@ -614,7 +606,7 @@ const AttendanceSection = ({
               mode="table"
               currentBranchId={branchID}
               markedStudents={markedStudents}
-              onToggleMark={(id) => uiDispatch({ type: "TOGGLE_MARK", payload: id })}
+              onToggleMark={(id) => manageableIds.has(Number(id)) && uiDispatch({ type: "TOGGLE_MARK", payload: id })}
             />
           </tbody>
         </table>

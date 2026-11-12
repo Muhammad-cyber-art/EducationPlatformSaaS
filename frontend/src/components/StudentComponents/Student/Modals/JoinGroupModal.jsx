@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { X, GraduationCap, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { safeArray } from "../../../../utils/safeArray";
+import { invalidateEnrollmentQueries } from '../../../../utils/enrollmentQueries';
 
 const JoinGroupModal = ({ isOpen, onClose, student, currentBranchId, api, onSuccess }) => {
+  const queryClient = useQueryClient();
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [loading, setLoading] = useState(false);
   const [createPayment, setCreatePayment] = useState(true);
+
+  useEffect(() => {
+    if (isOpen) setSelectedGroupId('');
+  }, [isOpen, student?.id]);
 
   const branchToUse = currentBranchId || student?.branch_id || student?.branch?.id;
 
@@ -33,10 +39,13 @@ const JoinGroupModal = ({ isOpen, onClose, student, currentBranchId, api, onSucc
         student_id: student.id,
         create_payment: createPayment
       });
+      invalidateEnrollmentQueries(queryClient);
       toast.success("O'quvchi guruhga muvaffaqiyatli qo'shildi!");
       if (onSuccess) onSuccess();
       onClose();
     } catch (error) {
+      toast.error(error.response?.data?.detail || error.response?.data?.error || "O‘quvchini guruhga qo‘shib bo‘lmadi.");
+    } finally {
       setLoading(false);
     }
   };

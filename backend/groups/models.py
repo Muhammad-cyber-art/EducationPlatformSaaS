@@ -4,7 +4,7 @@ from branches.models import Branch
 from config.validators import validate_image_file
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 User = get_user_model()
@@ -225,7 +225,17 @@ class Group(models.Model):
                 self.days = "everyday"
         except Exception:
             pass
-        super().save(*args, **kwargs)
+        self._billing_update = None
+        update_fields = kwargs.get('update_fields')
+        price_saved = update_fields is None or 'monthly_price' in update_fields
+        with transaction.atomic():
+            old_price = None
+            if self.pk and price_saved:
+                old_price = Group.objects.select_for_update().filter(pk=self.pk).values_list('monthly_price', flat=True).first()
+            super().save(*args, **kwargs)
+            if old_price is not None and old_price != self.monthly_price:
+                from finance.repricing import reprice_current_group_invoices
+                self._billing_update = reprice_current_group_invoices(self, old_price)
 
     def __str__(self):
         return f"{self.name} | Mentor: {self.mentor} | Kun: {self.days_display}"
@@ -366,12 +376,11 @@ class Student(models.Model):
 
         super(Student, self).save(*args, **kwargs)
 
-        # ✅ M2M va Enrollment synchronization
-        # Guruh o'zgarganda (shu jumladan o'quvchi guruhsiz qoldirilganda ham) eski guruh enrollmenti uziladi!
-        if not is_new and old_group_id and old_group_id != self.group_id:
-            GroupEnrollment.objects.filter(student=self, group_id=old_group_id).delete()
-
-        if self.group:
+        # Membership is managed explicitly by enroll/unenroll/transfer services.
+        # Changing a primary-group pointer must never remove other courses.
+        update_fields = kwargs.get('update_fields')
+        group_saved = update_fields is None or 'group' in update_fields or 'group_id' in update_fields
+        if self.group_id and group_saved:
             if is_new or (old_group_id != self.group_id):
                 obj, created = GroupEnrollment.objects.get_or_create(
                     student=self, group=self.group, defaults={"is_active": True, "left_at": None}

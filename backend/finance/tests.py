@@ -172,15 +172,15 @@ class FinanceAPITests(APITestCase):
         self.assertEqual(ft_refund, 0)
 
     def test_duplicate_payment_restriction(self):
-        # We removed unique_together to support soft-deleted students.
-        # So we just verify that we can create a second payment without IntegrityError.
-        p2 = Payment.objects.create(
-            student=self.student,
-            group=self.group,
-            month=self.month,
-            amount=self.group.monthly_price
-        )
-        self.assertIsNotNone(p2.id)
+        from django.db import IntegrityError, transaction
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Payment.objects.create(student=self.student, group=self.group,
+                                   month=self.month, amount=self.group.monthly_price)
+
+    def test_detached_history_can_have_multiple_invoices(self):
+        for _ in range(2):
+            Payment.objects.create(student=None, group=self.group, month=self.month, amount=100000)
+        self.assertEqual(Payment.objects.filter(student__isnull=True, group=self.group).count(), 2)
 
 
 class FinanceAttendanceStatsTests(TestCase):

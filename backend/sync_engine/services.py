@@ -61,13 +61,7 @@ def _execute(user, entity, action, data):
         from homework_attends.views.attendance import AttendanceViewSet
         group = get_object_or_404(accessible_groups(user), pk=data['group_id'])
         day, today = data['date'], timezone.localdate()
-        from groups.models import Student
-        ids = {item['student_id'] for item in data['attendances']}
-        members = set(Student.objects.filter(pk__in=ids).filter(
-            Q(group=group) | Q(enrollments__group=group),
-        ).values_list('pk', flat=True))
-        if members != ids:
-            raise ValidationError('Davomatda guruhga tegishli bo‘lmagan o‘quvchi bor.')
+        # The shared service validates exact dated membership and reports names.
         full = AttendanceViewSet()._user_has_full_attendance(user)
         recent = today - timedelta(days=30) <= day <= today
         grace = timezone.localtime().hour < 4 and day == today - timedelta(days=1)

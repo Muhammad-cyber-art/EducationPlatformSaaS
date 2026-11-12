@@ -83,7 +83,7 @@ class GroupAPITests(APITestCase):
         # Yangi guruh enrollmenti esa faol bo'lishi kerak
         self.assertTrue(student.enrollments.filter(group=new_group, is_active=True).exists())
 
-    def test_student_edit_group_disconnects_old_enrollment(self):
+    def test_student_edit_primary_group_preserves_old_enrollment(self):
         student = Student.objects.create(full_name="S2", group=self.group1)
         new_group = Group.objects.create(name="G4", branch=self.branch1)
         
@@ -91,12 +91,12 @@ class GroupAPITests(APITestCase):
         student.group = new_group
         student.save()
         
-        # Eski guruh enrollmenti uzilgan (o'chirilgan) bo'lishi kerak
-        self.assertFalse(student.enrollments.filter(group=self.group1).exists())
+        # Primary group changes must not remove membership in other courses.
+        self.assertTrue(student.enrollments.filter(group=self.group1, is_active=True).exists())
         # Yangi guruh enrollmenti faol bo'lishi kerak
         self.assertTrue(student.enrollments.filter(group=new_group, is_active=True).exists())
 
-    def test_student_clear_group_disconnects_enrollment(self):
+    def test_student_clear_primary_group_preserves_enrollment(self):
         student = Student.objects.create(full_name="S3", group=self.group1)
         self.assertTrue(student.enrollments.filter(group=self.group1).exists())
         
@@ -104,8 +104,8 @@ class GroupAPITests(APITestCase):
         student.group = None
         student.save()
         
-        # Eski guruh enrollmenti uzilgan bo'lishi kerak
-        self.assertFalse(student.enrollments.filter(group=self.group1).exists())
+        # Unenrollment requires the explicit group action.
+        self.assertTrue(student.enrollments.filter(group=self.group1, is_active=True).exists())
 
     def test_superadmin_student_edit_restriction(self):
         """Testing the restriction identified in permissions.py"""

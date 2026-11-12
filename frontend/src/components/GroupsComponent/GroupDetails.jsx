@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import { useCurrentBranch } from "../Authorized/useBranchId";
 import { useGroupDetails } from "./GroupDetails/useGroupDetails";
 import { useAttendance } from "./GroupDetails/useAttendance";
-import { normalizeCustomDays, formatDaysDisplay, isScheduledLessonDate } from "../../utils/scheduleUtils";
+import { normalizeCustomDays, formatDaysDisplay, isGroupLessonDate } from "../../utils/scheduleUtils";
 
 // Sub-components
 import GroupHeader from "./GroupDetails/GroupHeader";
@@ -88,7 +88,7 @@ export default function GroupDetailPage() {
   // Data & Permissions
   const { groupinfo, groupStudents, lessonDates, botStats, permissions, userData, isGroupError } = useGroupDetails(group_id, selectedMonth, selectedYear);
   const {
-    attendanceData, mergedAttendanceForDate, isAttendanceConfirmed,
+    attendanceData, attendanceStudents, mergedAttendanceForDate, isAttendanceConfirmed,
     handleLocalAttendanceChange, handleConfirmAttendance, refetchAttends
   } = useAttendance(group_id, selectedDate, groupStudents, userData);
 
@@ -136,12 +136,21 @@ export default function GroupDetailPage() {
         description: (editData.description || "").trim(),
       };
 
-      await api.patch(`/groups/groups/${group_id}/`, payload);
-      queryClient.invalidateQueries(["group-detail", group_id]);
-      queryClient.invalidateQueries(["group-lesson-dates", group_id]);
-      queryClient.invalidateQueries(["groups"]);
+      const response = await api.patch(`/groups/groups/${group_id}/`, payload);
+      queryClient.invalidateQueries({ queryKey: ["group-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["group-lesson-dates"] });
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["group-students"] });
+      queryClient.invalidateQueries({ queryKey: ["cashier-desk"] });
       uiDispatch({ type: "SET_FIELD", field: "isEditing", value: false });
-      toast.success("Muvaffaqiyatli saqlandi.");
+      const billing = response.data?.billing_update;
+      toast.success(billing
+        ? `Guruh saqlandi. Joriy oyda ${billing.updated_count} ta hisob yangilandi.`
+        : "Muvaffaqiyatli saqlandi.");
+      if (billing?.unmatched_count > 0) {
+        const names = (billing.unmatched_students || []).slice(0, 3).map(student => student.student_name).join(', ');
+        toast(`${billing.unmatched_count} ta hisobning narx asosi aniqlanmadi${names ? `: ${names}` : ''}. Ularni alohida tekshiring.`, { icon: 'ℹ️', duration: 8000 });
+      }
     } catch (err) {
       let errorMsg = "Xatolik yuz berdi.";
       if (err.response?.data) {
@@ -264,14 +273,8 @@ export default function GroupDetailPage() {
 
   // Dars kuni ekanligini mukammal tekshirish
   const checkIsLessonDay = useCallback((dateStr) => {
-    if (!dateStr) return false;
-    if (Array.isArray(groupinfo?.canceled_lesson_dates) && groupinfo.canceled_lesson_dates.includes(dateStr)) return false;
-    if (Array.isArray(groupinfo?.special_lesson_dates) && groupinfo.special_lesson_dates.includes(dateStr)) return true;
-    if (Array.isArray(lessonDates) && lessonDates.includes(dateStr)) return true;
-    if (Array.isArray(groupinfo?.last_3_lesson_dates) && groupinfo.last_3_lesson_dates.includes(dateStr)) return true;
-
-    return isScheduledLessonDate(dateStr, groupinfo?.custom_days, groupinfo?.days, groupinfo?.dars_kunlari);
-  }, [groupinfo, lessonDates]);
+    return isGroupLessonDate(dateStr, groupinfo);
+  }, [groupinfo]);
 
   const availableDates = useMemo(() => {
     if (!lessonDates || lessonDates.length === 0) {
@@ -300,10 +303,10 @@ export default function GroupDetailPage() {
 
   const filteredStudents = useMemo(() => {
     const search = studentSearch.trim().toLowerCase();
-    const sorted = [...groupStudents].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+    const sorted = [...attendanceStudents].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
     if (!search) return sorted;
     return sorted.filter(s => (s.full_name || "").toLowerCase().includes(search) || (s.phone || "").includes(search));
-  }, [groupStudents, studentSearch]);
+  }, [attendanceStudents, studentSearch]);
 
   const isGroupLogicActive = groupinfo.computed_status === 'active';
 

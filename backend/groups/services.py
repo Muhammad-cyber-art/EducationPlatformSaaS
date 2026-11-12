@@ -11,26 +11,30 @@ logger = logging.getLogger(__name__)
 
 def enroll_student_to_group(group, student_id, create_payment=True):
     """O'quvchini guruhga biriktirish logikasi"""
-    student = get_object_or_404(Student, id=student_id)
-    
     with transaction.atomic():
-        # O'quvchi boshqa guruhga qo'shilganda eski guruhi bilan enrollmenti butunlay uziladi
-        GroupEnrollment.objects.filter(student=student).exclude(group=group).delete()
+        student = get_object_or_404(Student.objects.select_for_update(), id=student_id)
+        # Joining another course is additive. Preserve even legacy membership
+        # before establishing the new enrollment.
+        if student.group_id:
+            GroupEnrollment.objects.get_or_create(student=student, group_id=student.group_id)
         
         enrollment, created = GroupEnrollment.objects.get_or_create(
             student=student,
             group=group
         )
         
-        # O'quvchining asosiy guruhi va filiali yangi guruhga sinxronlashtiriladi
-        student.group = group
-        student.branch = group.branch
-        student.save()
+        if not enrollment.is_active or enrollment.left_at is not None:
+            enrollment.is_active = True
+            enrollment.left_at = None
+            enrollment.save(update_fields=['is_active', 'left_at'])
+
+        # The legacy FK is a primary-group pointer, not the membership list.
+        student.sync_active_group_and_branch()
             
-        if created:
-            if create_payment:
+        if create_payment:
+            if not Payment.objects.filter(student=student, group=group, month=timezone.localdate().replace(day=1)).exists():
                 from finance.utils import floor_amount, calculate_attendance_based_student_payment
-                today = timezone.now().date()
+                today = timezone.localdate()
                 month_start = today.replace(day=1)
                 
                 is_discount = (student.status == 'discount')
@@ -68,21 +72,6 @@ def enroll_student_to_group(group, student_id, create_payment=True):
                         'is_auto_discount': is_auto_discount
                     }
                 )
-                if not p_created and not p_obj.is_paid:
-                    p_obj.amount = final_amount
-                    p_obj.is_auto_discount = is_auto_discount
-                    p_obj.save()
-        else:
-            # Agar enrollment avvaldan bor bo'lsa, u is_active=False bo'lishi mumkin
-            if not enrollment.is_active:
-                enrollment.is_active = True
-                enrollment.save()
-            
-            # Agar o'quvchining asosiy guruhi bo'lmasa, uni shu guruhga ulaymiz
-            if not student.group:
-                student.group = group
-                student.save()
-                
         from finance.services import sync_mentor_salary
         sync_mentor_salary(group)
                     
@@ -137,7 +126,7 @@ def unenroll_student_from_group(group, student_id, request_user):
             from groups.models import WaitingStudent
             WaitingStudent.objects.create(
                 full_name=student.full_name,
-                phone=student.phone,
+                phone=student.phone or '',
                 branch=group.branch,
                 notes=f"[Faol o'quvchi] {group.name} guruhidan chiqarildi | Tizimda boshqa guruhlarda faol",
                 telegram_id=student.telegram_id,
@@ -173,7 +162,12 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
 
     with transaction.atomic():
         from finance.utils import floor_amount
-        today = timezone.now().date()
+        student = Student.objects.select_for_update().get(pk=student.pk)
+        source_enrollment = GroupEnrollment.objects.filter(student=student, group=old_group).first()
+        source_joined_at = source_enrollment.joined_at if source_enrollment else (
+            student.joined_at if student.group_id == old_group.pk else None
+        )
+        today = timezone.localdate()
         current_month_start = today.replace(day=1)
 
         # 0. Snapshot fees (User talabi: Advanced guruh qoidasi bilan)
@@ -208,14 +202,16 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
 
         # Eski enrollment butunlay o'chiriladi (eski guruhdan asar ham qolmaydi)
         GroupEnrollment.objects.filter(student=student, group=old_group).delete()
-        # Boshqa barcha nofaol/eski guruh enrollmentlarini ham uzish
-        GroupEnrollment.objects.filter(student=student).exclude(group=new_group).delete()
+        # A transfer affects only its source group; other courses remain intact.
             
         new_enrollment, _ = GroupEnrollment.objects.get_or_create(student=student, group=new_group)
-        if not new_enrollment.is_active or new_enrollment.left_at is not None:
-            new_enrollment.is_active = True
-            new_enrollment.left_at = None
-            new_enrollment.save(update_fields=['is_active', 'left_at'])
+        # This transfer explicitly moves the source attendance history too.
+        # Carry its trusted membership start, rather than dating it as a new join.
+        joined_at = min(new_enrollment.joined_at, source_joined_at) if source_joined_at else new_enrollment.joined_at
+        GroupEnrollment.objects.filter(pk=new_enrollment.pk).update(
+            joined_at=joined_at, is_active=True, left_at=None,
+            is_frozen=False, frozen_at=None, frozen_reason=None,
+        )
 
         # 2. To'lovni hisoblash (Prorated)
         old_lesson_dates = old_group.get_lesson_dates(current_month_start.year, current_month_start.month)

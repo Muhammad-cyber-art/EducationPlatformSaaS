@@ -6,6 +6,7 @@ import { useCurrentBranch } from "../Authorized/useBranchId";
 import api from "../../tokenUpdater/updater";
 import toast from "react-hot-toast";
 import { safeArray } from "../../utils/safeArray";
+import { invalidateEnrollmentQueries } from '../../utils/enrollmentQueries';
 
 export const useAddStudent = (branchId) => {
   const { currentBranchId } = useCurrentBranch();
@@ -166,6 +167,7 @@ export const useAddStudent = (branchId) => {
         },
       );
       if (response.status === 201 || response.status === 200) {
+        invalidateEnrollmentQueries(queryClient);
         toast.success("O'quvchi guruhga biriktirildi!");
         queryClient.removeQueries({
           queryKey: ["group-detail", String(groupId)],
@@ -177,7 +179,7 @@ export const useAddStudent = (branchId) => {
       }
     } catch (error) {
       const errMsg =
-        error.response?.data?.detail || "Biriktirishda xatolik yuz berdi";
+        error.response?.data?.detail || error.response?.data?.error || "Biriktirishda xatolik yuz berdi";
       toast.error(errMsg);
     } finally {
       setLoading(false);
@@ -225,6 +227,7 @@ export const useAddStudent = (branchId) => {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (response.status === 201 || response.status === 200) {
+        invalidateEnrollmentQueries(queryClient);
         toast.success("O'quvchi muvaffaqiyatli qo'shildi!");
         if (paramGroupId) {
           queryClient.removeQueries({
@@ -241,6 +244,7 @@ export const useAddStudent = (branchId) => {
       const data = err?.response?.data;
       const errMsg =
         data?.detail ||
+        data?.error ||
         data?.non_field_errors?.[0] ||
         data?.full_name?.[0] ||
         data?.phone?.[0] ||

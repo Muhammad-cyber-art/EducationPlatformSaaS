@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
+import PaymentVerificationBadge from './PaymentVerificationBadge';
 import {
   CreditCard, RotateCcw, Eye, Search, CheckCircle2,
   AlertCircle, Clock, Phone, BookOpen, Layers, Users,
-  Sparkles, Filter, AlertTriangle, Award
+  Sparkles, Filter, AlertTriangle, Award, Calculator
 } from 'lucide-react';
 
 export default function GroupRoster({
@@ -267,6 +268,15 @@ export default function GroupRoster({
                           : `Jami: ${formatCurrency(st.expected_amount)} ${st.paid_amount > 0 ? `(To'langan: ${formatCurrency(st.paid_amount)})` : ''}`
                         }
                       </p>
+                      <div className="mt-1 flex justify-end">
+                        <PaymentVerificationBadge payment={st} />
+                      </div>
+                      {Number(st.remaining_amount) < Number(st.standard_course_amount ?? selectedGroup?.monthly_price ?? st.expected_amount) && (
+                        <button type="button" onClick={() => onOpenDetails(st)}
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--gold)] hover:underline">
+                          <Calculator size={12} /> Nega bu summa?
+                        </button>
+                      )}
                     </div>
 
                     {/* Quick Buttons */}

@@ -40,9 +40,14 @@ class SyncEngineAPIView(APIView):
                 if result.get('conflict'):
                     conflicts.append({'queue_id': item['queue_id'], **result['conflict']})
             except (APIException, Http404, ModelValidationError, ValueError) as exc:
+                detail = getattr(exc, 'detail', None)
+                message = detail.get('detail') if isinstance(detail, dict) else None
+                if message is None and isinstance(detail, list):
+                    message = '; '.join(str(item) for item in detail)
                 errors.append({
                     'queue_id': item['queue_id'],
-                    'detail': str(exc), 'retryable': False,
+                    'detail': str(message if message is not None else exc), 'retryable': False,
+                    **({'invalid_students': detail['invalid_students']} if isinstance(detail, dict) and 'invalid_students' in detail else {}),
                 })
             except Exception:
                 logger.exception('Sync mutation failed: queue_id=%s', item['queue_id'])

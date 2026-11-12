@@ -303,6 +303,7 @@ export async function clearAttendanceDraft(groupId, date) {
  */
 export async function queueAttendanceConfirm(groupId, date, attendancesList, markedByUser = null) {
   const now = new Date().toISOString();
+  let queueId;
 
   // Studentlar bo'yicha dublikatlarni tozalash (IntegrityError va xatoliklarni oldini olish)
   const uniqueMap = new Map();
@@ -354,20 +355,9 @@ export async function queueAttendanceConfirm(groupId, date, attendancesList, mar
       updated_at: now,
     });
 
-    // 3. Outbox navbatiga qo'shish (agar avval pending bo'lsa, yangisiga almashtirish)
-    try {
-      const existingPending = await db.sync_queue
-        .where('status')
-        .equals('pending')
-        .filter((q) => q.entity === 'attendance' && Number(q.data?.group_id) === Number(groupId) && q.data?.date === date)
-        .toArray();
-
-      if (existingPending.length > 0) {
-        await db.sync_queue.bulkDelete(existingPending.map((p) => p.queue_id));
-      }
-    } catch (e) {}
-
-    await db.sync_queue.add({
+    // A sent or timed-out operation keeps its identity and immutable payload.
+    // A later edit is a separate operation, replayed after earlier edits.
+    queueId = await db.sync_queue.add({
       action: 'confirm',
       entity: 'attendance',
       data: {
@@ -383,7 +373,7 @@ export async function queueAttendanceConfirm(groupId, date, attendancesList, mar
     await db.attendance_drafts.delete(`${groupId}_${date}`);
   });
 
-  return { success: true, queued: true };
+  return { success: true, queued: true, queueId };
 }
 
 // ==========================================
@@ -452,6 +442,8 @@ export async function queueCashierPayment(paymentPayload, queryClient = null) {
             st.is_partial = newRem > 0 && st.paid_amount > 0;
             st.payment_method = payment_method;
             st.paid_at = nowIso;
+            st.is_verified = false;
+            st.verification_status = 'sync_pending';
 
             if (st.is_paid) {
               grp.paid_count = (grp.paid_count || 0) + 1;
@@ -475,6 +467,8 @@ export async function queueCashierPayment(paymentPayload, queryClient = null) {
             } else {
               desk.debtors[dIdx].remaining_amount = rem;
               desk.debtors[dIdx].paid_amount = (Number(desk.debtors[dIdx].paid_amount) || 0) + numAmount;
+              desk.debtors[dIdx].is_verified = false;
+              desk.debtors[dIdx].verification_status = 'sync_pending';
             }
           }
         }

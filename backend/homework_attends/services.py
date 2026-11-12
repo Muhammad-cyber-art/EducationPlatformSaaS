@@ -33,6 +33,43 @@ def get_last_3_lesson_dates(group):
     # Eng yangi 3 tasini qaytaramiz
     return sorted(list(all_past_dates), reverse=True)[:3]
 
+def attendance_membership_error(group, requested_date, student_ids):
+    from groups.models import GroupEnrollment, GroupTransfer
+    transfers = GroupTransfer.objects.filter(models.Q(from_group=group) | models.Q(to_group=group)).values('student_id')
+    scoped_students = Student.objects.filter(pk__in=student_ids).filter(
+        models.Q(group=group) | models.Q(enrollments__group=group) |
+        models.Q(attendances__group=group) | models.Q(pk__in=transfers)
+    ).distinct()
+    students = {student.pk: student for student in scoped_students}
+    enrollments = {enrollment.student_id: enrollment for enrollment in
+                   GroupEnrollment.objects.filter(group=group, student_id__in=student_ids)}
+    invalid = []
+    for student_id in sorted(student_ids):
+        student = students.get(student_id)
+        enrollment = enrollments.get(student_id)
+        reason = 'Ushbu sanada faol a’zolik topilmadi.'
+        if not student:
+            reason = 'O‘quvchi topilmadi yoki arxivga o‘tkazilgan.'
+        elif student.is_archived or not student.is_active:
+            reason = 'O‘quvchi arxivlangan yoki faol emas.'
+        elif enrollment:
+            joined = timezone.localdate(enrollment.joined_at)
+            left = timezone.localdate(enrollment.left_at) if enrollment.left_at else None
+            if joined > requested_date:
+                reason = f'Guruhga {joined} kuni qo‘shilgan.'
+            elif left and left < requested_date:
+                reason = f'Guruhdan {left} kuni chiqqan.'
+            elif enrollment.is_frozen:
+                reason = 'Tanlangan sanada a’zolik muzlatilgan.'
+        elif student.group_id != group.pk:
+            reason = 'Ushbu guruhga biriktirilmagan yoki boshqa guruhga ko‘chirilgan.'
+        invalid.append({'student_id': student_id, 'student_name': student.full_name if student else f'ID {student_id}',
+                        'reason': reason})
+    names = '; '.join(f"{item['student_name']}: {item['reason']}" for item in invalid[:10])
+    return {'detail': f'{requested_date} sanasi uchun davomat ro‘yxati mos emas. {names}',
+            'invalid_students': invalid, 'date': str(requested_date)}
+
+
 def attendance_members(group, requested_date):
     """Students enrolled on this date; current state must not erase past membership."""
     from groups.models import GroupEnrollment
@@ -173,14 +210,16 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
     payload_serializer = AttendanceBulkMarkSerializer(data=attendances_payload, many=True)
     payload_serializer.is_valid(raise_exception=True)
     attendances_payload = payload_serializer.validated_data
-    if any(item['student_id'] not in valid_student_ids for item in attendances_payload):
+    invalid_ids = {item['student_id'] for item in attendances_payload} - valid_student_ids
+    if invalid_ids:
         from rest_framework.exceptions import ValidationError
-        raise ValidationError("Davomatda ushbu sanada guruhda faol bo'lmagan o'quvchi bor.")
+        raise ValidationError(attendance_membership_error(group, requested_date, invalid_ids))
 
     to_create = []
     to_update = []
     updated_ids = []
     processed_student_ids = set()
+    changed_student_ids = set()
 
     with transaction.atomic():
         for item in attendances_payload:
@@ -191,13 +230,14 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
 
             if student_id in attendance_map:
                 attendance = attendance_map[student_id]
-                if (attendance.is_present != is_present or attendance.marked_by != user
+                if (attendance.is_present != is_present or attendance.marked_by_id != user.pk
                         or not attendance.student_full_name or not attendance.group_name):
                     attendance.is_present = is_present
                     attendance.marked_by = user
                     attendance.student_full_name = attendance.student_full_name or members[student_id]
                     attendance.group_name = attendance.group_name or group.name
                     to_update.append(attendance)
+                    changed_student_ids.add(student_id)
                 updated_ids.append(attendance.id)
                 processed_student_ids.add(student_id)
             else:
@@ -211,6 +251,7 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
                     marked_by=user
                 ))
                 processed_student_ids.add(student_id)
+                changed_student_ids.add(student_id)
 
         if to_update:
             Attendance.objects.bulk_update(to_update, ['is_present', 'marked_by', 'student_full_name', 'group_name'])
@@ -225,17 +266,29 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
             updated_ids.extend(created_ids)
 
         # Qo'shimcha: To'lov va maoshni qayta hisoblash (bulk uchun)
-        if processed_student_ids:
+        if changed_student_ids:
             def trigger_finance_recalc():
-                from finance.services import update_attendance_based_payments
-                students = Student.objects.filter(id__in=processed_student_ids)
+                from finance.services import update_attendance_based_payments, recalculate_attendance_mentor_salary
+                from finance.utils import normalize_month
+                from time import monotonic
+                started = monotonic()
+                students = list(Student.objects.filter(id__in=changed_student_ids, status__in=['discount', 'negotiated']))
                 for student in students:
                     try:
-                        update_attendance_based_payments(student, group, requested_date)
+                        update_attendance_based_payments(student, group, requested_date, recalculate_salary=False)
                     except Exception as e:
                         import logging
                         logger = logging.getLogger(__name__)
                         logger.error("Failed to update payments for student %s in bulk: %s", student.id, e)
+                if students:
+                    recalculate_attendance_mentor_salary(group, normalize_month(requested_date))
+                elapsed = monotonic() - started
+                if elapsed >= 2:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        'Slow attendance finance recalculation: group=%s date=%s students=%s seconds=%.3f',
+                        group.pk, requested_date, len(students), elapsed,
+                    )
             
             transaction.on_commit(trigger_finance_recalc)
 
@@ -243,13 +296,14 @@ def bulk_confirm_attendance(group, requested_date, attendances_payload, user):
     from telegram_bot.tasks import send_attendance_notifications_task
     from telegram_bot.utils import get_tenant_bot_token
     from django.utils import timezone
-    if updated_ids and requested_date == timezone.localdate():
+    if changed_student_ids and requested_date == timezone.localdate():
         schema = get_current_schema_name()
         token = get_tenant_bot_token()
-        ids = list(updated_ids)
+        ids = list(Attendance.objects.filter(group=group, date=requested_date,
+                                            student_id__in=changed_student_ids).values_list('pk', flat=True))
         transaction.on_commit(
             lambda: send_attendance_notifications_task.apply_async(
-                args=[ids], kwargs={'schema_name': schema, 'bot_token': token}, retry=False,
+                args=[ids], kwargs={'schema_name': schema, 'bot_token': token}, retry=False, ignore_result=True,
             ), robust=True,
         )
 

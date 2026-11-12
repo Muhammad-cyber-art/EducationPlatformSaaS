@@ -30,7 +30,7 @@ def send_telegram_message_task(self, chat_id, text, bot_token=None):
         logger.error(f"Telegram xabari {chat_id} ga {self.max_retries} marta urinishdan so'ng ham bormadi: {exc}")
         return False
 
-@shared_task
+@shared_task(ignore_result=True)
 def send_attendance_notifications_task(attendance_ids, bot_token=None, schema_name=None):
     """
     Davomat xabarnomalarini fonda (Celery orqali) navbat bilan yuborish.

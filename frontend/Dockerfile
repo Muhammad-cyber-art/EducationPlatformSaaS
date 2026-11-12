@@ -2,7 +2,7 @@
 FROM node:20-alpine AS build-stage
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
 
 # Pass VITE_API_URL from build-args (set in docker-compose)

@@ -4,6 +4,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated,AllowAny
+from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponse
@@ -70,6 +71,54 @@ class AttendanceViewSet(viewsets.ModelViewSet):
        if not group.is_lesson_day(requested_date) or not group.is_logic_enabled():
            view_only = True
        return get_or_create_attendance_records(group, requested_date, view_only=view_only)
+
+    @action(detail=False, methods=['get'])
+    def roster(self, request):
+        from groups.models import Student, GroupEnrollment
+        from groups.serializers import StudentGroupListSerializer
+        from finance.models import Payment
+        group = get_object_or_404(Group, pk=request.query_params.get('group_id'))
+        if not self._user_can_access_group(request.user, group):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Ushbu guruhga ruxsat yo‘q.')
+        try:
+            day = date_type.fromisoformat(request.query_params.get('date', ''))
+        except (ValueError, TypeError):
+            raise ValidationError({'detail': 'Sana YYYY-MM-DD formatida bo‘lishi kerak.'})
+        eligible = set(attendance_members(group, day).values_list('pk', flat=True))
+        historical = Attendance.objects.filter(group=group, date=day).values('student_id')
+        current_ids = GroupEnrollment.objects.filter(group=group, is_active=True, left_at__isnull=True,
+            student__is_active=True, student__is_archived=False).values('student_id')
+        legacy_ids = Student.objects.filter(group=group, is_active=True, is_archived=False).exclude(
+            enrollments__group=group).values('pk')
+        # Keep current members discoverable even when viewing a date before
+        # they joined. They are visible, but never eligible for that attendance.
+        students = Student.objects.filter(Q(pk__in=eligible) | Q(pk__in=historical) |
+            Q(pk__in=current_ids) | Q(pk__in=legacy_ids)).order_by('full_name', 'pk')
+        enrollments = {row.student_id: row for row in GroupEnrollment.objects.filter(group=group, student__in=students)}
+        payments = {row['student_id']: row for row in Payment.objects.filter(
+            group=group, student__in=students, month=day.replace(day=1)).values('id', 'student_id', 'is_paid')}
+        context = {'request': request, 'payment_map': payments,
+                   'enrollment_map': {pk: row.joined_at.isoformat() for pk, row in enrollments.items()},
+                   'frozen_map': {pk: {'is_frozen': False} for pk in eligible}}
+        result = list(StudentGroupListSerializer(students, many=True, context=context).data)
+        from homework_attends.services import attendance_membership_error
+        unavailable_ids = {row['id'] for row in result} - eligible
+        reasons = {int(row['student_id']): row['reason'] for row in
+                   attendance_membership_error(group, day, unavailable_ids)['invalid_students']} if unavailable_ids else {}
+        current_members = set()
+        for student in students:
+            membership = enrollments.get(student.pk)
+            current = (membership.is_active and membership.left_at is None) if membership else student.group_id == group.pk
+            if current and student.is_active and not student.is_archived:
+                current_members.add(student.pk)
+        for row in result:
+            row['can_mark'] = row['id'] in eligible
+            row['attendance_unavailable_reason'] = reasons.get(row['id'])
+            row['is_current_member'] = row['id'] in current_members
+            membership = enrollments.get(row['id'])
+            row['current_is_frozen'] = membership.is_frozen if membership else row['is_frozen']
+        return Response({'date': str(day), 'students': result})
 
     @action(detail=False, methods=['get'])
     def weekly_report(self, request):
@@ -222,6 +271,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             queryset = bulk_confirm_attendance(group, requested_date, attendances_payload, request.user)
             serializer = AttendanceSerializer(queryset, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValidationError:
+            raise
         except Exception as e:
             logger.exception(f"Attendance confirm failed for group {group_id}: {e}")
             return Response({"detail": f"Davomatni tasdiqlashda xatolik: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)

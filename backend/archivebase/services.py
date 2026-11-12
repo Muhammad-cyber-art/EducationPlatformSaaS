@@ -325,12 +325,20 @@ def restore_student_from_archive(archived_student_id, restored_by):
         if not Group.objects.filter(pk=group_id).exists():
             continue
         values = {key: value for key, value in enrollment_data.items() if key not in ('id', 'student', 'group')}
+        if not values.get('joined_at') and group_id == student.group_id:
+            values['joined_at'] = student.joined_at
         # Updating a DateTimeField accepts the original ISO timestamp, preserving membership history.
         enrollment, _ = GroupEnrollment.objects.get_or_create(student=student, group_id=group_id)
         GroupEnrollment.objects.filter(pk=enrollment.pk).update(**values)
     if student.group_id and not metadata.get('enrollments'):
-        GroupEnrollment.objects.update_or_create(student=student, group=student.group,
-                                                defaults={'is_active': True, 'left_at': None})
+        enrollment, _ = GroupEnrollment.objects.get_or_create(student=student, group=student.group)
+        # Legacy archives have no enrollment rows, but retain the student's
+        # original join date. auto_now_add must not replace it with restore time.
+        GroupEnrollment.objects.filter(pk=enrollment.pk).update(
+            joined_at=student.joined_at, is_active=True, left_at=None,
+            is_frozen=student.is_frozen, frozen_at=student.frozen_at,
+            frozen_reason=student.frozen_reason,
+        )
     restore_payments(metadata.get('payments', []), student=student)
     student.archive_restore_warnings = restore_student_history(archived, student)
     # Legacy or deleted primary groups must not select an unrelated same-name group.

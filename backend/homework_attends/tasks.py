@@ -1,5 +1,6 @@
 from celery import shared_task
 from django.utils import timezone
+from django.db import transaction
 from datetime import timedelta
 from .models import Group, Attendance
 import logging
@@ -8,40 +9,28 @@ logger = logging.getLogger(__name__)
 
 def _create_attendance_for_current_schema():
     """Joriy faol schema ichida davomat yaratish logikasi."""
-    from groups.models import GroupEnrollment, Student
+    from .services import attendance_members
     tomorrow = timezone.localdate() + timedelta(days=1)
     groups = Group.objects.all()
     count = 0
 
     for group in groups:
-        if not group.is_faol:
+        if not group.is_faol or group.is_archived:
             continue
         if group.start_date and group.start_date > tomorrow:
             continue
         if not group.is_lesson_day(tomorrow):
             continue
 
-        active_student_ids = GroupEnrollment.objects.filter(
-            group=group,
-            is_active=True,
-            joined_at__date__lte=tomorrow,
-        ).values_list('student_id', flat=True)
-
-        students = Student.objects.filter(
-            id__in=active_student_ids,
-            is_archived=False,
-            is_active=True,
-        )
-
-        for student in students:
-            obj, created = Attendance.objects.get_or_create(
-                student=student,
-                group=group,
-                date=tomorrow,
-                defaults={'is_present': True}
-            )
-            if created:
-                count += 1
+        with transaction.atomic():
+            group = Group.objects.select_for_update().get(pk=group.pk)
+            # Match HTTP eligibility while retaining Attendance.save() signals.
+            for student in attendance_members(group, tomorrow):
+                _, created = Attendance.objects.get_or_create(
+                    student=student, group=group, date=tomorrow,
+                    defaults={'is_present': True},
+                )
+                count += int(created)
     return count
 
 

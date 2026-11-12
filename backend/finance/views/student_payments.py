@@ -152,8 +152,8 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 or (updated_instance.group.name if updated_instance.group else "Noma'lum guruh")
             )
             _branch = (
-                (updated_instance.student.branch if updated_instance.student else None)
-                or (updated_instance.group.branch if updated_instance.group else None)
+                (updated_instance.group.branch if updated_instance.group else None)
+                or (updated_instance.student.branch if updated_instance.student else None)
                 or getattr(self.request.user, 'branch', None)
             )
 
@@ -538,7 +538,9 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                     {"detail": "To'lov hali amalga oshirilmagan — tasdiqlab bo'lmaydi."},
                     status=400
                 )
-            if payment.is_verified:
+            if payment.is_verified and not FinanceTransaction.objects.filter(
+                related_id__startswith=related_id_prefix, status='completed', is_verified=False,
+            ).exists():
                 return Response(
                     {"detail": "Bu to'lov allaqachon tasdiqlangan."},
                     status=400
@@ -785,6 +787,8 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
         ).select_related('group', 'group__branch', 'group__mentor')
 
         all_groups_info = []
+        from finance.services import payment_verification_data, with_receipt_verification
+        from finance.cashier_calculation import build_cashier_calculation
         target_group = None
         for enr in active_enrollments:
             g = enr.group
@@ -794,9 +798,9 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 target_group = g
 
             # Ushbu guruh bo'yicha oylik to'lov
-            pmt = Payment.objects.filter(student=student, group=g, month=month_date).first()
+            pmt = with_receipt_verification(Payment.objects.filter(student=student, group=g, month=month_date)).first()
             if pmt:
-                g_expected = float(pmt.amount or g.monthly_price or 0)
+                g_expected = float(pmt.amount if pmt.amount is not None else (g.monthly_price or 0))
                 g_paid = float(pmt.paid_amount or 0)
                 if student.status == 'discount':
                     g_remaining = 0.0
@@ -835,12 +839,16 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "mentor_name": g.mentor.get_full_name() if g.mentor else "Biriktirilmagan",
                 "monthly_price": float(g.monthly_price or 0),
                 "payment_id": pmt_id,
+                **payment_verification_data(pmt),
                 "expected_amount": g_expected,
                 "paid_amount": g_paid,
                 "remaining_amount": g_remaining,
                 "is_paid": g_is_paid,
                 "is_partial": g_is_partial,
-                "is_discount": (student.status == 'discount')
+                "is_discount": (student.status == 'discount'),
+                "calculation": build_cashier_calculation(
+                    student, g, month_date, pmt, enr, g_expected, g_remaining, today=today,
+                )
             })
 
         if not target_group:
@@ -850,9 +858,9 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 target_group = student.primary_group
 
         if not all_groups_info and target_group:
-            pmt = Payment.objects.filter(student=student, group=target_group, month=month_date).first()
+            pmt = with_receipt_verification(Payment.objects.filter(student=student, group=target_group, month=month_date)).first()
             if pmt:
-                g_expected = float(pmt.amount or target_group.monthly_price or 0)
+                g_expected = float(pmt.amount if pmt.amount is not None else (target_group.monthly_price or 0))
                 g_paid = float(pmt.paid_amount or 0)
                 if student.status == 'discount':
                     g_remaining = 0.0
@@ -891,12 +899,16 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
                 "mentor_name": target_group.mentor.get_full_name() if target_group.mentor else "Biriktirilmagan",
                 "monthly_price": float(target_group.monthly_price or 0),
                 "payment_id": pmt_id,
+                **payment_verification_data(pmt),
                 "expected_amount": g_expected,
                 "paid_amount": g_paid,
                 "remaining_amount": g_remaining,
                 "is_paid": g_is_paid,
                 "is_partial": g_is_partial,
-                "is_discount": (student.status == 'discount')
+                "is_discount": (student.status == 'discount'),
+                "calculation": build_cashier_calculation(
+                    student, target_group, month_date, pmt, None, g_expected, g_remaining, today=today,
+                )
             })
 
         # 2. Target guruh davomat statistikasi
@@ -1097,7 +1109,7 @@ def generate_single_student_payment(request):
         from decimal import Decimal
         from django.utils import timezone
         
-        from permissions.scopes import require_finance_access
+        from permissions.scopes import require_finance_access, allowed_branch_ids
         student = get_object_or_404(Student, id=student_id)
         require_finance_access(request.user, student.branch_id)
         
@@ -1106,12 +1118,19 @@ def generate_single_student_payment(request):
         target_groups = []
         if group_id:
             group = get_object_or_404(Group, id=group_id)
+            require_finance_access(request.user, group.branch_id)
+            if not group.is_faol or not GroupEnrollment.objects.filter(
+                student=student, group=group, is_active=True, left_at__isnull=True,
+            ).exists():
+                return Response({"error": "O'quvchi ushbu guruhda faol emas"}, status=400)
             target_groups.append(group)
         else:
             # O'quvchining barcha faol guruhlarini aniqlash (eski/uzilgan guruhlar kirmaydi)
             active_enrollments = GroupEnrollment.objects.filter(
                 student=student, is_active=True, left_at__isnull=True
             ).select_related('group')
+            if request.user.role != 'super_admin':
+                active_enrollments = active_enrollments.filter(group__branch_id__in=allowed_branch_ids(request.user))
             target_groups = [e.group for e in active_enrollments if e.group and e.group.is_faol]
             if not target_groups and student.group and student.group.is_faol:
                 if GroupEnrollment.objects.filter(student=student, group=student.group, is_active=True, left_at__isnull=True).exists():
@@ -1178,6 +1197,8 @@ def generate_single_student_payment(request):
             msg = "To'lov ma'lumoti yaratilmadi"
 
         all_student_payments = Payment.objects.filter(student=student).order_by('-month', '-id')
+        if request.user.role != 'super_admin':
+            all_student_payments = all_student_payments.filter(group__branch_id__in=allowed_branch_ids(request.user))
 
         return Response({
             "success": True,

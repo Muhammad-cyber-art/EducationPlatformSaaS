@@ -101,6 +101,13 @@ class Payment(models.Model):
 
     class Meta:
         ordering = ['-month']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['student', 'group', 'month'],
+                condition=models.Q(student__isnull=False, group__isnull=False, month__isnull=False),
+                name='unique_student_group_month_bill',
+            ),
+        ]
         verbose_name = "O'quvchi to'lovi"
         verbose_name_plural = "O'quvchilar to'lovlari"
 
@@ -154,14 +161,15 @@ class Payment(models.Model):
             raise ValueError("Imtiyozli (discount) o'quvchilardan qo'lda pul qabul qilib bo'lmaydi.")
 
         installment = Decimal(str(installment_amount))
-        if installment <= 0:
+        if not installment.is_finite() or installment <= 0:
             raise ValueError("To'lov summasi 0 dan katta bo'lishi kerak")
 
         with db_transaction.atomic():
             if self.pk:
                 locked = Payment.objects.select_for_update().get(pk=self.pk)
-                if self.amount is None:
-                    self.amount = locked.amount
+                # The database invoice may have been repriced since this object
+                # was read. Never restore an obsolete amount while taking cash.
+                self.amount = locked.amount
                 self.paid_amount = locked.paid_amount
                 self.is_paid = locked.is_paid
                 self.is_partial = locked.is_partial
@@ -229,6 +237,12 @@ class Payment(models.Model):
                     self.is_paid = False
                     self.is_partial = False
 
+            # A new installment is a new cashier receipt, even if previous
+            # installments were approved. It must be approved separately.
+            if installment > 0:
+                self.is_verified = False
+                self.verified_by = None
+                self.verified_at = None
             self.save()
 
             # Faqat haqiqiy pul harakati bo'lsa tranzaksiya yaratamiz
@@ -248,8 +262,8 @@ class Payment(models.Model):
                     or (self.group.name if self.group else "Noma'lum guruh")
                 )
                 _branch = (
-                    (self.student.branch if self.student else None)
-                    or (self.group.branch if self.group else None)
+                    (self.group.branch if self.group else None)
+                    or (self.student.branch if self.student else None)
                 )
                 if _branch is None and self.student:
                     enr = self.student.enrollments.filter(is_active=True, group__branch__isnull=False).select_related('group__branch').first()

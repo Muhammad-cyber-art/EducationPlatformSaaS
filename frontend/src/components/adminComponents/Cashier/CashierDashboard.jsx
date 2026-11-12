@@ -80,6 +80,7 @@ export default function CashierDashboard() {
     },
     enabled: !!currentBranchId,
     staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   });
 
   const branchDesk = cashierData?.branch || {};

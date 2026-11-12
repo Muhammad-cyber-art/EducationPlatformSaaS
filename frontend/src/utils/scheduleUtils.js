@@ -120,3 +120,15 @@ export function isScheduledLessonDate(dateVal, customDays, legacyDays = null, da
   const normalized = normalizeCustomDays(customDays, legacyDays, darsKunlari);
   return normalized.includes(pyDay);
 }
+
+export function isGroupLessonDate(date, group) {
+  if (!group || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() !== Number(date.slice(0, 4)) ||
+      parsed.getMonth() + 1 !== Number(date.slice(5, 7)) || parsed.getDate() !== Number(date.slice(8, 10))) return false;
+  if (group.canceled_lesson_dates?.includes(date)) return false;
+  if (group.start_date && date < group.start_date) return false;
+  if (group.special_lesson_dates?.includes(date)) return true;
+  // Edit windows and cached monthly dates are not evidence of a scheduled day.
+  return isScheduledLessonDate(date, group.custom_days, group.days, group.dars_kunlari);
+}

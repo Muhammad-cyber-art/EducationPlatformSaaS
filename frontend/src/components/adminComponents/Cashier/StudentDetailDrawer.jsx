@@ -8,6 +8,8 @@ import {
 import api from '../../../tokenUpdater/updater';
 import toast from 'react-hot-toast';
 import AmountInput from '../../Common/AmountInput';
+import PaymentVerificationBadge from './PaymentVerificationBadge';
+import PaymentCalculation from './PaymentCalculation';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { db, queueCashierPayment } from '../../../db/db';
@@ -71,7 +73,15 @@ export default function StudentDetailDrawer({
       try {
         const cached = await db.query_cache.get(cacheKey);
         if (cached?.data && isMounted) {
-          setDetailData(cached.data);
+          const data = student.verification_status === 'sync_pending' ? {
+            ...cached.data,
+            all_active_groups: cached.data.all_active_groups?.map(group =>
+              Number(group.group_id) === Number(student.group_id)
+                ? { ...group, paid_amount: student.paid_amount, remaining_amount: student.remaining_amount,
+                    is_paid: student.is_paid, is_verified: false, verification_status: 'sync_pending', calculation: null }
+                : group),
+          } : cached.data;
+          setDetailData(data);
           const targetGrp = cached.data.all_active_groups?.find(g => g.group_id === student.group_id);
           if (targetGrp) {
             setPayAmount(String(targetGrp.remaining_amount || ''));
@@ -98,7 +108,9 @@ export default function StudentDetailDrawer({
             remaining_amount: student.remaining_amount,
             paid_amount: student.paid_amount,
             is_paid: student.is_paid,
-            payment_id: student.payment_id
+            payment_id: student.payment_id,
+            is_verified: student.is_verified,
+            verification_status: student.verification_status,
           },
           all_active_groups: [
             {
@@ -108,7 +120,9 @@ export default function StudentDetailDrawer({
               remaining_amount: student.remaining_amount,
               paid_amount: student.paid_amount,
               is_paid: student.is_paid,
-              payment_id: student.payment_id
+              payment_id: student.payment_id,
+              is_verified: student.is_verified,
+              verification_status: student.verification_status,
             },
             ...(student.other_groups || []).map(og => ({
               group_id: og.group_id,
@@ -432,11 +446,16 @@ export default function StudentDetailDrawer({
                           <span className="text-[var(--text-secondary)]">Oylik narx:</span>
                           <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(grp.monthly_price)}</span>
                         </div>
+                        <div className="mt-2">
+                          <PaymentVerificationBadge payment={grp} />
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
+
+              <PaymentCalculation key={activeGroup.group_id} calculation={activeGroup.calculation} formatCurrency={formatCurrency} />
 
               {/* SECTION 2: Attendance Summary */}
               {detailData?.attendance && (
@@ -705,13 +724,15 @@ export default function StudentDetailDrawer({
                           </p>
                         </div>
 
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                        {tx.status === 'completed' && tx.category === 'student_fee' && Number(tx.amount) > 0 ? (
+                          <PaymentVerificationBadge payment={{ paid_amount: tx.amount, is_verified: tx.is_verified }} />
+                        ) : <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                           tx.status === 'completed'
                             ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
                             : 'bg-[var(--bg-panel)] text-[var(--text-muted)] border border-[var(--border-glass)]'
                         }`}>
                           {tx.status}
-                        </span>
+                        </span>}
                       </div>
                     ))}
                   </div>

@@ -687,6 +687,16 @@ from django.db.models import Q
 
 
 class GroupSerializer(serializers.ModelSerializer):
+    billing_update = serializers.SerializerMethodField()
+
+    def get_billing_update(self, obj):
+        return getattr(obj, '_billing_update', None)
+
+    def validate_monthly_price(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Guruh narxi manfiy bo‘lishi mumkin emas.')
+        return value
+
     mentor_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.filter(role="mentor"),
         source="mentor",
@@ -722,6 +732,7 @@ class GroupSerializer(serializers.ModelSerializer):
             "group_type",
             "is_faol",
             "monthly_price",
+            "billing_update",
             "branch",
             "branch_id",
             "days",

@@ -110,13 +110,43 @@ class SyncManager {
    * Internet yo'q bo'lganda api.post() xatolik tashlaydi — bu endi gracefully ushlaydi.
    */
   async pushChanges() {
-    const pendingItems = await db.sync_queue
-      .where('status')
-      .equals('pending')
-      .limit(PUSH_BATCH_SIZE)
-      .sortBy('created_at');
+    return this._serializePush(async () => {
+      const pendingItems = await db.sync_queue
+        .where('status')
+        .equals('pending')
+        .limit(PUSH_BATCH_SIZE)
+        .sortBy('created_at');
 
-    const queueItems = pendingItems.slice(0, PUSH_BATCH_SIZE);
+      const queueItems = pendingItems.slice(0, PUSH_BATCH_SIZE);
+      return this._pushQueueItems(queueItems);
+    });
+  }
+
+  async _serializePush(work) {
+    const previous = this._pushPromise || Promise.resolve();
+    const pending = previous.catch(() => {}).then(work);
+    this._pushPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this._pushPromise === pending) this._pushPromise = null;
+    }
+  }
+
+  async pushAttendance(queueId) {
+    return this._serializePush(async () => {
+      const target = await db.sync_queue.get(queueId);
+      if (!target || target.status !== 'pending') return { pushedCount: 0 };
+      // Do not let a new edit overtake an older unacknowledged edit of the day.
+      const items = await db.sync_queue.where('status').equals('pending').filter(item =>
+        item.entity === 'attendance' && item.queue_id <= target.queue_id &&
+        Number(item.data?.group_id) === Number(target.data.group_id) && item.data?.date === target.data.date
+      ).sortBy('queue_id');
+      return this._pushQueueItems(items.slice(0, PUSH_BATCH_SIZE));
+    });
+  }
+
+  async _pushQueueItems(queueItems) {
     if (queueItems.length === 0) return { pushedCount: 0 };
 
     this.notify('push_start', { totalToPush: queueItems.length });

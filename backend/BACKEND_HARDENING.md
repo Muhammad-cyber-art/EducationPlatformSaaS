@@ -1,5 +1,299 @@
 # Backend hardening
 
+## Multiple-course membership fix (2026-11-12)
+
+Joining an existing student to another group now preserves all other enrollments,
+their dates, attendance and invoices. The legacy `Student.group` field is a
+primary-group pointer: saving or clearing it no longer deletes memberships.
+Partial saves that exclude this field cannot reactivate a stale membership.
+Enrollment writes lock the student row; rejoining clears a stale `left_at`.
+Explicit transfer still moves its selected source course, but leaves unrelated
+courses intact. Removing one course preserves a student's other active courses,
+including students without a phone number.
+
+Nightly attendance creation now uses the same dated membership and freeze rules
+as HTTP attendance reads, including legacy records without an enrollment. It
+retains model save signals for finance and skips archived/inactive groups.
+The `create_attendance` command uses the same tenant-aware generation path.
+
+The old `cleanup_transferred_enrollments` command could delete legitimate second
+courses, historical memberships and unpaid invoices. Mutation mode is disabled
+and exits with `CommandError` before any writes. `--dry-run [--tenant SCHEMA]`
+now provides only a read-only membership count, not proposed deletions. Remove
+old scheduled invocations of this command and check production cron/deployment
+scripts; the repository does not establish whether it was scheduled there.
+
+Deploy the updated code to all backend processes together. With Compose:
+
+```sh
+docker compose up -d --build web celery_worker notification_worker celery_beat telegram_bot
+```
+
+No schema migration or frontend payload change is required. This fix prevents
+further losses; it cannot recover already deleted enrollment dates or invoices.
+Reconcile those against a trusted backup or an explicitly verified mapping of
+student IDs, group IDs and membership dates. Do not infer current memberships
+from old attendance, old transfers or the primary-group pointer alone.
+
+Local verification: 227 tests discovered; 223 passed and four PostgreSQL-only
+tests skipped using `config.test_settings`. The 12 new membership regressions
+cover API joins/retries, next-day generation and HTTP reads, rejoining, legacy
+memberships, partial saves, transfer/unenrollment isolation, generation rules,
+finance save signals, the attendance command and disabled cleanup behavior.
+Migration drift and diff whitespace checks passed. No production data was
+modified and no deployment was performed. PostgreSQL row locking and live
+Celery scheduling were not exercised by the SQLite run.
+
+### Cashier and monthly billing follow-up (2026-11-12)
+
+Cross-branch membership exposed an existing ledger attribution bug: receipts,
+paid-invoice adjustments and group-specific extra payments preferred the
+student's primary branch over the selected group's branch. These paths now
+prefer the group's branch, matching cashier authorization and refunds. The
+primary branch remains a fallback for payments whose group no longer exists.
+Existing ledger entries are not rewritten; historical misattribution needs
+separate reconciliation.
+
+Five additional regressions verify independent 300,000/500,000 course invoices,
+repeat monthly generation without duplicate bills or cash entries, a 100,000
+installment reducing only its selected course's debt, and branch attribution
+for cashier receipts, adjustments and extra payments. Full isolated SQLite
+result: 232 discovered, 228 passed, four PostgreSQL-only tests skipped.
+Migration drift and diff whitespace checks passed. Production was not modified.
+
+### Admin cashier approval indicators (2026-11-12)
+
+Cashier roster/debtor rows, group cards in the student drawer and completed
+student-fee receipts now distinguish payment collection from super-admin
+approval. Green means approved; amber means approval is pending. Offline queued
+payments use a blue awaiting-upload badge. Old cached payloads without approval
+fields show an unknown state rather than a guessed approval. The roster refreshes
+every 30 seconds while active; offline badges reflect locally cached state.
+
+Cashier desk/offline bundle and student detail responses include `is_verified`
+and `verification_status` per invoice. A correlated pending-receipt check avoids
+per-student roster queries and overrides stale legacy invoice approval flags.
+New installments reset invoice approval metadata while preserving previously
+approved ledger receipts; the verify action can also approve pending receipts
+when a legacy invoice flag is already true. Payment amounts, debt settlement
+and the super-admin-only approval restriction are preserved.
+
+Deploy backend and frontend together; no migration is required. Six approval
+regressions cover unpaid/partial/full receipts, reapproval after an installment,
+drawer/roster agreement, admin rejection and stale legacy flags. Full isolated
+SQLite result: 238 discovered, 234 passed, four PostgreSQL-only tests skipped.
+Frontend production build passed; targeted ESLint returned zero errors and
+10 existing warnings. Migration drift and diff whitespace checks passed.
+Browser visual QA, PostgreSQL locking and production deployment were not run.
+
+### Cashier arithmetic explanations (2026-11-12)
+
+The cashier student drawer now shows a per-course explanation with comparison
+bars, a sequence of arithmetic operations, recorded payments, the final balance,
+and a dated lesson calendar. Reduced balances have a "Nega bu summa?" shortcut
+on roster/debtor rows. Switching courses uses that course's own calculation.
+
+This is read-only: amounts reconcile to the invoice and cashier balance rather
+than recalculating or changing debt. Individual prices, matching midmonth join
+or group-start calculations, recorded attendance refunds, prior receipts and
+grant coverage are separated. Rounding happens after multiplication. Confirmed
+attendance, unmarked dates, canceled/special lessons and membership dates are
+shown separately. Membership dates use the configured local timezone.
+
+Current schedules and prices are not historical billing snapshots. Matching
+schedule arithmetic is labeled as a current-data cross-check. An unexplained
+historical difference is shown as a recorded difference with an explicit warning;
+it is never fabricated as a discount. Invoice notes are shown when available.
+No-invoice results are labeled as estimates. A saved zero amount is retained
+instead of falling back to the full course price. Offline queued payments do
+not display stale cached arithmetic until the server can confirm the amount.
+
+Ten new regression cases cover arithmetic continuity, proration plus installments,
+individual prices, refunds without double deduction, rounding, canceled/special
+dates, grants, unknown historical differences, zero invoices, independent course
+amounts and no-invoice estimates. Full isolated SQLite result: 248 discovered,
+244 passed, four PostgreSQL-only tests skipped. Frontend production build passed;
+targeted ESLint reported zero errors and two existing warnings. Browser QA could
+not start because the Windows sandbox denied access to its helper directory.
+No production data was changed and no deployment was performed.
+
+### Current-month group tariff changes (2026-11-12)
+
+Changing a group's `monthly_price` through normal model/API saves now updates
+recognizable open current-month invoices in the same transaction. The group row
+and invoice rows are locked. Fully settled invoices remain at their original
+amount, as explicitly selected for this release. Receipts, paid amounts and
+existing receipt approval metadata are not rewritten and no cash movement is
+created by a tariff edit. A price decrease can settle an invoice whose existing
+receipts already cover the new amount; it does not automatically refund cash.
+
+Explicit individual fees remain fixed. Midmonth enrollment/group-start fractions
+are retained when the existing invoice matches that basis. Recorded attendance
+refunds scale with the applicable tariff; ignored refunds remain ignored.
+Tariff-based grant invoices use the existing attendance calculation. Historical
+months, existing future invoices, frozen/inactive memberships and other courses
+are not repriced. Missing invoices are not created by this operation; ordinary
+monthly generation uses the new tariff when it creates later invoices.
+
+Ambiguous legacy/manual amounts are preserved and reported by student name in
+`billing_update`, rather than treated as full-month bills without evidence.
+This is not a retroactive repair of invoices already stale before this release.
+Those require a verified pricing basis. Raw `QuerySet.update()`/SQL bypasses
+model save behavior and must not be used to change tariffs when invoice
+synchronization is required. Unpaid mentor salary recalculation remains part
+of the transaction when student invoices change.
+
+Group-edit responses include updated/preserved/review counts. The frontend shows
+the result and invalidates cashier, group, membership and schedule queries so
+the new figures are fetched immediately. No schema migration is required;
+deploy all backend processes and the frontend together.
+
+Verification: 14 new repricing regressions cover 400,000→450,000, installments,
+paid/history/future preservation, individual fees, proration/refunds/grants,
+unrecognized amounts, frozen/other-course isolation, partial model saves,
+rollback after an invoice write, retries and tariff reductions. Full isolated
+SQLite suite: 262 discovered, 258 passed, four PostgreSQL-only tests skipped.
+Frontend production build passed; targeted lint had zero errors and four
+existing warnings. Migration drift and diff whitespace checks passed. No
+production changes or deployment were performed; PostgreSQL lock behavior was
+not exercised locally.
+
+### Attendance confirmation timeouts and retries (2026-11-12)
+
+The reported Axios `ECONNABORTED` means no response arrived within the 25-second
+client deadline; it does not prove that the attendance transaction failed.
+Code inspection found repeated per-student mentor salary calculations and a
+Celery result-consumer Redis subscription during notification publication.
+Celery's result-backend reconnect policy can add waits despite publish retry
+being disabled. Attendance notification tasks now explicitly ignore results,
+avoiding that subscription. Broker connect/read limits remain in effect; the
+global Axios timeout was not increased. The exact original runtime delay was
+not profiled in the authenticated live application.
+
+Bulk confirmation recalculates relevant student invoices, then mentor salary
+once for the group/month. Regular students skip the unrelated finance loop.
+Comparing marker IDs avoids fetching a user for every attendance row. Repeating
+unchanged attendance does not republish notifications or recalculate finance.
+Paid employee salaries are preserved. Recalculations taking at least two seconds
+log group/date/student count and duration for further diagnosis. These changes
+reduce known blocking work; they do not establish a hard request deadline.
+
+Online attendance now submits its persisted outbox item through the same sync
+endpoint/client/queue identity used by retries. Pushes in one browser session are
+serialized; earlier pending edits of the same group/day precede a newer edit.
+Only explicitly acknowledged queue IDs are removed. New edits never replace
+the payload or identity of an older possibly committed operation. Outbox rows
+remain available after a timeout, and permanent server rejection remains failed
+with its reason. A failed IndexedDB transaction no longer produces optimistic
+confirmation or a local-save success message. UI messages distinguish local
+durability, pending server confirmation and actual server acknowledgment.
+
+Deploy backend/web, notification workers and frontend together. No migration
+or IndexedDB reset is required. Preserve existing client identity and queued
+operations. An unavailable broker can still prevent Telegram dispatch; the
+existing robust callback preserves committed attendance, but does not provide
+a durable notification-delivery guarantee or a broker-outage replay queue.
+
+Verification: full isolated SQLite suite discovered 270 tests; 266 passed and
+four PostgreSQL-only tests skipped. Eight new backend regressions cover batching,
+unchanged confirms, query count, publishing without a result subscription,
+broker failure, grant invoices, paid salaries and lost-response replay. Six
+frontend orchestration tests pass with `npm run test:sync` (Node VM modules and
+mocked API/storage, not browser IndexedDB integration). Production build,
+targeted lint (zero errors/two existing warnings), migration drift and diff
+whitespace checks passed. Live authenticated request timing, real worker
+delivery, multi-tab browser races and PostgreSQL locks were not exercised.
+
+## Dated attendance rosters after transfer and restoration
+
+`GET /api/homework_attends/attendances/roster/?group_id=ID&date=YYYY-MM-DD`
+returns students eligible on that exact date plus existing historical rows.
+Each row includes `can_mark`, current membership and current freeze flags.
+The endpoint enforces the existing group/branch permissions. Historical records
+without dated membership remain readable but cannot authorize new attendance.
+Past members remain eligible within their actual membership dates even if they
+have since left or frozen their membership. Existing date-edit permissions still
+apply independently.
+
+The frontend uses that dated roster in the table and confirmation payload. It
+refreshes it before an online confirmation; if eligible members changed, it
+updates the table and requests review before creating a new outbox operation.
+Read-only rows are excluded from attendance confirmation. Former members cannot
+be included in current membership management/bulk actions from a historical
+roster. Freeze/transfer/restore refreshes reload both attendance and the roster.
+Offline use prefers the cached dated snapshot and otherwise filters known local
+membership dates; server validation remains authoritative when replayed.
+Multiple pending edits display the latest local intent while retaining FIFO
+submission and immutable operation identities.
+
+The project's explicit transfer operation already relocates source attendance
+history. It now carries the trusted source membership start into the target
+enrollment and resumes the target's active/unfrozen state. Transfer calculations
+use the configured local day. Archive restoration preserves original enrollment
+timestamps; legacy primary-group archives with absent enrollment data or an
+absent join timestamp use the retained original student join date. It does not
+infer missing secondary-course membership dates or unfreeze archived history.
+
+Invalid payloads still reject atomically. Structured errors identify the affected
+date, student and membership reason rather than exposing Python `ErrorDetail`
+representations. Names of unrelated students are not exposed through ID probing.
+Existing failed outbox operations are retained for review, not silently dropped.
+Already corrupted production dates are not guessed or bulk-rewritten; repair
+requires a trusted backup or a verified student/group/date mapping.
+
+Deploy backend and frontend together; no migration or storage reset is needed.
+Verification: full isolated SQLite suite discovered 281 tests; 277 passed and
+four PostgreSQL-only tests skipped. Eleven new backend regressions cover dated
+rosters, transfer history, modern/legacy restores, frozen history, branch scope,
+structured errors and atomic rejection. `npm run test:sync` passes all ten
+frontend orchestration/helper tests. Production build and targeted lint passed
+(zero errors, ten existing warnings); migration drift and whitespace checks
+passed. Browser visual QA, PostgreSQL locking and production repair/deployment
+were not performed.
+
+## Disabled attendance controls on non-lesson days (2026-11-13)
+
+Desktop/mobile attendance toggles and confirm/save controls now use native
+`disabled` states with reduced opacity and an explanatory tooltip on non-lesson
+or canceled dates. Extra lessons remain available on their explicitly added
+dates. A shared frontend schedule predicate uses weekly days, group start date,
+extra lessons and cancellations; cached monthly dates and the last-three-editable
+dates no longer override the actual schedule. Handler and existing permission
+checks remain in place. This change does not alter backend membership rules.
+
+Four schedule regressions were added to `npm run test:sync`; all 14 frontend
+tests pass. Targeted lint reported zero errors and seven existing warnings;
+the production frontend build passed. No backend migration or production
+deployment was performed. Browser visual QA was not performed.
+
+## Newly added student visibility (2026-11-13)
+
+The reported case was a successful student creation with no visible new row.
+The new/existing-student add flows previously invalidated only group detail,
+leaving the ten-minute group-student cache and dated attendance roster stale.
+They now invalidate the relevant membership, roster, student and cashier query
+families. The profile join modal also invalidates those caches, resets its
+selection when opened, releases loading in `finally`, and displays server errors.
+
+The dated roster now includes all current group members even when an earlier
+attendance date is selected. A newly joined student is visible with the actual
+join-date explanation and `can_mark=false` for earlier dates; attendance eligibility
+is not broadened. Former/historical members retain the existing dated rules.
+Rows without an invoice in the selected month do not show a debt badge merely
+because they are current members viewed before joining. No student, invoice or
+attendance is recreated by refreshing this roster.
+
+Verification: an API integration regression creates a student, checks the active
+group enrollment and group student list, verifies visibility/read-only state on
+an earlier date, and verifies current-date eligibility without creating past
+attendance. A real QueryClient regression verifies invalidation despite infinite
+stale time. Full isolated SQLite suite: 282 discovered, 278 passed, four
+PostgreSQL-only tests skipped. All 15 frontend tests and production build passed;
+targeted lint reported zero errors and three existing warnings. Migration drift
+and whitespace checks passed. Deploy backend and frontend together; no migration
+or production-data recreation is required. Browser QA and deployment were not
+performed.
+
 ## General deployment verification (2026-11-09)
 
 The current working tree passed the following checks after the lifecycle fixes:

@@ -49,6 +49,13 @@ services:
     restart: always
     logging: *service-logging
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --threads ${GUNICORN_THREADS:-3} --worker-class gthread --max-requests 1000 --max-requests-jitter 50 --timeout 120 --access-logfile - --error-logfile -
+    # Gunicorn binds only after entrypoint has migrated public and tenant schemas.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 120s
     ports:
       - "127.0.0.1:8000:8000"
     env_file:
@@ -79,7 +86,7 @@ services:
       redis:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - media_volume:/app/media
       - static_volume:/app/static
@@ -99,6 +106,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      web:
+        condition: service_healthy
     volumes:
       - media_volume:/app/media
 
@@ -115,7 +124,7 @@ services:
       redis:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - media_volume:/app/media
       - static_volume:/app/static
@@ -138,7 +147,7 @@ services:
       redis:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - media_volume:/app/media
       - static_volume:/app/static

@@ -8,7 +8,9 @@ import { useState, useRef, useEffect } from "react";
 import { db } from "../../db/db";
 
 // 3 nuqta dropdown menu komponenti
-function StudentActionMenu({ item, onColor, onTransfer, onDelete, onToggleFreeze, menuOpenId, setMenuOpenId }) {
+function StudentActionMenu({ item: displayedItem, onColor, onTransfer, onDelete, onToggleFreeze, menuOpenId, setMenuOpenId }) {
+  const item = displayedItem.current_is_frozen === undefined ? displayedItem :
+    { ...displayedItem, is_frozen: displayedItem.current_is_frozen };
   const menuRef = useRef(null);
   const colorInputRef = useRef(null);
   const desktopColorInputRef = useRef(null);
@@ -24,6 +26,8 @@ function StudentActionMenu({ item, onColor, onTransfer, onDelete, onToggleFreeze
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isOpen, setMenuOpenId]);
+
+  if (item.is_current_member === false) return null;
 
   return (
     <div className="flex items-center justify-center gap-2">
@@ -282,7 +286,7 @@ export default function GroupsStudent({
 
   const handleToggle = async (attendanceId, currentStatus, studentId, studentName) => {
     if (!groupId) return;
-    if (!isLessonDay || isCanceledDay) {
+    if (!canEdit || !isLessonDay || isCanceledDay) {
       toast.error("Bu kun dars kuni emas yoki dars bekor qilingan! Davomat olib bo'lmaydi.");
       return;
     }
@@ -330,9 +334,9 @@ export default function GroupsStudent({
 
         // Senior Fix: O'quvchi guruhga qo'shilgan sanadan oldingi darslarni ko'rsatmaslik
         const joinDateStr = item.joined_at ? item.joined_at.split('T')[0] : null;
-        const isJoinedLater = joinDateStr && selectedDate < joinDateStr;
+        const isJoinedLater = item.can_mark === true ? false : joinDateStr && selectedDate < joinDateStr;
 
-        const defaultState = (isLessonDay && !isJoinedLater) ? true : undefined;
+        const defaultState = (isLessonDay && !isJoinedLater && item.can_mark !== false) ? true : undefined;
 
         let isPresent;
         if (item.id in localOverrides) {
@@ -381,6 +385,9 @@ export default function GroupsStudent({
                 <span>Muzlatilgan</span>
               </div>
             );
+          }
+          if (item.can_mark === false && !item.current_payment_id) {
+            return <span className="text-[10px] font-medium text-[var(--text-muted)]">Bu oy uchun hisob yo‘q</span>;
           }
           const isPaid = Boolean(item.current_payment_status);
           return (
@@ -454,6 +461,7 @@ export default function GroupsStudent({
                         item.is_frozen ? 'text-sky-200 group-hover:text-sky-300' : 'text-[var(--text-primary)] group-hover:text-[var(--gold)]'
                       }`}>
                         {item.full_name}
+                        {item.can_mark === false && <span className="block text-[10px] font-normal text-[var(--text-muted)]">{item.attendance_unavailable_reason || 'Bu sana uchun davomat olinmaydi'}</span>}
                       </h4>
                       {item.is_frozen && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_8px_rgba(56,189,248,0.25)]">
@@ -503,10 +511,12 @@ export default function GroupsStudent({
                       <span>Eritish</span>
                     </button>
                   </div>
-                ) : canEdit && isLessonDay && !isCanceledDay ? (
+                ) : item.can_mark !== false && typeof isLessonDay === 'boolean' ? (
                   <button
+                    disabled={!canEdit || !isLessonDay || isCanceledDay}
+                    title={!isLessonDay || isCanceledDay ? 'Bu sanada dars yo‘q — davomat olinmaydi' : !canEdit ? 'Bu sanani tahrirlash mumkin emas' : undefined}
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
-                    className={`h-9 px-6 rounded-xl text-[9px] font-black capitalize tracking-[0.2em] flex items-center gap-2 transition-all shadow-md active:scale-90 ${isPresent === true
+                    className={`h-9 px-6 rounded-xl text-[9px] font-black capitalize tracking-[0.2em] flex items-center gap-2 transition-all shadow-md active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${isPresent === true
                       ? 'bg-emerald-500 text-white shadow-emerald-500/20'
                       : isPresent === false
                         ? 'bg-red-500 text-white shadow-red-500/20'
@@ -577,6 +587,7 @@ export default function GroupsStudent({
                       item.is_frozen ? 'text-sky-200' : 'text-[var(--text-primary)]'
                     }`}>
                       {item.full_name}
+                      {item.can_mark === false && <span className="block text-[10px] font-normal text-[var(--text-muted)]">{item.attendance_unavailable_reason || 'Bu sana uchun davomat olinmaydi'}</span>}
                     </h4>
                     {item.is_frozen && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_8px_rgba(56,189,248,0.25)]">
@@ -619,10 +630,12 @@ export default function GroupsStudent({
                       <span>Eritish</span>
                     </button>
                   </div>
-                ) : canEdit && isLessonDay && !isCanceledDay ? (
+                ) : item.can_mark !== false && typeof isLessonDay === 'boolean' ? (
                   <button
+                    disabled={!canEdit || !isLessonDay || isCanceledDay}
+                    title={!isLessonDay || isCanceledDay ? 'Bu sanada dars yo‘q — davomat olinmaydi' : !canEdit ? 'Bu sanani tahrirlash mumkin emas' : undefined}
                     onClick={(e) => { e.stopPropagation(); handleToggle(attId, isPresent, item.id, item.full_name); }}
-                    className={`h-9 px-5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 text-[9px] font-black capitalize tracking-widest ${isPresent === true
+                    className={`h-9 px-5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 text-[9px] font-black capitalize tracking-widest disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${isPresent === true
                       ? 'bg-emerald-500 text-white shadow-emerald-500/20'
                       : isPresent === false
                         ? 'bg-red-500 text-white shadow-red-500/20'

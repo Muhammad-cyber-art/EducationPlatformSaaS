@@ -55,7 +55,7 @@ def sync_mentor_salary(group, month_date=None):
         employee_payment.save(update_fields=['salary_base'])
 
 
-def update_attendance_based_payments(student, group, date):
+def update_attendance_based_payments(student, group, date, recalculate_salary=True):
     """
     Davomat o'zgarganda:
       1) Discount student uchun (faqat joriy oy): Payment.amount qayta hisoblanadi.
@@ -96,7 +96,15 @@ def update_attendance_based_payments(student, group, date):
             )
 
     # 2. Mentor maoshi (discount/negotiated uchun) — to'lanmagan bo'lsa o'tgan oylarni ham yangilash (BUG M-2 FIX)
-    if student.status in ["discount", "negotiated"]:
+    if recalculate_salary and student.status in ["discount", "negotiated"]:
+        recalculate_attendance_mentor_salary(group, month_date)
+
+    auto_pay_from_wallet(student)
+
+
+def recalculate_attendance_mentor_salary(group, month_date):
+    """Recalculate once after all students in a bulk attendance save are updated."""
+    if group:
         try:
             mentor = group.mentor
             if mentor and hasattr(mentor, "staff_profile"):
@@ -122,6 +130,8 @@ def update_attendance_based_payments(student, group, date):
                                     "attendance_deductions": {},
                                 },
                             )
+                            if emp_payment.is_paid:
+                                return
                             apply_calculated_salary_to_employee_payment(
                                 profile, month_date, emp_payment
                             )
@@ -130,13 +140,10 @@ def update_attendance_based_payments(student, group, date):
             logger.error(
                 "Failed to update mentor salary for group %s, date %s: %s",
                 group.id,
-                date,
+                month_date,
                 e,
             )
     
-    auto_pay_from_wallet(student)
-
-
 def apply_calculated_salary_to_employee_payment(profile, month_date, emp_payment):
     """
     StaffProfile.calculate_salary_for_month natijasini EmployeePayment ga yozadi.
@@ -459,7 +466,7 @@ def handle_custom_payment(request_user, data):
     student = get_object_or_404(Student, id=id_student)
     group = get_object_or_404(Group, id=id_group)
 
-    branch_instance = student.branch or group.branch
+    branch_instance = group.branch or student.branch
     if not branch_instance and hasattr(request_user, "branch"):
         branch_instance = request_user.branch
 
@@ -536,15 +543,21 @@ def confirm_student_payment(request_user, payment, data):
         "1",
         "yes",
     ]
+    # Recheck under the row lock: another cashier may have settled this invoice
+    # after the caller loaded it. A tariff increase must not reopen a paid bill.
+    if payment.is_paid and not is_custom_amount:
+        return payment
 
     # Amount ni olish
     provided_amount = data.get("amount")
     installment_amount = None
-    if provided_amount is not None and str(provided_amount).strip():
+    if provided_amount is not None:
         try:
             installment_amount = Decimal(str(provided_amount).strip())
         except Exception:
-            pass
+            raise ValueError("To'lov summasi noto'g'ri") from None
+        if not installment_amount.is_finite() or installment_amount <= 0:
+            raise ValueError("To'lov summasi 0 dan katta va chekli bo'lishi kerak")
 
     if is_custom_amount:
         # ---------------------------------------------------------------
@@ -579,7 +592,15 @@ def confirm_student_payment(request_user, payment, data):
         else:
             base_amount = payment.group.monthly_price
 
-        contract_amount = Decimal(str(floor_amount(base_amount)))
+        if status == 'teacher_negotiated' and payment.student.custom_fee is None:
+            from finance.utils import get_teacher_negotiated_center_fee
+            base_amount = get_teacher_negotiated_center_fee(payment.group)
+        full_month_amount = Decimal(str(floor_amount(base_amount)))
+        # An issued invoice already includes enrollment proration and historical
+        # pricing. Only an explicit full-month payment may replace that basis.
+        contract_amount = Decimal(str(payment.amount)) if payment.amount is not None else full_month_amount
+        if not payment.refund_ignored:
+            contract_amount += Decimal(str(payment.refund_amount or 0))
 
         if status == "discount":
             # Discount: HAR DOIM davomat asosida hisoblash.
@@ -607,15 +628,15 @@ def confirm_student_payment(request_user, payment, data):
                     or (
                         installment_amount is not None
                         and (
-                            installment_amount >= contract_amount
-                            or (Decimal(str(payment.paid_amount or 0)) + installment_amount) >= contract_amount
+                            installment_amount >= full_month_amount
+                            or (Decimal(str(payment.paid_amount or 0)) + installment_amount) >= full_month_amount
                         )
                     )
-                    or (ignore_refund and installment_amount is None)
                 )
             )
 
             if is_paying_full:
+                contract_amount = full_month_amount
                 pay_full_month = True
                 ignore_refund = True
                 is_partial_payment = False
@@ -1518,6 +1539,28 @@ def auto_pay_from_wallet(student):
             extra_balance -= to_pay
 
 
+def with_receipt_verification(payments):
+    """Detect pending installments without adding one query per roster row."""
+    from django.db.models import CharField, Exists, OuterRef, Value
+    from django.db.models.functions import Cast, Concat
+
+    pending = FinanceTransaction.objects.filter(
+        related_id__startswith=Concat(Value('STP-'), Cast(OuterRef('pk'), CharField()), Value('-INS-')),
+        status='completed', is_verified=False,
+    )
+    return payments.annotate(has_unverified_receipts=Exists(pending))
+
+
+def payment_verification_data(payment):
+    """Keep receipt approval separate from settling the student's debt."""
+    has_payment = payment is not None and (payment.paid_amount or 0) > 0
+    verified = bool(has_payment and payment.is_verified and not getattr(payment, 'has_unverified_receipts', False))
+    return {
+        'is_verified': verified,
+        'verification_status': ('verified' if verified else 'pending') if has_payment else 'unpaid',
+    }
+
+
 def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, search_query=''):
     """
     Filial POS Kassasi (Cashier Desk) ma'lumotlarini hisoblab, lug'at (dict) ko'rinishida qaytaradi.
@@ -1622,10 +1665,10 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
             })
 
     # 6. O'quvchilarning joriy oydagi to'lovlari (Payment)
-    payments_qs = Payment.objects.filter(
+    payments_qs = with_receipt_verification(Payment.objects.filter(
         group_id__in=group_ids,
         month=month_date
-    ).select_related('student', 'group', 'marked_by')
+    ).select_related('student', 'group', 'marked_by'))
     payment_map = {(p.student_id, p.group_id): p for p in payments_qs}
 
     # 7. Davomatlar (Bir so'rovda o'quvchining kelgan kunlari soni)
@@ -1734,7 +1777,9 @@ def build_cashier_desk_dict(target_branch_id, month_date=None, today=None, searc
             "group_name": group.name,
             "mentor_name": group.mentor.get_full_name() if group.mentor else "Biriktirilmagan",
             "payment_id": pmt_id,
+            **payment_verification_data(pmt),
             "expected_amount": float(expected_amt),
+            "standard_course_amount": float(group.monthly_price or 0),
             "paid_amount": float(paid_amt),
             "remaining_amount": float(remaining_amt),
             "is_paid": is_paid,
