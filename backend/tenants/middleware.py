@@ -61,6 +61,14 @@ class TenantMiddleware(MiddlewareMixin):
 
         # ── 1. CEO ROUTELARIGA SUBDOMENDAN KIRISHNI TAQIQLASH ────────────────
         effective_host = self._get_request_subdomain_host(request, host)
+        actual_host = self._get_actual_host(request)
+        central_hosts = set(getattr(settings, 'TENANT_CEO_DOMAINS', set()))
+        central_hosts.add(getattr(settings, 'TENANT_BASE_DOMAIN', 'chronous.uz'))
+        if settings.DEBUG:
+            central_hosts.update(('localhost', '127.0.0.1'))
+        if path.startswith(ceo_url_prefix) and actual_host not in central_hosts:
+            return JsonResponse({"error": "CEO API requires the central platform domain",
+                                 "code": "CEO_FORBIDDEN_ON_SUBDOMAIN"}, status=403)
         if path.startswith(ceo_url_prefix) and self._is_tenant_subdomain(effective_host):
             logger.warning(
                 "Subdomendan CEO route'ga urinish taqiqlandi: host=%s, path=%s",
@@ -93,7 +101,8 @@ class TenantMiddleware(MiddlewareMixin):
             return None
 
         # ── 2. DEV BYPASS: X-Tenant-Schema HEADER ────────────────────────────
-        if getattr(settings, 'TENANT_DEV_SCHEMA_HEADER', False) and settings.DEBUG:
+        if (getattr(settings, 'TENANT_DEV_SCHEMA_HEADER', False) and settings.DEBUG
+                and path != '/api/v1/auth/impersonation/exchange/'):
             dev_schema = request.META.get('HTTP_X_TENANT_SCHEMA')
             if dev_schema:
                 return self._handle_dev_bypass(request, dev_schema)
@@ -126,8 +135,8 @@ class TenantMiddleware(MiddlewareMixin):
             )
             return JsonResponse(
                 {
-                    "error": "O'quv markaz vaqtincha bloklangan",
-                    "detail": f"'{tenant.name}' markazi administrator tomonidan to'xtatilgan.",
+                    "error": "Malumot olishda xatolik",
+                    "detail": "Malumot olishda xatolik",
                     "code": "TENANT_INACTIVE",
                 },
                 status=403,
@@ -183,17 +192,29 @@ class TenantMiddleware(MiddlewareMixin):
     # ─────────────────────────────────────────────────────────────────────────
 
     @staticmethod
+    def _get_actual_host(request):
+        from django.core.exceptions import DisallowedHost
+        from django.http.request import split_domain_port, validate_host
+        raw_host = request.META.get('HTTP_HOST') or request.META.get('SERVER_NAME', '')
+        domain, _ = split_domain_port(raw_host.lower())
+        allowed = settings.ALLOWED_HOSTS
+        if settings.DEBUG and not allowed:
+            allowed = ['.localhost', '127.0.0.1', '[::1]']
+        if not domain or not validate_host(domain, allowed):
+            raise DisallowedHost("Invalid HTTP Host header")
+        return domain
+
+    @staticmethod
     def _get_host(request) -> str:
         """
         Host headerdan toza domen olish (port va protokol olib tashlanadi).
-        X-Tenant-Domain, X-Forwarded-Host va Host headerlarini ketma-ket tekshiradi.
+        Production uses the validated HTTP Host. Header overrides are local-dev only.
         """
-        host = (
-            request.META.get('HTTP_X_TENANT_DOMAIN')
-            or request.META.get('HTTP_X_FORWARDED_HOST')
-            or request.get_host()
-        )
-        return host.split(':')[0].lower().strip()
+        host = TenantMiddleware._get_actual_host(request)
+        # Only local development may select a tenant through a browser header.
+        if settings.DEBUG and host in ('localhost', '127.0.0.1'):
+            host = request.META.get('HTTP_X_TENANT_DOMAIN', host).split(':')[0].lower().strip()
+        return host
 
     @staticmethod
     def _get_request_subdomain_host(request, default_host: str) -> str:
@@ -201,6 +222,10 @@ class TenantMiddleware(MiddlewareMixin):
         Request qaysi subdomen/domendan kelganini aniqlash.
         X-Tenant-Domain header, Origin yoki Referer orqali.
         """
+        # A client-supplied header must never override the actual tenant host.
+        if TenantMiddleware._is_tenant_subdomain(default_host):
+            return default_host
+
         # 1. X-Tenant-Domain header (frontend explicit o'rnatgan bo'lsa)
         x_tenant = request.META.get('HTTP_X_TENANT_DOMAIN')
         if x_tenant:
@@ -346,52 +371,13 @@ class TenantMiddleware(MiddlewareMixin):
         Raises:
             TenantNotFoundError: Agar topilmasa
         """
-        from django.core.cache import cache
         from tenants.models import Domain, Tenant
-        from django.db.models import Q
 
-        # 1. 0-SQL Tezkor Kesh: To'liq Tenant obyektini Redis keshidan tekshirish (Zero-DB Hit)
-        cache_obj_key = f"tenant_resolved_obj_{host}"
-        cached_tenant = cache.get(cache_obj_key)
-        if cached_tenant is not None:
-            return cached_tenant
-
-        # 2. Orqaga moslik: agar faqat ID keshda bo'lsa
-        cache_id_key = f"tenant_resolved_id_{host}"
-        cached_id = cache.get(cache_id_key)
-        if cached_id:
-            tenant = Tenant.objects.filter(id=cached_id).first()
-            if tenant:
-                cache.set(cache_obj_key, tenant, timeout=600)
-                return tenant
-
-        # 3. Aniq to'liq domen bo'yicha qidirish (masalan: "najot.crm.uz", "maktab1.localhost")
+        # Read the current tenant on every request: cached model instances can
+        # outlive a block, deletion, or domain reassignment.
         domain_obj = Domain.objects.select_related('tenant').filter(domain=host).first()
         if domain_obj:
-            cache.set(cache_obj_key, domain_obj.tenant, timeout=600)
-            cache.set(cache_id_key, domain_obj.tenant.id, timeout=600)
             return domain_obj.tenant
-
-        # 4. Subdomen bo'yicha qidirish (masalan: "najot.localhost" -> subdomen "najot")
-        subdomain = host.split('.')[0].lower()
-        if subdomain and subdomain not in ('localhost', '127', 'www', 'api', 'admin', 'ceo'):
-            domain_by_sub = Domain.objects.select_related('tenant').filter(
-                Q(domain__istartswith=f"{subdomain}.") |
-                Q(tenant__schema_name__icontains=subdomain)
-            ).first()
-            if domain_by_sub:
-                cache.set(cache_obj_key, domain_by_sub.tenant, timeout=600)
-                cache.set(cache_id_key, domain_by_sub.tenant.id, timeout=600)
-                return domain_by_sub.tenant
-
-            tenant_by_schema = Tenant.objects.filter(
-                Q(schema_name=f"tenant_{subdomain}") |
-                Q(schema_name__icontains=subdomain)
-            ).first()
-            if tenant_by_schema:
-                cache.set(cache_obj_key, tenant_by_schema, timeout=600)
-                cache.set(cache_id_key, tenant_by_schema.id, timeout=600)
-                return tenant_by_schema
 
         # Django test muhiti (host == 'testserver') uchun avtomatik test tenant
         if host == 'testserver':
@@ -472,7 +458,7 @@ class TenantMiddleware(MiddlewareMixin):
         if not tenant.is_active:
             return JsonResponse(
                 {
-                    "error": f"Dev bypass: '{tenant.name}' markazi bloklangan",
+                    "error": "Malumot olishda xatolik",
                     "code": "TENANT_INACTIVE",
                 },
                 status=403,

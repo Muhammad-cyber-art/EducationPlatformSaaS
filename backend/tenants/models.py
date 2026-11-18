@@ -294,3 +294,16 @@ class CEOUser(models.Model):
     def is_authenticated(self) -> bool:
         """Middleware'larda request.user.is_authenticated tekshiruvi uchun."""
         return True
+
+
+class ImpersonationGrant(models.Model):
+    """Short-lived, single-use CEO login grant. Only its digest is stored."""
+    code_hash = models.CharField(max_length=64, unique=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
+    ceo = models.ForeignKey(CEOUser, on_delete=models.CASCADE)
+    admin_user_id = models.PositiveBigIntegerField()
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tenants_impersonation_grant"

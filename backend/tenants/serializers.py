@@ -372,3 +372,16 @@ class CEOAnalyticsSerializer(serializers.Serializer):
         read_only=True,
         help_text="[{month: 'YYYY-MM', new_tenants: N, mrr: X}, ...]"
     )
+
+
+class TenantPaginationSerializer(serializers.Serializer):
+    page = serializers.IntegerField(min_value=1, default=1)
+    page_size = serializers.IntegerField(min_value=1, max_value=100, default=20)
+
+
+class TenantUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, required=False)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    telegram_bot_token = serializers.CharField(max_length=150, required=False, allow_blank=True, allow_null=True)
+    plan = serializers.ChoiceField(choices=Subscription.PLAN_CHOICES, required=False)

@@ -108,6 +108,9 @@ def set_search_path(schema_name: str) -> None:
     if not validate_schema_name(schema_name):
         raise InvalidSchemaNameError(schema_name)
 
+    if connection.vendor != 'postgresql':
+        return
+
     try:
         with connection.cursor() as cursor:
             # Muhim: schema_name to'g'ridan-to'g'ri string interpolation

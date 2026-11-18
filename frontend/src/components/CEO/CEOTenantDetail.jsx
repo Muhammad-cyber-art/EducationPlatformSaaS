@@ -1,3 +1,4 @@
+import { tenantLoginUrl } from '../../utils/tenantLoginUrl';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -88,21 +89,20 @@ export default function CEOTenantDetail() {
 
   const handleImpersonate = async () => {
     if (!tenant) return;
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) {
+      toast.error("Brauzerda yangi oyna ochishga ruxsat bering.");
+      return;
+    }
+    tab.opener = null;
     setImpersonating(true);
     try {
       const res = await dispatch(impersonateTenant(tenant.id)).unwrap();
-      const sub = tenant.primary_domain?.split('.')[0] || tenant.schema_name?.replace('tenant_', '') || 'subdomain';
-      const tenantDomain = `${sub}.chronous.uz`;
-      const protocol = window.location.protocol || 'http:';
-      const port = window.location.port && !['80', '443'].includes(window.location.port) ? `:${window.location.port}` : '';
+      const url = `${tenantLoginUrl(res.domain)}#sso_code=${encodeURIComponent(res.code)}`;
+      tab.location.replace(url);
 
-      localStorage.setItem('tenant_schema', res.tenant.schema_name);
-      localStorage.setItem('tenant_name', res.tenant.name);
-
-      toast.success(`${res.tenant.name} markazi super admini sifatida kirdingiz!`);
-      // Subdomenga SSO tokeni orqali to'g'ridan-to'g'ri kirish
-      window.open(`${protocol}//${tenantDomain}${port}/login?access_token=${res.access}&refresh_token=${res.refresh}`, '_blank');
     } catch (err) {
+      tab.close();
       toast.error(typeof err === 'string' ? err : 'Tizimga kirishda xatolik yuz berdi');
     } finally {
       setImpersonating(false);
@@ -680,13 +680,11 @@ export default function CEOTenantDetail() {
 
               <button
                 onClick={() => {
-                  const sub = tenant.primary_domain?.split('.')[0] || tenant.schema_name?.replace('tenant_', '') || 'subdomain';
-                  const tenantDomain = `${sub}.chronous.uz`;
-                  const protocol = window.location.protocol || 'http:';
-                  const port = window.location.port && !['80', '443'].includes(window.location.port) ? `:${window.location.port}` : '';
-                  localStorage.setItem('tenant_schema', tenant.schema_name);
-                  localStorage.setItem('tenant_name', tenant.name);
-                  window.open(`${protocol}//${tenantDomain}${port}/login`, '_blank');
+                  try {
+                    window.open(tenantLoginUrl(tenant.primary_domain), '_blank', 'noopener,noreferrer');
+                  } catch (err) {
+                    toast.error(err.message);
+                  }
                 }}
                 className="px-4 py-2.5 rounded-xl font-medium text-xs flex items-center gap-2 transition-all"
                 style={{

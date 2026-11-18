@@ -10,3 +10,5 @@ TELEGRAM_BOT_TOKEN = ''
 ALLOWED_HOSTS = ['testserver', 'localhost', '.localhost', '.crm.uz', '.chronous.uz']
 DEBUG = False
 SECURE_SSL_REDIRECT = False
+
+TENANT_CEO_DOMAINS = {*TENANT_CEO_DOMAINS, "testserver"}

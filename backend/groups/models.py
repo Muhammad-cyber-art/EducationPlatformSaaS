@@ -231,7 +231,9 @@ class Group(models.Model):
         with transaction.atomic():
             old_price = None
             if self.pk and price_saved:
-                old_price = Group.objects.select_for_update().filter(pk=self.pk).values_list('monthly_price', flat=True).first()
+                # Tariff edits must not block ledger foreign-key checks while
+                # waiting for a cashier's locked invoice.
+                old_price = Group.objects.select_for_update(no_key=True).filter(pk=self.pk).values_list('monthly_price', flat=True).first()
             super().save(*args, **kwargs)
             if old_price is not None and old_price != self.monthly_price:
                 from finance.repricing import reprice_current_group_invoices

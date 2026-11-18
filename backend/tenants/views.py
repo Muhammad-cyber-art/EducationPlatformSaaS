@@ -31,6 +31,8 @@ from tenants.auth import CEOJWTAuthentication, IsCEOPermission, generate_ceo_tok
 from tenants.models import Tenant, Domain, Subscription, CEOUser
 from tenants.serializers import (
     TenantListSerializer,
+    TenantPaginationSerializer,
+    TenantUpdateSerializer,
     TenantDetailSerializer,
     TenantCreateSerializer,
     TenantToggleStatusSerializer,
@@ -39,6 +41,7 @@ from tenants.serializers import (
     CEOAnalyticsSerializer,
 )
 from tenants.services import TenantProvisioningService
+from tenants.plans import PLAN_SETTINGS
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +171,10 @@ class TenantListCreateView(CEOAuthMixin, APIView):
             qs = qs.filter(subscription__plan=plan)
 
         # Oddiy pagination
-        page      = max(1, int(request.query_params.get("page", 1)))
-        page_size = min(100, int(request.query_params.get("page_size", 20)))
+        pagination = TenantPaginationSerializer(data=request.query_params)
+        pagination.is_valid(raise_exception=True)
+        page = pagination.validated_data["page"]
+        page_size = pagination.validated_data["page_size"]
         offset    = (page - 1) * page_size
         total     = qs.count()
 
@@ -203,7 +208,7 @@ class TenantListCreateView(CEOAuthMixin, APIView):
                 return Response({"telegram_bot_token": [check_res['error']]}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            result = service.provision(
+            result = TenantProvisioningService().provision(
                 name            = data["name"],
                 domain          = data["domain"],
                 plan            = data["plan"],
@@ -277,7 +282,11 @@ class TenantDetailView(CEOAuthMixin, APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        data = request.data
+        serializer = TenantUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if "plan" in data and not hasattr(tenant, "subscription"):
+            return Response({"plan": ["Tenant subscription not found."]}, status=400)
         if "name" in data and data["name"].strip():
             tenant.name = data["name"].strip()
         if "city" in data:
@@ -295,14 +304,16 @@ class TenantDetailView(CEOAuthMixin, APIView):
             else:
                 tenant.telegram_bot_token = None
 
-        tenant.save()
-
-        # Obuna tarifini yangilash
-        if "plan" in data:
-            new_plan = data["plan"]
-            if hasattr(tenant, "subscription") and new_plan in ("starter", "pro", "enterprise"):
-                tenant.subscription.plan = new_plan
-                tenant.subscription.save()
+        with transaction.atomic():
+            tenant.save()
+            if "plan" in data:
+                subscription = Subscription.objects.select_for_update().get(tenant=tenant)
+                subscription.plan = data["plan"]
+                for field, value in PLAN_SETTINGS[subscription.plan].items():
+                    setattr(subscription, field, value)
+                subscription.save(update_fields=["plan", *PLAN_SETTINGS[subscription.plan]])
+        # Discard the prefetched subscription after changing it separately.
+        tenant.refresh_from_db()
 
         # Cached ma'lumotlarni tozalash
         if hasattr(tenant, "_cached_stats_and_admin"):
@@ -603,68 +614,78 @@ class CEOAnalyticsView(CEOAuthMixin, APIView):
 
 
 class TenantImpersonateView(CEOAuthMixin, APIView):
-    """
-    POST /api/v1/super-admin/tenants/{tenant_id}/impersonate/
-    CEO uchun: O'quv markaz super admini sifatida 1-bosishda tizimga kirish (impersonation).
-    Tenant super admini uchun haqiqiy JWT tokenlarini generatsiya qiladi.
-    """
-    def post(self, request, tenant_id: int):
-        try:
-            tenant = Tenant.objects.get(id=tenant_id)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant topilmadi."}, status=status.HTTP_404_NOT_FOUND)
-
-        if not tenant.is_active:
-            return Response({"error": "Ushbu markaz faol emas (bloklangan)."}, status=status.HTTP_403_FORBIDDEN)
-
+    """Issue a one-time code; JWTs are returned only by the tenant exchange."""
+    def post(self, request, tenant_id):
+        import hashlib
+        import secrets
+        from django.contrib.auth import get_user_model
+        from tenants.models import ImpersonationGrant
         from tenants.utils import tenant_schema_context
-        from tenants.context import set_current_tenant, clear_current_tenant
+
+        tenant = Tenant.objects.filter(pk=tenant_id, is_active=True).first()
+        if tenant is None:
+            return Response({"error": "Tenant topilmadi yoki bloklangan."}, status=404)
+        domain = tenant.domains.filter(is_primary=True).first()
+        if domain is None:
+            return Response({"error": "Tenantning asosiy domeni topilmadi."}, status=400)
+        with tenant_schema_context(tenant):
+            users = get_user_model().objects.filter(is_active=True)
+            admin = users.filter(role="super_admin").first() or users.filter(is_superuser=True).first()
+            if admin is None:
+                return Response({"error": "Faol super admin topilmadi."}, status=404)
+            admin_id = admin.pk
+        code = secrets.token_urlsafe(32)
+        ImpersonationGrant.objects.create(
+            code_hash=hashlib.sha256(code.encode()).hexdigest(), tenant=tenant,
+            ceo=request.user, admin_user_id=admin_id,
+            expires_at=timezone.now() + timedelta(seconds=60),
+        )
+        logger.info("CEO login grant issued: CEO=%s tenant=%s", request.user.pk, tenant.pk)
+        response = Response({"code": code, "domain": domain.domain, "expires_in": 60})
+        response["Cache-Control"] = "no-store"
+        return response
+
+
+class TenantImpersonationExchangeView(APIView):
+    """Redeem a code once, on its own active tenant domain only."""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        import hashlib
         from django.contrib.auth import get_user_model
         from authenticatsiya.serializers import LoginSerializer
+        from tenants.models import ImpersonationGrant
+        from tenants.utils import tenant_schema_context
 
-        UserModel = get_user_model()
-
-        try:
-            with tenant_schema_context(tenant.schema_name):
-                admin_user = UserModel.objects.filter(role="super_admin").first()
-                if not admin_user:
-                    admin_user = UserModel.objects.filter(is_superuser=True).first()
-
-                if not admin_user:
-                    return Response(
-                        {"error": "Ushbu markazda super admin foydalanuvchisi topilmadi."},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-
-                set_current_tenant(tenant)
-                refresh = LoginSerializer.get_token(admin_user)
-                access = str(refresh.access_token)
-                clear_current_tenant()
-
-                logger.info(
-                    "CEO Impersonation: CEO=%s entered tenant=%s as admin=%s",
-                    request.user.email, tenant.name, admin_user.username
-                )
-
-                return Response({
-                    "access": access,
-                    "refresh": str(refresh),
-                    "tenant": {
-                        "id": tenant.id,
-                        "name": tenant.name,
-                        "schema_name": tenant.schema_name,
-                    },
-                    "user": {
-                        "id": admin_user.id,
-                        "username": admin_user.username,
-                        "role": admin_user.role,
-                        "full_name": admin_user.get_full_name() or admin_user.username,
-                    }
-                }, status=status.HTTP_200_OK)
-
-        except Exception as exc:
-            logger.error("Impersonation xatolik: %s", exc)
-            return Response({"error": f"Xatolik: {str(exc)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        tenant = getattr(request, "tenant", None)
+        code = request.data.get("code")
+        if tenant is None or not tenant.is_active or not isinstance(code, str) or not 20 <= len(code) <= 128:
+            return Response({"error": "Kirish kodi yaroqsiz yoki muddati tugagan."}, status=400)
+        now = timezone.now()
+        with transaction.atomic():
+            grant = ImpersonationGrant.objects.select_for_update().filter(
+                code_hash=hashlib.sha256(code.encode()).hexdigest(), tenant_id=tenant.pk,
+                tenant__is_active=True, ceo__is_active=True,
+                consumed_at__isnull=True, expires_at__gt=now,
+            ).first()
+            if grant is None:
+                return Response({"error": "Kirish kodi yaroqsiz yoki muddati tugagan."}, status=400)
+            with tenant_schema_context(tenant):
+                admin = get_user_model().objects.filter(pk=grant.admin_user_id, is_active=True).first()
+                if admin is None or not (admin.role == "super_admin" or admin.is_superuser):
+                    return Response({"error": "Faol super admin topilmadi."}, status=403)
+                # Conditional update also protects backends without row locks.
+                if not ImpersonationGrant.objects.filter(pk=grant.pk, consumed_at__isnull=True).update(consumed_at=now):
+                    return Response({"error": "Kirish kodi ishlatilgan."}, status=400)
+                refresh = LoginSerializer.get_token(admin)
+                data = {"access": str(refresh.access_token), "refresh": str(refresh),
+                        "tenant": {"schema_name": tenant.schema_name, "name": tenant.name}}
+            logger.info("CEO login grant redeemed: CEO=%s tenant=%s admin=%s", grant.ceo_id, tenant.pk, admin.pk)
+        response = Response(data)
+        response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        return response
 
 
 class ResolveSubdomainView(APIView):
@@ -680,39 +701,18 @@ class ResolveSubdomainView(APIView):
         if not subdomain:
             return Response({"error": "Subdomen parametri ko'rsatilmadi."}, status=status.HTTP_400_BAD_REQUEST)
 
-        from django.db.models import Q
-        domain_obj = Domain.objects.select_related('tenant').filter(
-            Q(domain=subdomain) |
-            Q(domain=f"{subdomain}.localhost") |
-            Q(domain=f"{subdomain}.chronous.uz") |
-            Q(domain__istartswith=f"{subdomain}.") |
-            Q(tenant__schema_name=f"tenant_{subdomain}") |
-            Q(tenant__schema_name=subdomain)
-        ).filter(tenant__is_active=True).first()
-
-        if domain_obj and domain_obj.tenant:
-            return Response({
-                "exists": True,
-                "name": domain_obj.tenant.name,
-                "subdomain": subdomain,
-                "schema_name": domain_obj.tenant.schema_name,
-                "primary_domain": domain_obj.domain,
-            }, status=status.HTTP_200_OK)
-
-        tenant = Tenant.objects.filter(
-            Q(schema_name=f"tenant_{subdomain}") | Q(schema_name=subdomain),
-            is_active=True
-        ).first()
-
-        if tenant:
-            return Response({
-                "exists": True,
-                "name": tenant.name,
-                "subdomain": subdomain,
-                "schema_name": tenant.schema_name,
-            }, status=status.HTTP_200_OK)
-
-        return Response({
-            "exists": False,
-            "error": f"'{subdomain}' nomli faol o'quv markaz topilmadi."
-        }, status=status.HTTP_404_NOT_FOUND)
+        import re
+        from django.conf import settings
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", subdomain):
+            return Response({"error": "Subdomen formati noto'g'ri."}, status=400)
+        domains = [f"{subdomain}.{settings.TENANT_BASE_DOMAIN}"]
+        if settings.DEBUG:
+            domains.insert(0, f"{subdomain}.localhost")
+        domain_obj = Domain.objects.select_related("tenant").filter(
+            domain__in=domains, tenant__is_active=True,
+        ).order_by("-is_primary", "id").first()
+        if domain_obj:
+            return Response({"exists": True, "name": domain_obj.tenant.name,
+                             "subdomain": subdomain, "schema_name": domain_obj.tenant.schema_name,
+                             "primary_domain": domain_obj.domain})
+        return Response({"exists": False, "error": "Faol o'quv markaz topilmadi."}, status=404)

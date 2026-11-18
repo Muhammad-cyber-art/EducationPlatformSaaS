@@ -1,42 +1,39 @@
-import { useEffect, useState } from "react";
+import { jwtDecode } from "jwt-decode";
+import { useEffect, useRef, useState } from "react";
 import api from "../../tokenUpdater/updater";
 import { useNavigate, Link } from "react-router-dom";
 import { get_user_info } from "./getRole";
-import { jwtDecode } from "jwt-decode";
 import LoginError from "../Errors/LoginError";
 import ThemeToggle from "../ThemeToggle";
 import { User, Lock, ArrowRight, ShieldCheck, Eye, EyeOff, Building2, Globe, ChevronLeft } from "lucide-react";
 import { extractSubdomain } from "../../utils/subdomain";
 
 export default function Login() {
-  const user_info = get_user_info();
   const navigate = useNavigate();
 
-  // 1. URL parametrlari orqali avtomatik login (CEO Impersonation SSO)
+  const ssoStarted = useRef(false);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get("access_token") || params.get("token");
-    const refreshFromUrl = params.get("refresh_token") || params.get("refresh");
-    if (tokenFromUrl) {
-      localStorage.setItem("access_token", tokenFromUrl);
-      if (refreshFromUrl) {
-        localStorage.setItem("refresh_token", refreshFromUrl);
-      }
-      try {
-        const decoded = jwtDecode(tokenFromUrl);
-        if (decoded?.role) {
-          window.location.href = `/${decoded.role}`;
-          return;
-        }
-      } catch (e) {}
-      window.location.href = "/super_admin";
+    const code = new URLSearchParams(window.location.hash.slice(1)).get("sso_code");
+    if (code) {
+      if (ssoStarted.current) return;
+      ssoStarted.current = true;
+      // Remove the secret before making network requests or navigating.
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      api.post("v1/auth/impersonation/exchange/", { code }).then(({ data }) => {
+        localStorage.setItem("access_token", data.access);
+        localStorage.setItem("refresh_token", data.refresh);
+        localStorage.setItem("tenant_schema", data.tenant.schema_name);
+        localStorage.setItem("tenant_name", data.tenant.name);
+        window.location.replace("/super_admin");
+      }).catch(() => {
+        setError("Kirish kodi yaroqsiz yoki muddati tugagan. CEO panelidan qayta kiring.");
+      });
       return;
     }
-
-    if (user_info) {
-      navigate(`/${user_info.role}`);
-    }
-  }, [user_info, navigate]);
+    if (ssoStarted.current) return;
+    const currentUser = get_user_info();
+    if (currentUser) navigate(`/${currentUser.role}`);
+  }, [navigate]);
 
   const [subdomain, setSubdomain] = useState(() => extractSubdomain());
   const [workspaceInput, setWorkspaceInput] = useState("");

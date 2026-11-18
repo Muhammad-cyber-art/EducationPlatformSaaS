@@ -118,3 +118,34 @@ Xavfsizlik muammolarini topgan bo'lsangiz, iltimos darhol xabar bering!
 ## 📄 Litsenziya
 
 [Your License Here]
+
+
+## CEO tenant workflow deployment
+
+Apply the shared-schema migration before deploying the updated CEO frontend:
+
+```sh
+python manage.py migrate --noinput
+```
+
+Migration `tenants.0003_impersonationgrant` stores hashed, single-use login codes.
+The CEO issues a 60-second code; the tenant exchanges it at
+`POST /api/v1/auth/impersonation/exchange/`. The frontend carries the code in the
+URL fragment, removes it immediately, and receives JWTs in the POST response.
+Expired grants are removed by the existing `cleanup_expired_tokens` task.
+
+Every tenant hostname (including localhost aliases) must have an exact `Domain`
+record. Routing no longer guesses tenants from partial schema names or cached
+model instances. The reverse proxy must preserve the original validated `Host`.
+Only DEBUG requests to localhost may use `X-Tenant-Domain` for development.
+The existing subscription expiry and usage enforcement behavior is unchanged.
+
+Validation:
+
+```sh
+python manage.py test tenants authenticatsiya.tests.CrossTenantAuthSecurityTests --settings=config.test_settings --noinput
+python manage.py test tenants --settings=config.test_postgres_settings --noinput
+```
+
+The PostgreSQL lifecycle test uses only the isolated test database and verifies
+that a retained schema cannot be reassigned when recreating a deleted tenant.

@@ -8,8 +8,10 @@ logger = logging.getLogger(__name__)
 def cleanup_expired_tokens():
     """Bound blacklist growth in public and each active tenant schema."""
     from django.core.management import call_command
-    from tenants.models import Tenant
+    from tenants.models import Tenant, ImpersonationGrant
+    from django.utils import timezone
     from tenants.utils import tenant_schema_context
+    ImpersonationGrant.objects.filter(expires_at__lte=timezone.now()).delete()
     call_command('flushexpiredtokens', verbosity=0)
     for tenant in Tenant.objects.filter(is_active=True).iterator():
         with tenant_schema_context(tenant):

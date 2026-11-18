@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def enroll_student_to_group(group, student_id, create_payment=True):
     """O'quvchini guruhga biriktirish logikasi"""
     with transaction.atomic():
-        student = get_object_or_404(Student.objects.select_for_update(), id=student_id)
+        student = get_object_or_404(Student.objects.select_for_update(no_key=True), id=student_id)
         # Joining another course is additive. Preserve even legacy membership
         # before establishing the new enrollment.
         if student.group_id:
@@ -162,13 +162,23 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
 
     with transaction.atomic():
         from finance.utils import floor_amount
-        student = Student.objects.select_for_update().get(pk=student.pk)
+        # Keep membership writes serialized while allowing cashier foreign-key
+        # checks on this student to commit before we lock its invoices.
+        student = Student.objects.select_for_update(no_key=True).get(pk=student.pk)
         source_enrollment = GroupEnrollment.objects.filter(student=student, group=old_group).first()
         source_joined_at = source_enrollment.joined_at if source_enrollment else (
             student.joined_at if student.group_id == old_group.pk else None
         )
         today = timezone.localdate()
         current_month_start = today.replace(day=1)
+        # Cashier installments lock invoices independently of the student row.
+        # Lock both transfer invoices in a stable order before moving balances,
+        # otherwise a concurrent receipt can be overwritten by this transfer.
+        transfer_payments = {
+            row.group_id: row for row in Payment.objects.select_for_update().filter(
+                student=student, group_id__in=[old_group.pk, new_group.pk], month=current_month_start,
+            ).order_by('pk')
+        }
 
         # 0. Snapshot fees (User talabi: Advanced guruh qoidasi bilan)
         def get_effective_fee(st, gr):
@@ -232,7 +242,7 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
             new_amount = floor_amount(new_daily * len(remaining_new_lessons))
 
         # Update Old Payment
-        old_payment = Payment.objects.filter(student=student, group=old_group, month=current_month_start).first()
+        old_payment = transfer_payments.get(old_group.pk)
         excess_paid = Decimal("0")
         
         if old_payment:
@@ -263,7 +273,7 @@ def transfer_student_to_group(student, new_group_id, request_user, reason, from_
                 )
 
         # Update New Payment
-        existing_new = Payment.objects.filter(student=student, group=new_group, month=current_month_start).first()
+        existing_new = transfer_payments.get(new_group.pk)
         is_discount = (student.status == 'discount')
         
         if existing_new:

@@ -5,7 +5,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from tenants.views import ResolveSubdomainView
+from tenants.views import ResolveSubdomainView, TenantImpersonationExchangeView
 
 urlpatterns = [
     path('adminn/', admin.site.urls),
@@ -16,6 +16,7 @@ urlpatterns = [
         # ── CEO / Super Admin API (public schema, tenant bypass) ────────────
         # Bu prefix TenantMiddleware tomonidan taniladi va tenant
         # tekshiruvidan o'tkazib yuboriladi.
+        path('v1/auth/impersonation/exchange/', TenantImpersonationExchangeView.as_view(), name='impersonation-exchange'),
         path('v1/super-admin/', include('tenants.urls', namespace='tenants')),
 
         # ── Tenant API'lari (tenant schema) ────────────────────────────────

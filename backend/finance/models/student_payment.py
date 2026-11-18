@@ -271,13 +271,9 @@ class Payment(models.Model):
                         _branch = enr.group.branch
 
                 if _branch is None:
-                    # Branch aniqlanmasa tranzaksiya yaratmaymiz — AttributeError dan saqlaymiz
-                    import logging as _logging
-                    _logging.getLogger(__name__).error(
-                        "apply_payment: branch aniqlanmadi, tranzaksiya yaratilmadi. "
-                        "Payment id=%s, student_full_name=%s",
-                        self.id, _student_name
-                    )
+                    # Roll back the invoice too: money cannot be accepted without
+                    # an attributable cash ledger receipt.
+                    raise ValueError("To'lov uchun filial aniqlanmadi; pul qabul qilinmadi.")
                 else:
                     # KASSA LOGIKASI:
                     # Super Admin to'lovni o'zi qilsa — darhol tasdiqlanadi (is_verified=True).
@@ -297,7 +293,7 @@ class Payment(models.Model):
                         status='completed',
                         record_type='payment',
                         amount=installment,
-                        date=self.paid_at.date(),
+                        date=timezone.localdate(),
                         marked_by=admin_user,
                         branch=_branch,
                         student=self.student,

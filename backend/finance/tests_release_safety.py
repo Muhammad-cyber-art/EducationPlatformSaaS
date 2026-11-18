@@ -2,6 +2,7 @@ from decimal import Decimal
 from unittest.mock import patch
 from unittest import skipUnless
 from io import StringIO
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase
@@ -127,9 +128,106 @@ class ReleasePaymentSafetyTests(TestCase):
         call_command('audit_financial_integrity', stdout=output)
         self.assertIn('0 issue(s)', output.getvalue())
 
+    def test_installments_enter_cash_on_the_actual_receipt_day(self):
+        first_day = timezone.localdate()
+        second_day = first_day + timedelta(days=1)
+        with patch('finance.models.student_payment.timezone.localdate', return_value=first_day):
+            self.payment.apply_payment(self.admin, Decimal('50000'))
+        with patch('finance.models.student_payment.timezone.localdate', return_value=second_day):
+            self.payment.apply_payment(self.admin, Decimal('75000'))
+        receipts = list(FinanceTransaction.objects.order_by('id').values_list('date', 'amount'))
+        self.assertEqual(receipts, [(first_day, Decimal('50000')), (second_day, Decimal('75000'))])
+
+    def test_branchless_invoice_cannot_accept_money_without_a_cash_receipt(self):
+        invoice = Payment.objects.create(month=self.month, amount=100000)
+        with self.assertRaisesRegex(ValueError, 'filial'):
+            invoice.apply_payment(self.admin, Decimal('50000'))
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.paid_amount, 0)
+        self.assertFalse(FinanceTransaction.objects.exists())
+
+    @patch('finance.models.FinanceTransaction.objects.create', side_effect=RuntimeError('ledger unavailable'))
+    def test_failed_cash_ledger_write_rolls_back_invoice(self, _ledger):
+        before = list(Payment.objects.values())
+        with self.assertRaisesRegex(RuntimeError, 'ledger unavailable'):
+            self.payment.apply_payment(self.admin, Decimal('50000'))
+        self.assertEqual(list(Payment.objects.values()), before)
+        self.assertFalse(FinanceTransaction.objects.exists())
+
 
 @skipUnless(connection.vendor == 'postgresql', 'Requires PostgreSQL concurrent writes')
 class FirstInvoiceConcurrencyTests(TransactionTestCase):
+    def test_tariff_change_and_cashier_installment_do_not_deadlock_or_lose_cash(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from django.db import close_old_connections
+        branch = Branch.objects.create(name='Tariff race')
+        group = Group.objects.create(name='Course', branch=branch, monthly_price=400000)
+        student = Student.objects.create(full_name='Tariff student', group=group)
+        user = get_user_model().objects.create_user(username='price-race', role='admin', branch=branch)
+        invoice = Payment.objects.create(student=student, group=group,
+                                         month=timezone.localdate().replace(day=1), amount=400000)
+        barrier = Barrier(2)
+
+        def worker(reprice):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=10)
+                if reprice:
+                    course = Group.objects.get(pk=group.pk)
+                    course.monthly_price = Decimal('450000')
+                    course.save(update_fields=['monthly_price'])
+                else:
+                    confirm_student_payment(get_user_model().objects.get(pk=user.pk),
+                                            Payment.objects.get(pk=invoice.pk),
+                                            {'amount': '100000', 'is_partial_payment': True})
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(worker, reprice) for reprice in (True, False)]
+            for future in futures:
+                future.result(timeout=25)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.amount, Decimal('450000'))
+        self.assertEqual(invoice.paid_amount, Decimal('100000'))
+        self.assertEqual(FinanceTransaction.objects.get().amount, Decimal('100000'))
+
+    def test_cashier_installment_and_transfer_preserve_collected_money(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from django.db import close_old_connections
+        from django.db.models import Sum
+        from groups.services import transfer_student_to_group
+        branch = Branch.objects.create(name='Transfer race')
+        source = Group.objects.create(name='Source', branch=branch, monthly_price=400000, custom_days=list(range(7)))
+        target = Group.objects.create(name='Target', branch=branch, monthly_price=450000, custom_days=list(range(7)))
+        student = Student.objects.create(full_name='Transfer student', group=source)
+        user = get_user_model().objects.create_user(username='transfer-race', role='admin', branch=branch)
+        invoice = Payment.objects.create(student=student, group=source,
+                                         month=timezone.localdate().replace(day=1), amount=400000)
+        barrier = Barrier(2)
+
+        def worker(transfer):
+            close_old_connections()
+            try:
+                admin = get_user_model().objects.get(pk=user.pk)
+                barrier.wait(timeout=10)
+                if transfer:
+                    transfer_student_to_group(Student.objects.get(pk=student.pk), target.pk, admin, 'Concurrency audit')
+                else:
+                    confirm_student_payment(admin, Payment.objects.get(pk=invoice.pk),
+                                            {'amount': '100000', 'is_partial_payment': True})
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(worker, transfer) for transfer in (True, False)]
+            for future in futures:
+                future.result(timeout=25)
+        self.assertEqual(Payment.objects.filter(student=student).aggregate(total=Sum('paid_amount'))['total'], Decimal('100000'))
+        self.assertEqual(FinanceTransaction.objects.filter(student=student).aggregate(total=Sum('amount'))['total'], Decimal('100000'))
+
     def test_simultaneous_first_installments_create_one_invoice_and_two_receipts(self):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier

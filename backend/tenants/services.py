@@ -25,6 +25,7 @@ from datetime import timedelta
 from django.db import connection, transaction
 from django.utils import timezone
 
+from tenants.plans import PLAN_SETTINGS
 from tenants.exceptions import TenantSchemaError, InvalidSchemaNameError
 from tenants.models import Tenant, Domain, Subscription, CEOUser
 from tenants.utils import schema_name_from_slug, schema_exists, validate_schema_name
@@ -190,8 +191,10 @@ class TenantProvisioningService:
         schema_name = base_schema
 
         counter = 2
-        while Tenant.objects.filter(schema_name=schema_name).exists():
-            schema_name = f"{base_schema}_{counter}"
+        while (Tenant.objects.filter(schema_name=schema_name).exists()
+               or ("sqlite" not in self._get_db_engine() and schema_exists(schema_name))):
+            suffix = f"_{counter}"
+            schema_name = f"{base_schema[:62 - len(suffix)]}{suffix}"
             counter += 1
             if counter > 99:
                 raise ValueError(f"'{name}' nomi uchun noyob schema topilmadi.")
@@ -227,24 +230,12 @@ class TenantProvisioningService:
         self, tenant: Tenant, plan: str, trial_days: int
     ) -> Subscription:
         """public.tenants_subscription ga yozuv qo'shadi."""
-        plan_prices = {
-            "starter": 500_000,    # 500,000 so'm/oy
-            "pro": 1_500_000,      # 1,500,000 so'm/oy
-            "enterprise": 3_000_000,  # 3,000,000 so'm/oy
-        }
-        plan_limits = {
-            "starter": {"max_students": 200, "max_branches": 1},
-            "pro": {"max_students": 1000, "max_branches": 3},
-            "enterprise": {"max_students": 10000, "max_branches": 20},
-        }
-
         subscription = Subscription.objects.create(
             tenant=tenant,
             plan=plan,
-            price_per_month=plan_prices.get(plan, 500_000),
             expires_at=timezone.now() + timedelta(days=trial_days),
             status="trial",
-            **plan_limits.get(plan, plan_limits["starter"]),
+            **PLAN_SETTINGS[plan],
         )
         logger.debug("Subscription yaratildi: plan=%s, expires=%s", plan, subscription.expires_at)
         return subscription
@@ -268,8 +259,7 @@ class TenantProvisioningService:
             raise InvalidSchemaNameError(schema_name)
 
         if schema_exists(schema_name):
-            logger.warning("Schema allaqachon mavjud: %s", schema_name)
-            return
+            raise ValueError(f"Schema already exists and cannot be reused: {schema_name}")
 
         try:
             with connection.cursor() as cursor:
