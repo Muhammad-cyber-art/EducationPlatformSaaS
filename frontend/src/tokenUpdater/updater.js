@@ -1,3 +1,4 @@
+import { TENANT_ACCESS_DENIED_EVENT } from '../utils/tenantAccess';
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import notify from "../utils/toastNotify";
@@ -181,6 +182,10 @@ function addRefreshSubscriber() {
 api.interceptors.response.use(
  (response) => response,
  async (error) => {
+ if (error.response?.status === 403 && ['TENANT_INACTIVE', 'TENANT_NOT_FOUND'].includes(error.response?.data?.code)) {
+   window.dispatchEvent(new Event(TENANT_ACCESS_DENIED_EVENT));
+   return Promise.reject(error);
+ }
  const originalRequest = error.config;
 
  if (!originalRequest) return Promise.reject(error);

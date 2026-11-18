@@ -6,11 +6,13 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from tenants.views import ResolveSubdomainView, TenantImpersonationExchangeView
+from tenants.access import TenantAccessView
 
 urlpatterns = [
     path('adminn/', admin.site.urls),
     path('api/', include([
         # ── Public API: Subdomen mavjudligini xavfsiz tekshirish ───────────
+        path('v1/public/tenants/access/', TenantAccessView.as_view(), name='tenant-access'),
         path('v1/public/tenants/resolve/', ResolveSubdomainView.as_view(), name='resolve-subdomain'),
 
         # ── CEO / Super Admin API (public schema, tenant bypass) ────────────

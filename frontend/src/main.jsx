@@ -9,9 +9,6 @@ import ErrorBoundary from'./components/Common/ErrorBoundary.jsx';
 
 import { Provider } from'react-redux';
 import { store } from'./store';
-import { attendanceOfflineService } from './services/attendanceOfflineService';
-import { financeOfflineService } from './services/financeOfflineService';
-import { runFullCleanup } from './db/db';
 import { ThemeProvider, useTheme } from './ThemeContext';
 
 const queryClient = new QueryClient({
@@ -32,16 +29,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-// Initialize background warm-cache prefetch for attendance and finance
-attendanceOfflineService.init(queryClient);
-financeOfflineService.init(queryClient);
-
-// Production: Ilova yuklanganda eskirgan IndexedDB yozuvlarini tozalash
-// (5 soniya kutib — sahifa renderiga xalaqit bermasligi uchun)
-setTimeout(() => {
-  runFullCleanup().catch(() => {});
-}, 5000);
 
 function ThemedToaster() {
   const { theme } = useTheme();

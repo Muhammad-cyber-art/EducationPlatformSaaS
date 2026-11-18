@@ -1,3 +1,4 @@
+import { tenantAccessPlugin } from './tenantAccessPlugin.js';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -12,8 +13,7 @@ import { VitePWA } from 'vite-plugin-pwa';
  *
  * 2. globPatterns ga woff (woff2 bilan birga) qo'shildi.
  *
- * 3. navigateFallback: '/index.html' — SPA routing uchun majburiy.
- *    Bu bo'lmasa offline holatda /admin/profile kabi URL lar 404 beradi.
+ * 3. Tenant HTML always requires live server admission.
  *
  * 4. cleanupOutdatedCaches: true — eski Service Worker keshlarini tozalaydi.
  *    Bu yangi deploy dan keyin qurilmalarda eski kesh qolmasligini ta'minlaydi.
@@ -22,6 +22,7 @@ import { VitePWA } from 'vite-plugin-pwa';
  */
 export default defineConfig({
   plugins: [
+    tenantAccessPlugin(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -76,14 +77,11 @@ export default defineConfig({
       },
 
       workbox: {
-        // BUG FIX: SPA routing — offline holatda barcha yo'llar index.html ga
-        navigateFallback: '/index.html',
+        // Tenant HTML must always pass server admission; never serve a cached SPA shell.
+        navigateFallback: null,
 
-        // API va media so'rovlar hech qachon SPA index.html ga yo'naltirilmasligi kerak
-        navigateFallbackDenylist: [/^\/api\//, /^\/media\//],
-
-        // Statik fayllarni (JS, CSS, HTML, Media, Shriftlar) to'liq keshga olish
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
+        // Public assets remain cacheable; HTML always requires live admission.
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2,ttf,eot}'],
 
         // BUG FIX: Eski keshlarni tozalash — yangi deploy dan keyin muammo bo'lmasin
         cleanupOutdatedCaches: true,

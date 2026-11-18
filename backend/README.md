@@ -149,3 +149,28 @@ python manage.py test tenants --settings=config.test_postgres_settings --noinput
 
 The PostgreSQL lifecycle test uses only the isolated test database and verifies
 that a retained schema cannot be reassigned when recreating a deleted tenant.
+
+
+## Blocked tenant page admission
+
+`GET /api/v1/public/tenants/access/` returns uncached 204 for an active registered
+host (or the central platform), and 403 for blocked or unknown tenant hosts.
+It requires no JWT and does not activate a tenant database schema.
+
+The Vite development server and production reverse proxy deny tenant HTML before
+serving the SPA. The React admission gate also checks before mounting CRM routes,
+reacts immediately to `TENANT_INACTIVE`, and rechecks every 15 seconds and on focus.
+Public JS/CSS and service-worker updates remain available. HTML is no longer
+precached or served through the PWA navigation fallback. If admission cannot be
+verified, tenant routes stay closed, including offline starts.
+
+Deploy backend and frontend together, then validate and reload the reverse proxy:
+
+```sh
+docker compose up -d --build web frontend
+docker compose exec nginx nginx -t
+docker compose exec nginx nginx -s reload
+```
+
+No database migration is needed for page admission. Existing clients need the
+updated frontend/service worker before the client-side guard can take effect.
